@@ -26,6 +26,8 @@ export interface Club {
   shortName: string;
   primaryColor: string;
   secondaryColor: string;
+  badgeUrl?: string;
+  stadiumImageUrl?: string;
   stadium: string;
   city: string;
   capacity: number;

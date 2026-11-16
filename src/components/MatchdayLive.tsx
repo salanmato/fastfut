@@ -30,7 +30,9 @@ import {
   type LiveMatchSession,
 } from "../engine/matchEngine";
 import { formatMoney, getStaminaColor } from "../utils/format";
+import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
+import { ClubKit } from "./ClubKit";
 import { LivePitch2D } from "./LivePitch2D";
 
 interface MatchdayLiveProps {
@@ -288,79 +290,96 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Left/Center: User Match Broadcast */}
         <div className="space-y-5 lg:col-span-8">
-          {/* Scoreboard */}
-          <div className="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-xl">
-            <div className="mb-3 flex justify-center">
-              <span
-                className={`rounded-full px-3.5 py-1 text-xs font-black tracking-wider ${
-                  userSession.finished
-                    ? "bg-slate-800 text-slate-300"
-                    : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 animate-pulse"
-                }`}
-              >
-                {userSession.finished
-                  ? "FIM DE JOGO"
-                  : userSession.minute > 90
-                  ? `90+${userSession.minute - 90}'`
-                  : `${userSession.minute}'`}
-              </span>
-            </div>
+          {/* Scoreboard with Stadium Photo Atmosphere */}
+          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-xl">
+            {getClubVisuals(homeClub).stadiumImageUrl && (
+              <img
+                src={getClubVisuals(homeClub).stadiumImageUrl}
+                alt={homeClub.stadium}
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20"
+              />
+            )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-900/80 to-slate-950/95" />
 
-            <div className="grid grid-cols-11 items-center gap-2">
-              <div className="col-span-4 flex flex-col items-center text-center sm:items-end sm:text-right">
-                <div className="flex items-center gap-3">
-                  <span className="hidden sm:inline text-lg font-black text-white">
-                    {homeClub.name}
-                  </span>
-                  <span className="sm:hidden text-sm font-black text-white">
-                    {homeClub.shortName}
-                  </span>
-                  <ClubBadge club={homeClub} size="lg" />
-                </div>
-                <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
-                  {homeGoalEvents.map((g) => (
-                    <div key={g.id}>
-                      ⚽ {g.playerName} ({g.minute}')
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="col-span-3 flex items-center justify-center gap-3 text-4xl font-black text-white sm:text-5xl">
-                <span>{userSession.homeGoals}</span>
-                <span className="text-slate-600 text-2xl">-</span>
-                <span>{userSession.awayGoals}</span>
-              </div>
-
-              <div className="col-span-4 flex flex-col items-center text-center sm:items-start sm:text-left">
-                <div className="flex items-center gap-3">
-                  <ClubBadge club={awayClub} size="lg" />
-                  <span className="hidden sm:inline text-lg font-black text-white">
-                    {awayClub.name}
-                  </span>
-                  <span className="sm:hidden text-sm font-black text-white">
-                    {awayClub.shortName}
-                  </span>
-                </div>
-                <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
-                  {awayGoalEvents.map((g) => (
-                    <div key={g.id}>
-                      ⚽ {g.playerName} ({g.minute}')
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {motmPlayer && finalizedUser && (
-              <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
-                <Award className="h-4 w-4 text-amber-400" />
-                <span>
-                  Craque da Partida: <strong className="text-white">{motmPlayer.name}</strong> (Nota{" "}
-                  {finalizedUser.playerRatings[motmPlayer.id]?.toFixed(1)})
+            <div className="relative">
+              <div className="mb-3 flex justify-center">
+                <span
+                  className={`rounded-full px-3.5 py-1 text-xs font-black tracking-wider ${
+                    userSession.finished
+                      ? "bg-slate-800 text-slate-300"
+                      : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 animate-pulse"
+                  }`}
+                >
+                  {userSession.finished
+                    ? "FIM DE JOGO"
+                    : userSession.minute > 90
+                    ? `90+${userSession.minute - 90}'`
+                    : `${userSession.minute}'`}
                 </span>
               </div>
-            )}
+
+              <div className="grid grid-cols-11 items-center gap-2">
+                <div className="col-span-4 flex flex-col items-center text-center sm:items-end sm:text-right">
+                  <div className="flex items-center gap-2.5">
+                    <span className="hidden sm:inline text-lg font-black text-white">
+                      {homeClub.name}
+                    </span>
+                    <span className="sm:hidden text-sm font-black text-white">
+                      {homeClub.shortName}
+                    </span>
+                    <div className="hidden md:block">
+                      <ClubKit club={homeClub} variant="home" size="sm" />
+                    </div>
+                    <ClubBadge club={homeClub} size="lg" />
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
+                    {homeGoalEvents.map((g) => (
+                      <div key={g.id}>
+                        ⚽ {g.playerName} ({g.minute}')
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="col-span-3 flex items-center justify-center gap-3 text-4xl font-black text-white sm:text-5xl">
+                  <span>{userSession.homeGoals}</span>
+                  <span className="text-slate-500 text-2xl">-</span>
+                  <span>{userSession.awayGoals}</span>
+                </div>
+
+                <div className="col-span-4 flex flex-col items-center text-center sm:items-start sm:text-left">
+                  <div className="flex items-center gap-2.5">
+                    <ClubBadge club={awayClub} size="lg" />
+                    <div className="hidden md:block">
+                      <ClubKit club={awayClub} variant="away" size="sm" />
+                    </div>
+                    <span className="hidden sm:inline text-lg font-black text-white">
+                      {awayClub.name}
+                    </span>
+                    <span className="sm:hidden text-sm font-black text-white">
+                      {awayClub.shortName}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
+                    {awayGoalEvents.map((g) => (
+                      <div key={g.id}>
+                        ⚽ {g.playerName} ({g.minute}')
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {motmPlayer && finalizedUser && (
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+                  <Award className="h-4 w-4 text-amber-400" />
+                  <span>
+                    Craque da Partida: <strong className="text-white">{motmPlayer.name}</strong> (Nota{" "}
+                    {finalizedUser.playerRatings[motmPlayer.id]?.toFixed(1)})
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 2D Live Pitch Radar */}

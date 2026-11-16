@@ -2,7 +2,9 @@ import React, { useMemo, useState } from "react";
 import { Search, Trophy, MapPin, Banknote, Users, Sparkles } from "lucide-react";
 import type { Club, Player } from "../types/game";
 import { formatMoney, getOverallColor } from "../utils/format";
+import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
+import { ClubKit } from "./ClubKit";
 
 interface ClubSelectionProps {
   clubs: Club[];
@@ -135,21 +137,54 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
         {/* Selected Club Inspector */}
         {selectedClub && (
           <div className="lg:col-span-5">
-            <div className="sticky top-6 space-y-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl">
-              <div className="flex items-center gap-4 border-b border-slate-800 pb-4">
-                <ClubBadge club={selectedClub} size="lg" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-black text-white">{selectedClub.name}</h2>
-                    <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300">
-                      Est. {selectedClub.foundedYear}
-                    </span>
+            <div className="sticky top-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-xl">
+              {/* Stadium Photo Hero Banner */}
+              <div className="relative h-36 w-full overflow-hidden bg-slate-950">
+                {getClubVisuals(selectedClub).stadiumImageUrl && (
+                  <img
+                    src={getClubVisuals(selectedClub).stadiumImageUrl}
+                    alt={selectedClub.stadium}
+                    className="h-full w-full object-cover opacity-65 transition duration-500"
+                    loading="lazy"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
+                <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <ClubBadge club={selectedClub} size="lg" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="truncate text-xl font-black text-white">
+                          {selectedClub.name}
+                        </h2>
+                        <span className="shrink-0 rounded-md bg-slate-950/80 px-2 py-0.5 text-[10px] font-semibold text-slate-300 ring-1 ring-white/10">
+                          Est. {selectedClub.foundedYear}
+                        </span>
+                      </div>
+                      <p className="truncate text-xs text-slate-300">
+                        {selectedClub.manager} ({selectedClub.managerNationality})
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Técnico anterior: <span className="text-slate-200">{selectedClub.manager}</span> ({selectedClub.managerNationality})
-                  </p>
                 </div>
               </div>
+
+              <div className="space-y-5 p-5">
+                {/* Home & Away Kits Showcase */}
+                <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Uniformes Oficiais 26/27
+                    </div>
+                    <div className="text-xs text-slate-300 mt-0.5">
+                      Titular (Casa) e Reserva (Visitante)
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <ClubKit club={selectedClub} variant="home" size="md" label="Titular" />
+                    <ClubKit club={selectedClub} variant="away" size="md" label="Reserva" />
+                  </div>
+                </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
@@ -220,6 +255,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
               >
                 Iniciar Carreira no {selectedClub.name}
               </button>
+              </div>
             </div>
           </div>
         )}

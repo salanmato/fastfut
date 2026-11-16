@@ -22,7 +22,9 @@ import type {
 } from "../types/game";
 import { computeMatchStadiumMetrics, computeTeamPower } from "../engine/matchEngine";
 import { formatMoney, formatWage, getOverallColor } from "../utils/format";
+import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
+import { ClubKit } from "./ClubKit";
 import { PlayerAvatar } from "./PlayerAvatar";
 
 interface DashboardProps {
@@ -161,8 +163,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
         awayClub &&
         homePower &&
         awayPower && (
-          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-950/40 px-5 py-3 text-xs text-slate-400">
+          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl">
+            {getClubVisuals(homeClub).stadiumImageUrl && (
+              <img
+                src={getClubVisuals(homeClub).stadiumImageUrl}
+                alt={homeClub.stadium}
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20"
+              />
+            )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-900/75 to-slate-950/90" />
+
+            <div className="relative flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-950/60 px-5 py-3 text-xs text-slate-300">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="rounded-md bg-emerald-500/15 px-2.5 py-0.5 font-bold text-emerald-300">
                   Rodada {currentMatchweek} de 38
@@ -172,7 +183,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   {nextFixture.kickoffTimeUk} (UK)
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" /> {homeClub.stadium} (
+                  <MapPin className="h-3.5 w-3.5 text-emerald-400" /> {homeClub.stadium} (
                   {nextStadiumMetrics
                     ? `${nextStadiumMetrics.attendance.toLocaleString("pt-BR")} esp.`
                     : homeClub.capacity.toLocaleString("pt-BR")}
@@ -197,11 +208,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
 
-            <div className="grid gap-6 p-6 lg:grid-cols-12 lg:items-center">
+            <div className="relative grid gap-6 p-6 lg:grid-cols-12 lg:items-center">
               {/* Matchup */}
               <div className="flex items-center justify-between gap-4 lg:col-span-7">
-                <div className="flex flex-1 flex-col items-center text-center sm:flex-row sm:text-left sm:gap-4">
+                <div className="flex flex-1 flex-col items-center text-center sm:flex-row sm:text-left sm:gap-3">
                   <ClubBadge club={homeClub} size="lg" />
+                  <div className="hidden sm:block">
+                    <ClubKit club={homeClub} variant="home" size="sm" />
+                  </div>
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Mandante
@@ -217,12 +231,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 <div className="px-2 text-center">
-                  <div className="rounded-xl border border-slate-700/80 bg-slate-950 px-3.5 py-1.5 text-xs font-black tracking-widest text-slate-300">
+                  <div className="rounded-xl border border-slate-700/80 bg-slate-950/90 px-3.5 py-1.5 text-xs font-black tracking-widest text-slate-300">
                     VS
                   </div>
                 </div>
 
-                <div className="flex flex-1 flex-col-reverse items-center text-center sm:flex-row sm:justify-end sm:text-right sm:gap-4">
+                <div className="flex flex-1 flex-col-reverse items-center text-center sm:flex-row sm:justify-end sm:text-right sm:gap-3">
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Visitante
@@ -234,6 +248,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {standings.find((s) => s.club.id === awayClub.id)?.position}º • OVR{" "}
                       {awayPower.overall}
                     </div>
+                  </div>
+                  <div className="hidden sm:block">
+                    <ClubKit club={awayClub} variant="away" size="sm" />
                   </div>
                   <ClubBadge club={awayClub} size="lg" />
                 </div>

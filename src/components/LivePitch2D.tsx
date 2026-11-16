@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Star } from "lucide-react";
+import { Eye, EyeOff, Shirt, Star } from "lucide-react";
 import type { Club, MatchEvent, Player, Tactics } from "../types/game";
 import type { LiveMatchSession } from "../engine/matchEngine";
 import { formatMoney, getFormationSlots, getStaminaColor } from "../utils/format";
+import { getClubVisuals } from "../utils/clubVisuals";
+import { ClubKit } from "./ClubKit";
 
 interface LivePitch2DProps {
   session: LiveMatchSession;
@@ -48,6 +50,22 @@ function isLightColor(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 180;
 }
 
+function colorsTooClose(hexA: string, hexB: string): boolean {
+  const parse = (h: string) => {
+    const c = h.replace("#", "");
+    if (c.length !== 6) return [0, 0, 0];
+    return [
+      parseInt(c.slice(0, 2), 16),
+      parseInt(c.slice(2, 4), 16),
+      parseInt(c.slice(4, 6), 16),
+    ];
+  };
+  const [r1, g1, b1] = parse(hexA);
+  const [r2, g2, b2] = parse(hexB);
+  const dist = Math.hypot(r1 - r2, g1 - g2, b1 - b2);
+  return dist < 110;
+}
+
 function getBaseHorizontalCoord(
   slotX: number,
   slotY: number,
@@ -91,6 +109,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 }) => {
   const [showNames, setShowNames] = useState(true);
   const [showRatings, setShowRatings] = useState(true);
+  const [showKits, setShowKits] = useState(true);
 
   const [ballPos, setBallPos] = useState<Coord>({ x: 50, y: 50 });
   const [carrierId, setCarrierId] = useState<number | null>(null);
@@ -365,8 +384,18 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     return () => window.clearInterval(timer);
   }, [isPlaying, session.finished]);
 
-  const homeTextColor = isLightColor(homeClub.primaryColor) ? "#0f172a" : "#ffffff";
-  const awayTextColor = isLightColor(awayClub.primaryColor) ? "#0f172a" : "#ffffff";
+  const homeVisuals = getClubVisuals(homeClub);
+  const awayVisuals = getClubVisuals(awayClub);
+  const awayUsesAlternate = colorsTooClose(
+    homeVisuals.homeKit.primary,
+    awayVisuals.homeKit.primary
+  );
+  const awayVariant: "home" | "away" = awayUsesAlternate ? "away" : "home";
+  const awayKitColors = awayUsesAlternate ? awayVisuals.awayKit : awayVisuals.homeKit;
+  const homeKitColors = homeVisuals.homeKit;
+
+  const homeTextColor = isLightColor(homeKitColors.primary) ? "#0f172a" : "#ffffff";
+  const awayTextColor = isLightColor(awayKitColors.primary) ? "#0f172a" : "#ffffff";
   const carrierClub = carrierClubId === homeClub.id ? homeClub : awayClub;
   const carrierPlayer = carrierId ? playerMap.get(carrierId) : undefined;
 
@@ -378,7 +407,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           <span className="inline-flex items-center gap-1.5 font-bold text-white">
             <span
               className="h-3 w-3 rounded-full ring-1 ring-white/40"
-              style={{ backgroundColor: homeClub.primaryColor }}
+              style={{ backgroundColor: homeKitColors.primary }}
             />
             {homeClub.shortName} ({homeTactics.formation}) →
           </span>
@@ -387,14 +416,19 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             ← {awayClub.shortName} ({awayTactics.formation})
             <span
               className="h-3 w-3 rounded-full ring-1 ring-white/40"
-              style={{ backgroundColor: awayClub.primaryColor }}
+              style={{ backgroundColor: awayKitColors.primary }}
             />
           </span>
           {!session.finished && carrierPlayer && (
             <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-0.5 text-[11px] text-slate-300">
               <span
                 className="h-2 w-2 rounded-full animate-pulse"
-                style={{ backgroundColor: carrierClub.primaryColor }}
+                style={{
+                  backgroundColor:
+                    carrierClub.id === homeClub.id
+                      ? homeKitColors.primary
+                      : awayKitColors.primary,
+                }}
               />
               Posse: <strong className="text-white">{carrierPlayer.name}</strong>
             </span>
@@ -402,6 +436,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowKits((v) => !v)}
+            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+              showKits
+                ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                : "border-slate-700 bg-slate-800 text-slate-400"
+            }`}
+          >
+            <Shirt className="h-3 w-3" /> {showKits ? "Camisas" : "Bolinhas"}
+          </button>
           <button
             onClick={() => setShowNames((v) => !v)}
             className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
@@ -573,6 +617,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           if (!player) return null;
 
           const club = info.isHome ? homeClub : awayClub;
+          const kitColors = info.isHome ? homeKitColors : awayKitColors;
+          const variant: "home" | "away" = info.isHome ? "home" : awayVariant;
           const textColor = info.isHome ? homeTextColor : awayTextColor;
           const isUserPlayer = club.id === userClubId;
           const isSubSelected = subOutId === playerId;
@@ -597,36 +643,61 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 isUserPlayer && !session.finished ? "cursor-pointer hover:scale-110" : "cursor-default"
               }`}
             >
-              {/* Token circle */}
-              <div
-                className={`relative flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full text-[9px] font-black shadow-md transition ${
-                  isSubSelected
-                    ? "ring-2 ring-amber-400 scale-115"
-                    : isCarrier
-                    ? "ring-2 ring-white scale-110"
-                    : "ring-1 ring-black/50"
-                }`}
-                style={{
-                  backgroundColor: club.primaryColor,
-                  color: textColor,
-                  borderColor: club.secondaryColor,
-                  borderWidth: "1.5px",
-                }}
-              >
-                {info.label.slice(0, 2)}
+              {/* Token: Kit SVG or Circle */}
+              {showKits ? (
+                <div
+                  className={`relative rounded-lg transition ${
+                    isSubSelected
+                      ? "ring-2 ring-amber-400 bg-amber-400/20 scale-115"
+                      : isCarrier
+                      ? "ring-2 ring-white/90 bg-white/10 scale-110"
+                      : ""
+                  }`}
+                >
+                  <ClubKit
+                    club={club}
+                    variant={variant}
+                    size="sm"
+                    number={info.label.slice(0, 2)}
+                  />
+                  {hasYellow && (
+                    <span className="absolute -left-0.5 -top-0.5 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
+                  )}
+                  {showRatings && (
+                    <span className="absolute -right-1.5 -top-1 rounded bg-slate-950/95 px-1 text-[8px] font-bold text-amber-300 ring-1 ring-white/15">
+                      {rating}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className={`relative flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full text-[9px] font-black shadow-md transition ${
+                    isSubSelected
+                      ? "ring-2 ring-amber-400 scale-115"
+                      : isCarrier
+                      ? "ring-2 ring-white scale-110"
+                      : "ring-1 ring-black/50"
+                  }`}
+                  style={{
+                    backgroundColor: kitColors.primary,
+                    color: textColor,
+                    borderColor: kitColors.secondary,
+                    borderWidth: "1.5px",
+                  }}
+                >
+                  {info.label.slice(0, 2)}
 
-                {/* Yellow Card badge */}
-                {hasYellow && (
-                  <span className="absolute -left-1 -top-1 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
-                )}
+                  {hasYellow && (
+                    <span className="absolute -left-1 -top-1 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
+                  )}
 
-                {/* Live Rating badge */}
-                {showRatings && (
-                  <span className="absolute -right-2 -top-1.5 rounded bg-slate-950/90 px-1 text-[8px] font-bold text-amber-300 ring-1 ring-white/15">
-                    {rating}
-                  </span>
-                )}
-              </div>
+                  {showRatings && (
+                    <span className="absolute -right-2 -top-1.5 rounded bg-slate-950/90 px-1 text-[8px] font-bold text-amber-300 ring-1 ring-white/15">
+                      {rating}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Name & Stamina pill */}
               {showNames && (
