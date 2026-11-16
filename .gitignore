@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build & Deploy
+dist/
+.vercel/
+
+# Raw downloaded ETL caches (fm2627.sqlite & public/data/fm2627.json remain tracked)
+data/raw/
+
+# Environment & Logs
+.env
+.env.*
+*.log
+npm-debug.log*
+
+# OS / Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

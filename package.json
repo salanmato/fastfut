@@ -1,0 +1,33 @@
+{
+  "name": "football-manager-pl2627",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Football Manager 26/27 — Premier League interactive web simulation powered by EA FC 27 & Transfermarkt data.",
+  "author": "salanmato",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/salanmato/football-manager.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "etl": "python3 scripts/build_database.py"
+  },
+  "dependencies": {
+    "lucide-react": "^0.545.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.2"
+  }
+}
