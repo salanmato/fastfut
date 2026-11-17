@@ -6,7 +6,6 @@ import {
   ShoppingBag,
   Building2,
   Play,
-  RotateCcw,
   Download,
   Loader2,
   Home,
@@ -350,14 +349,6 @@ export const App: React.FC = () => {
     setSave(newSave);
     setActiveTab("dashboard");
     setScreen("game");
-  };
-
-  const handleResetSave = () => {
-    if (!window.confirm("Deseja encerrar o save atual e escolher um novo clube?")) return;
-    localStorage.removeItem(SAVE_KEY);
-    setSave(null);
-    setActiveTab("dashboard");
-    setScreen("select_club");
   };
 
   const handleDeleteSave = () => {
@@ -1351,14 +1342,6 @@ export const App: React.FC = () => {
               className="rounded-lg border border-white/15 bg-black/25 p-2 text-slate-300 hover:text-white"
             >
               <Download className="h-4 w-4" />
-            </button>
-            <button
-              onClick={handleResetSave}
-              disabled={activeTab === "matchday"}
-              title="Novo Save / Trocar Clube"
-              className="rounded-lg border border-white/15 bg-black/25 p-2 text-slate-300 hover:text-rose-400 disabled:opacity-40"
-            >
-              <RotateCcw className="h-4 w-4" />
             </button>
           </div>
         </div>
