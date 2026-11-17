@@ -770,6 +770,7 @@ export function stepLiveMatchMinute(
     defPower: TeamPower,
     attTeam: Player[],
     defTeam: Player[],
+    attTactics: Tactics,
     clubName: string
   ) => {
     const clubId = isHome ? session.homeClubId : session.awayClubId;
@@ -785,16 +786,61 @@ export function stepLiveMatchMinute(
     if (attackers.length === 0) return;
 
     const shooter = weightedPick(attackers, (p) => {
-      const roleMult = p.roleCategory === "ATT" ? 3.2 : p.roleCategory === "MID" ? 1.4 : 0.35;
-      return roleMult * (0.5 + p.stats.finishing / 100) * evaluateShirtNumberAffinity(p).multiplier;
+      const isWinger = ["LW", "RW", "LM", "RM", "LAM", "RAM"].includes(p.primaryPosition);
+      const isWingBack = ["LB", "RB", "LWB", "RWB"].includes(p.primaryPosition);
+      const isAttackingMentality = attTactics.mentality === "Attacking";
+      let roleMult = 0.26;
+      if (p.roleCategory === "ATT") {
+        roleMult = isWinger ? 2.75 : 3.35;
+        if (attTactics.passingStyle === "Direct" && isWinger) roleMult += 0.35;
+      } else if (p.primaryPosition === "CAM") {
+        roleMult = 2.15 + (isAttackingMentality ? 0.35 : 0);
+      } else if (p.roleCategory === "MID") {
+        roleMult = p.primaryPosition === "CM" ? 1.35 + (isAttackingMentality ? 0.25 : 0) : 0.9;
+      } else if (isWingBack) {
+        roleMult = 0.58 + (isAttackingMentality ? 0.28 : 0);
+      }
+
+      const stam = session.playerStamina[p.id] ?? p.stamina;
+      const staminaReadiness = 0.85 + 0.15 * (Math.max(20, stam) / 100);
+      const finishingBlend =
+        0.4 +
+        (p.stats.finishing * 0.55 +
+          p.faceStats.dribbling * 0.25 +
+          p.faceStats.pace * (attTactics.passingStyle === "Direct" ? 0.32 : 0.2)) /
+          100;
+      return roleMult * finishingBlend * staminaReadiness * evaluateShirtNumberAffinity(p).multiplier;
     });
 
     const possibleAssisters = attackers.filter((p) => p.id !== shooter.id);
+    const assistProb =
+      attTactics.passingStyle === "Short" ? 0.78 : attTactics.passingStyle === "Direct" ? 0.68 : 0.73;
     const assister =
-      possibleAssisters.length > 0 && Math.random() < 0.72
+      possibleAssisters.length > 0 && Math.random() < assistProb
         ? weightedPick(possibleAssisters, (p) => {
-            const roleMult = p.roleCategory === "MID" ? 2.2 : p.roleCategory === "ATT" ? 1.5 : 0.7;
-            return roleMult * (0.5 + p.faceStats.passing / 100) * evaluateShirtNumberAffinity(p).multiplier;
+            const isCreator = p.primaryPosition === "CAM" || p.primaryPosition === "CM";
+            const isWinger = ["LW", "RW", "LM", "RM", "LAM", "RAM"].includes(p.primaryPosition);
+            const isFullback = ["LB", "RB", "LWB", "RWB"].includes(p.primaryPosition);
+            let roleMult = 0.35;
+            if (isCreator) {
+              roleMult = (p.primaryPosition === "CAM" ? 2.65 : 2.1) + (attTactics.passingStyle === "Short" ? 0.35 : 0);
+            } else if (isWinger) {
+              roleMult = 2.25;
+            } else if (isFullback) {
+              roleMult = 1.35 + (attTactics.mentality === "Attacking" ? 0.35 : 0);
+            } else if (p.roleCategory === "ATT") {
+              roleMult = 1.5 + (attTactics.passingStyle === "Short" ? 0.25 : 0);
+            } else if (p.roleCategory === "MID") {
+              roleMult = 1.45 + (attTactics.passingStyle === "Direct" ? 0.35 : 0);
+            }
+
+            const playmakeBlend =
+              0.4 +
+              (p.faceStats.passing * 0.55 +
+                p.faceStats.dribbling * 0.25 +
+                p.faceStats.pace * 0.2) /
+                100;
+            return roleMult * playmakeBlend * evaluateShirtNumberAffinity(p).multiplier;
           })
         : undefined;
 
@@ -887,8 +933,8 @@ export function stepLiveMatchMinute(
     }
   };
 
-  resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeClub.shortName);
-  resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayClub.shortName);
+  resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
+  resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
 
   // Check end of match
   if (min >= session.stoppageEnd) {
