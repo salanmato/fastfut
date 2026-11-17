@@ -14,6 +14,7 @@ import {
   Lock,
   Unlock,
   Flame,
+  Award,
 } from "lucide-react";
 import type {
   MatchInjury,
@@ -31,6 +32,12 @@ import {
   createDefaultTactics,
 } from "./engine/matchEngine";
 import { computeStandings } from "./engine/standings";
+import {
+  createInitialFACupState,
+  extractMatchweekDates,
+  generateDivisionFixtures,
+  simulateFACupRound,
+} from "./engine/faCup";
 import { formatMoney } from "./utils/format";
 import { getKitThemePalette } from "./utils/clubVisuals";
 import {
@@ -55,6 +62,7 @@ import { LeagueHub } from "./components/LeagueHub";
 import { TransferMarket } from "./components/TransferMarket";
 import { StadiumHub } from "./components/StadiumHub";
 import { CalendarHub } from "./components/CalendarHub";
+import { FACupHub } from "./components/FACupHub";
 import { PlayerProfileModal } from "./components/PlayerProfileModal";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
@@ -65,6 +73,7 @@ type Tab =
   | "stadium"
   | "calendar"
   | "league"
+  | "facup"
   | "market"
   | "matchday";
 type Screen = "menu" | "select_club" | "game";
@@ -97,6 +106,7 @@ function hydrateSave(parsed: SaveState): SaveState {
     currentDate: parsed.currentDate ?? defaultDate,
     shortlistIds: parsed.shortlistIds ?? [],
     allowTransfersOutsideWindow: parsed.allowTransfersOutsideWindow ?? false,
+    faCup: parsed.faCup ?? createInitialFACupState(parsed.clubs),
   };
 }
 
@@ -221,9 +231,26 @@ export const App: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  const leagueClubs = useMemo(() => {
+    if (!save) return [];
+    const uc = save.clubs.find((c) => c.id === save.userClubId);
+    const div = uc?.division ?? "Premier League";
+    const inDiv = save.clubs.filter((c) => (c.division ?? "Premier League") === div);
+    if (inDiv.length > 20 && save.fixtures.length > 0) {
+      const fxIds = new Set<number>();
+      for (const fx of save.fixtures) {
+        fxIds.add(fx.homeClubId);
+        fxIds.add(fx.awayClubId);
+      }
+      const active = inDiv.filter((c) => fxIds.has(c.id));
+      if (active.length > 0) return active;
+    }
+    return inDiv;
+  }, [save]);
+
   const standings = useMemo(
-    () => (save ? computeStandings(save.clubs, save.fixtures) : []),
-    [save]
+    () => (save ? computeStandings(leagueClubs, save.fixtures) : []),
+    [save, leagueClubs]
   );
 
   const stadiumByClub = useMemo(
@@ -239,7 +266,6 @@ export const App: React.FC = () => {
     if (!rawDb) return;
     const clubs = rawDb.clubs.map((c) => ({ ...c }));
     const players = rawDb.players.map((p) => ({ ...p }));
-    const fixtures = rawDb.fixtures.map((f) => ({ ...f }));
     const referees = rawDb.referees.map((r) => ({ ...r }));
 
     const tacticsByClub: Record<number, Tactics> = {};
@@ -249,6 +275,17 @@ export const App: React.FC = () => {
     }
 
     const chosenClub = clubs.find((c) => c.id === clubId)!;
+    const chosenDivision = chosenClub.division ?? "Premier League";
+    const fixtures =
+      chosenDivision !== "Premier League"
+        ? generateDivisionFixtures(
+            clubs.filter((c) => (c.division ?? "Premier League") === chosenDivision),
+            extractMatchweekDates(rawDb.fixtures),
+            referees,
+            clubId
+          )
+        : rawDb.fixtures.map((f) => ({ ...f }));
+
     const initialDate = getDefaultDateForMatchweek(fixtures, 1, false, clubId);
     const newSave: SaveState = {
       version: 1,
@@ -267,6 +304,7 @@ export const App: React.FC = () => {
       currentDate: initialDate,
       shortlistIds: [],
       allowTransfersOutsideWindow: false,
+      faCup: createInitialFACupState(clubs),
       news: [
         {
           id: "welcome-1",
@@ -274,12 +312,19 @@ export const App: React.FC = () => {
           category: "league",
           clubId,
           title: `${managerName} é apresentado no ${chosenClub.name}!`,
-          body: `A diretoria confirmou a contratação de ${managerName} para liderar o projeto na Premier League 2026/27 com orçamento inicial de ${formatMoney(
+          body: `A diretoria confirmou a contratação de ${managerName} para liderar o projeto na ${chosenDivision} 2026/27 com orçamento inicial de ${formatMoney(
             chosenClub.transferBudgetEur
           )}.`,
         },
         {
           id: "welcome-2",
+          matchweek: 1,
+          category: "cup",
+          title: "Copa da Inglaterra 2026/27 (64 Clubes)",
+          body: "Todos os 64 clubes ingleses das 4 divisões disputam o mata-mata da Emirates FA Cup a partir da Rodada 10.",
+        },
+        {
+          id: "welcome-3",
           matchweek: 1,
           category: "transfer",
           title: "Janela de Verão Aberta até 01/09/2026",
@@ -619,6 +664,24 @@ export const App: React.FC = () => {
       seasonFinished
     );
 
+    const activeCup = save.faCup ?? createInitialFACupState(nextClubs);
+    const dueCupRound = !seasonFinished
+      ? activeCup.rounds.find(
+          (r) => !r.completed && r.triggerMatchweek === nextMwValue
+        )
+      : undefined;
+    const cupNews: NewsItem[] = dueCupRound
+      ? [
+          {
+            id: `fac-due-${nextMwValue}`,
+            matchweek: nextMwValue,
+            category: "cup",
+            title: `🏆 Copa da Inglaterra: ${dueCupRound.name} disponível!`,
+            body: `Os confrontos eliminatórios da ${dueCupRound.shortName} estão prontos. Acesse a aba FA Cup para simular a fase.`,
+          },
+        ]
+      : [];
+
     setSave({
       ...save,
       clubs: nextClubs,
@@ -629,11 +692,14 @@ export const App: React.FC = () => {
       players: nextPlayers,
       tacticsByClub: nextTacticsByClub,
       stadiumByClub: nextStadiumByClub,
-      news: [...milestoneNews, ...newItems, ...save.news].slice(0, 40),
+      faCup: activeCup,
+      news: [...cupNews, ...milestoneNews, ...newItems, ...save.news].slice(0, 40),
     });
 
     setActiveTab("dashboard");
-    const milestoneToast = milestoneNews[0]?.title;
+    const milestoneToast = dueCupRound
+      ? `🏆 FA Cup liberada: ${dueCupRound.name}!`
+      : milestoneNews[0]?.title;
     setToast(
       seasonFinished
         ? "Temporada 2026/27 encerrada! Confira a classificação final."
@@ -644,6 +710,45 @@ export const App: React.FC = () => {
             userHomeRevenue
           )}`
         : `Rodada ${save.currentMatchweek} concluída!`
+    );
+  };
+
+  const handleSimulateFACupRound = () => {
+    if (!save) return;
+    const currentCup = save.faCup ?? createInitialFACupState(save.clubs);
+    const activeRound = currentCup.rounds[currentCup.currentRoundIndex];
+    if (!activeRound || activeRound.completed) return;
+
+    const { nextFaCup, prizeByClub, headlines } = simulateFACupRound(
+      currentCup,
+      save.clubs,
+      save.players,
+      save.tacticsByClub,
+      save.referees,
+      stadiumByClub,
+      save.userClubId,
+      save.currentMatchweek
+    );
+
+    const nextClubs = save.clubs.map((c) => {
+      const bonus = prizeByClub.get(c.id) ?? 0;
+      return bonus > 0 ? { ...c, transferBudgetEur: c.transferBudgetEur + bonus } : c;
+    });
+
+    const userBonus = prizeByClub.get(save.userClubId) ?? 0;
+    setSave({
+      ...save,
+      clubs: nextClubs,
+      faCup: nextFaCup,
+      news: [...headlines, ...save.news].slice(0, 40),
+    });
+
+    setToast(
+      userBonus > 0
+        ? `🏆 ${activeRound.shortName} concluída! Seu clube avançou e faturou +${formatMoney(
+            userBonus
+          )}.`
+        : headlines[0]?.title ?? `Copa da Inglaterra (${activeRound.shortName}) concluída!`
     );
   };
 
@@ -847,7 +952,7 @@ export const App: React.FC = () => {
             ...p,
             clubId: userClub.id,
             clubName: userClub.name,
-            league: "Premier League",
+            league: userClub.division ?? "Premier League",
           }
         : p
     );
@@ -1109,7 +1214,15 @@ export const App: React.FC = () => {
               { id: "tactics" as const, label: "Tática & Elenco", icon: Users },
               { id: "calendar" as const, label: "Calendário", icon: CalendarIcon },
               { id: "stadium" as const, label: "Estádio", icon: Building2 },
-              { id: "league" as const, label: "Premier League", icon: Trophy },
+              {
+                id: "league" as const,
+                label:
+                  !userClub.division || userClub.division === "Premier League"
+                    ? "Premier League"
+                    : "Liga & Divisões",
+                icon: Trophy,
+              },
+              { id: "facup" as const, label: "FA Cup", icon: Award },
               { id: "market" as const, label: "Mercado", icon: ShoppingBag },
             ].map((item) => {
               const Icon = item.icon;
@@ -1202,6 +1315,7 @@ export const App: React.FC = () => {
             seasonFinished={save.seasonFinished}
             currentDate={currentDate}
             windowStatus={windowStatus}
+            faCup={save.faCup}
             clubs={save.clubs}
             players={save.players}
             fixtures={save.fixtures}
@@ -1291,6 +1405,16 @@ export const App: React.FC = () => {
             fixtures={save.fixtures}
             standings={standings}
             onSelectPlayer={setInspectedPlayer}
+          />
+        )}
+
+        {activeTab === "facup" && save.faCup && (
+          <FACupHub
+            faCup={save.faCup}
+            clubs={save.clubs}
+            userClubId={userClub.id}
+            currentMatchweek={save.currentMatchweek}
+            onSimulateCurrentRound={handleSimulateFACupRound}
           />
         )}
 

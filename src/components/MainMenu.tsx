@@ -112,7 +112,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           <div className="space-y-6 lg:col-span-6">
             <div>
               <div className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-300">
-                <Trophy className="h-3.5 w-3.5" /> Premier League 2026/27 • Dados Reais
+                <Trophy className="h-3.5 w-3.5" /> Futebol Inglês 2026/27 • 4 Divisões + FA Cup
               </div>
               <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
                 Football Manager{" "}
@@ -175,8 +175,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     <div className="text-base font-black text-white">Novo Jogo</div>
                     <div className="text-xs text-slate-400">
                       {save
-                        ? "Escolher um novo clube da Premier League 26/27"
-                        : "Escolha um dos 20 clubes e inicie sua carreira"}
+                        ? "Escolher um novo clube entre 4 divisões da Inglaterra"
+                        : "Escolha entre 64 clubes (PL, Championship, League One e League Two)"}
                     </div>
                   </div>
                 </div>

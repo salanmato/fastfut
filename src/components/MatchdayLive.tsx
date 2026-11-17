@@ -288,7 +288,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 px-5 py-3.5">
         <div>
           <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-            Premier League • Rodada {matchweek} Ao Vivo
+            {homeClub.division ?? "Premier League"} • Rodada {matchweek} Ao Vivo
           </div>
           <div className="text-xs text-slate-400">
             {homeClub.stadium} ({userSession.attendance.toLocaleString("pt-BR")} /{" "}

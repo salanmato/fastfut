@@ -72,11 +72,66 @@ MARKET_LEAGUES = {
     "Ligue 1 McDonald's",
     "Eredivisie",
     "Liga Portugal",
-    "EFL Championship",
     "ROSHN Saudi League",
     "Major League Soccer",
     "Liga Profesional de Fútbol",
     "Trendyol Süper Lig",
+}
+
+# Canonical EFL clubs across Championship (24), League One (16), League Two (4)
+# Tuple fields: (fc27_name, canonical_name, short, division, tier, primary, secondary, budgetM, tm_id, stadium, city, capacity, founded, stadium_img)
+EFL_CLUBS: list[dict[str, Any]] = [
+    # --- EFL Championship (24 clubs, tier 2) ---
+    {"fc27": "West Ham", "name": "West Ham United", "short": "WHU", "division": "EFL Championship", "tier": 2, "primary": "#7A263A", "secondary": "#1BB1E7", "budgetM": 42, "tm": 379, "stadium": "London Stadium", "city": "London", "capacity": 62500, "founded": 1895, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/London_Olympic_Stadium_West_Ham.jpg/1280px-London_Olympic_Stadium_West_Ham.jpg"},
+    {"fc27": "Wolves", "name": "Wolverhampton Wanderers", "short": "WOL", "division": "EFL Championship", "tier": 2, "primary": "#FDB913", "secondary": "#231F20", "budgetM": 38, "tm": 543, "stadium": "Molineux Stadium", "city": "Wolverhampton", "capacity": 31750, "founded": 1877, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/MolineuxStadium2022.jpg/1280px-MolineuxStadium2022.jpg"},
+    {"fc27": "Burnley", "name": "Burnley", "short": "BUR", "division": "EFL Championship", "tier": 2, "primary": "#6C1D45", "secondary": "#99D6EA", "budgetM": 30, "tm": 1132, "stadium": "Turf Moor", "city": "Burnley", "capacity": 21944, "founded": 1882, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/Turf_Moor_-_Harry_Potts_Way_%28east%29.jpg/1280px-Turf_Moor_-_Harry_Potts_Way_%28east%29.jpg"},
+    {"fc27": "Middlesbrough", "name": "Middlesbrough", "short": "MID", "division": "EFL Championship", "tier": 2, "primary": "#E11B22", "secondary": "#FFFFFF", "budgetM": 26, "tm": 641, "stadium": "Riverside Stadium", "city": "Middlesbrough", "capacity": 34742, "founded": 1876, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Middlesbrough_riverside_stadium.jpg/1280px-Middlesbrough_riverside_stadium.jpg"},
+    {"fc27": "Southampton", "name": "Southampton", "short": "SOU", "division": "EFL Championship", "tier": 2, "primary": "#D71920", "secondary": "#FFFFFF", "budgetM": 34, "tm": 180, "stadium": "St Mary's Stadium", "city": "Southampton", "capacity": 32384, "founded": 1885, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b2/St_Mary%27s_Stadium_%28cropped%29.jpg/1280px-St_Mary%27s_Stadium_%28cropped%29.jpg"},
+    {"fc27": "Sheffield Utd", "name": "Sheffield United", "short": "SHU", "division": "EFL Championship", "tier": 2, "primary": "#EE2737", "secondary": "#111111", "budgetM": 25, "tm": 350, "stadium": "Bramall Lane", "city": "Sheffield", "capacity": 32050, "founded": 1889, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/2023_08_02_arne_mueseler_00138-Verbessert-RR_%2853106208941%29.jpg/1280px-2023_08_02_arne_mueseler_00138-Verbessert-RR_%2853106208941%29.jpg"},
+    {"fc27": "Norwich", "name": "Norwich City", "short": "NOR", "division": "EFL Championship", "tier": 2, "primary": "#FFF200", "secondary": "#00A650", "budgetM": 20, "tm": 1123, "stadium": "Carrow Road", "city": "Norwich", "capacity": 27359, "founded": 1902, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/2015-05-16_-11_-_Carrow_Road%2C_Norwich.JPG/1280px-2015-05-16_-11_-_Carrow_Road%2C_Norwich.JPG"},
+    {"fc27": "Wrexham", "name": "Wrexham", "short": "WRE", "division": "EFL Championship", "tier": 2, "primary": "#E41B17", "secondary": "#FFFFFF", "budgetM": 24, "tm": 1112, "stadium": "STōK Cae Ras", "city": "Wrexham", "capacity": 13341, "founded": 1864, "img": "https://upload.wikimedia.org/wikipedia/commons/d/d2/The_Racecourse_Ground%2C_Wrexham_%28geograph_6141572%29.jpg"},
+    {"fc27": "Birmingham City", "name": "Birmingham City", "short": "BIR", "division": "EFL Championship", "tier": 2, "primary": "#0047AB", "secondary": "#FFFFFF", "budgetM": 24, "tm": 337, "stadium": "St. Andrew's", "city": "Birmingham", "capacity": 29409, "founded": 1875, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/TiltonRoadEnd01.JPG/1280px-TiltonRoadEnd01.JPG"},
+    {"fc27": "Derby County", "name": "Derby County", "short": "DER", "division": "EFL Championship", "tier": 2, "primary": "#FFFFFF", "secondary": "#111111", "budgetM": 16, "tm": 22, "stadium": "Pride Park Stadium", "city": "Derby", "capacity": 32956, "founded": 1884, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/2023_08_02_arne_mueseler_00196-Verbessert-RR_%2853106400184%29.jpg/1280px-2023_08_02_arne_mueseler_00196-Verbessert-RR_%2853106400184%29.jpg"},
+    {"fc27": "Swansea City", "name": "Swansea City", "short": "SWA", "division": "EFL Championship", "tier": 2, "primary": "#FFFFFF", "secondary": "#111111", "budgetM": 15, "tm": 2288, "stadium": "Swansea.com Stadium", "city": "Swansea", "capacity": 21088, "founded": 1912, "img": "https://upload.wikimedia.org/wikipedia/commons/6/68/New_Morfa_Stadium_-_geograph.org.uk_-_32243.jpg"},
+    {"fc27": "Watford", "name": "Watford", "short": "WAT", "division": "EFL Championship", "tier": 2, "primary": "#FBEE23", "secondary": "#ED2127", "budgetM": 18, "tm": 1010, "stadium": "Vicarage Road", "city": "Watford", "capacity": 22200, "founded": 1881, "img": "https://upload.wikimedia.org/wikipedia/commons/1/16/Vicarage_Road_2015.jpg"},
+    {"fc27": "QPR", "name": "Queens Park Rangers", "short": "QPR", "division": "EFL Championship", "tier": 2, "primary": "#1D5BA4", "secondary": "#FFFFFF", "budgetM": 14, "tm": 1039, "stadium": "Loftus Road", "city": "London", "capacity": 18439, "founded": 1882, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Loftus_Road_Stadium_25_April_2025.jpg/1280px-Loftus_Road_Stadium_25_April_2025.jpg"},
+    {"fc27": "Millwall", "name": "Millwall", "short": "MIL", "division": "EFL Championship", "tier": 2, "primary": "#001D5E", "secondary": "#FFFFFF", "budgetM": 14, "tm": 1028, "stadium": "The Den", "city": "London", "capacity": 20146, "founded": 1885, "img": "https://upload.wikimedia.org/wikipedia/commons/5/52/The_New_Den_-_geograph.org.uk_-_1143517.jpg"},
+    {"fc27": "West Brom", "name": "West Bromwich Albion", "short": "WBA", "division": "EFL Championship", "tier": 2, "primary": "#122F67", "secondary": "#FFFFFF", "budgetM": 18, "tm": 984, "stadium": "The Hawthorns", "city": "West Bromwich", "capacity": 26850, "founded": 1878, "img": ""},
+    {"fc27": "Blackburn Rovers", "name": "Blackburn Rovers", "short": "BLB", "division": "EFL Championship", "tier": 2, "primary": "#009EE0", "secondary": "#FFFFFF", "budgetM": 14, "tm": 164, "stadium": "Ewood Park", "city": "Blackburn", "capacity": 31367, "founded": 1875, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cc/Ewood_Park_2011.jpg/1280px-Ewood_Park_2011.jpg"},
+    {"fc27": "Bristol City", "name": "Bristol City", "short": "BRC", "division": "EFL Championship", "tier": 2, "primary": "#E21836", "secondary": "#FFFFFF", "budgetM": 15, "tm": 698, "stadium": "Ashton Gate", "city": "Bristol", "capacity": 27000, "founded": 1894, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/Ashton_Gate_-_Lansdown_Stand.jpg/1280px-Ashton_Gate_-_Lansdown_Stand.jpg"},
+    {"fc27": "Preston", "name": "Preston North End", "short": "PNE", "division": "EFL Championship", "tier": 2, "primary": "#FFFFFF", "secondary": "#002B5C", "budgetM": 12, "tm": 466, "stadium": "Deepdale", "city": "Preston", "capacity": 23408, "founded": 1880, "img": "https://upload.wikimedia.org/wikipedia/commons/2/23/Deepdalecomplete.jpg"},
+    {"fc27": "Portsmouth", "name": "Portsmouth", "short": "POR", "division": "EFL Championship", "tier": 2, "primary": "#001489", "secondary": "#FFFFFF", "budgetM": 13, "tm": 1020, "stadium": "Fratton Park", "city": "Portsmouth", "capacity": 20899, "founded": 1898, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Fratton_Park.jpg/1280px-Fratton_Park.jpg"},
+    {"fc27": "Stoke City", "name": "Stoke City", "short": "STK", "division": "EFL Championship", "tier": 2, "primary": "#E03A3E", "secondary": "#FFFFFF", "budgetM": 16, "tm": 512, "stadium": "bet365 Stadium", "city": "Stoke-on-Trent", "capacity": 30089, "founded": 1863, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/Aerial_view_of_Bet_365_Stadium.jpg/1280px-Aerial_view_of_Bet_365_Stadium.jpg"},
+    {"fc27": "Charlton Ath", "name": "Charlton Athletic", "short": "CHA", "division": "EFL Championship", "tier": 2, "primary": "#D4021D", "secondary": "#FFFFFF", "budgetM": 11, "tm": 358, "stadium": "The Valley", "city": "London", "capacity": 27111, "founded": 1905, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/84/Charlton_Athletic_football_ground.jpg/1280px-Charlton_Athletic_football_ground.jpg"},
+    {"fc27": "Bolton", "name": "Bolton Wanderers", "short": "BOL", "division": "EFL Championship", "tier": 2, "primary": "#FFFFFF", "secondary": "#1C2C5B", "budgetM": 11, "tm": 355, "stadium": "Toughsheet Community Stadium", "city": "Bolton", "capacity": 28723, "founded": 1874, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f1/Bolton_macron_wanderers_stadium.jpg/1280px-Bolton_macron_wanderers_stadium.jpg"},
+    {"fc27": "Cardiff City", "name": "Cardiff City", "short": "CAR", "division": "EFL Championship", "tier": 2, "primary": "#0070B5", "secondary": "#FFFFFF", "budgetM": 13, "tm": 603, "stadium": "Cardiff City Stadium", "city": "Cardiff", "capacity": 33280, "founded": 1899, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Cardiff_City_Stadium_Pitch.jpg/1280px-Cardiff_City_Stadium_Pitch.jpg"},
+    {"fc27": "Lincoln City", "name": "Lincoln City", "short": "LIN", "division": "EFL Championship", "tier": 2, "primary": "#E0001B", "secondary": "#FFFFFF", "budgetM": 8, "tm": 1198, "stadium": "LNER Stadium", "city": "Lincoln", "capacity": 10780, "founded": 1884, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3d/Lincoln_v_Boston_002.jpg/1280px-Lincoln_v_Boston_002.jpg"},
+    # --- EFL League One (16 clubs, tier 3) ---
+    {"fc27": "Leicester City", "name": "Leicester City", "short": "LEI", "division": "EFL League One", "tier": 3, "primary": "#003090", "secondary": "#FDBE11", "budgetM": 14, "tm": 1003, "stadium": "King Power Stadium", "city": "Leicester", "capacity": 32262, "founded": 1884, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/Leicester_city_king_power_stadium.jpg/1280px-Leicester_city_king_power_stadium.jpg"},
+    {"fc27": "Luton Town", "name": "Luton Town", "short": "LUT", "division": "EFL League One", "tier": 3, "primary": "#F78F1E", "secondary": "#002D62", "budgetM": 9, "tm": 1031, "stadium": "Kenilworth Road", "city": "Luton", "capacity": 12056, "founded": 1885, "img": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Luton_Town_FC_-_geograph.org.uk_-_1407783.jpg"},
+    {"fc27": "Sheffield Wed", "name": "Sheffield Wednesday", "short": "SHW", "division": "EFL League One", "tier": 3, "primary": "#0066B3", "secondary": "#FFFFFF", "budgetM": 8, "tm": 1035, "stadium": "Hillsborough Stadium", "city": "Sheffield", "capacity": 34835, "founded": 1867, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/Sheffield_wednesday_hillsborough_stadium.jpg/1280px-Sheffield_wednesday_hillsborough_stadium.jpg"},
+    {"fc27": "Oxford United", "name": "Oxford United", "short": "OXF", "division": "EFL League One", "tier": 3, "primary": "#FDE100", "secondary": "#002147", "budgetM": 7, "tm": 988, "stadium": "Kassam Stadium", "city": "Oxford", "capacity": 12500, "founded": 1893, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/The_Kassam_Stadium_-_geograph.org.uk_-_6961557.jpg/1280px-The_Kassam_Stadium_-_geograph.org.uk_-_6961557.jpg"},
+    {"fc27": "Huddersfield", "name": "Huddersfield Town", "short": "HUD", "division": "EFL League One", "tier": 3, "primary": "#0E63AD", "secondary": "#FFFFFF", "budgetM": 7, "tm": 1110, "stadium": "John Smith's Stadium", "city": "Huddersfield", "capacity": 24121, "founded": 1908, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/Huddersfield_the-john-smiths-stadium.jpg/1280px-Huddersfield_the-john-smiths-stadium.jpg"},
+    {"fc27": "Reading", "name": "Reading", "short": "REA", "division": "EFL League One", "tier": 3, "primary": "#004494", "secondary": "#FFFFFF", "budgetM": 6, "tm": 1032, "stadium": "Select Car Leasing Stadium", "city": "Reading", "capacity": 24161, "founded": 1871, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/Select_Car_Leasing.jpg/1280px-Select_Car_Leasing.jpg"},
+    {"fc27": "Blackpool", "name": "Blackpool", "short": "BLA", "division": "EFL League One", "tier": 3, "primary": "#F68712", "secondary": "#FFFFFF", "budgetM": 6, "tm": 1181, "stadium": "Bloomfield Road", "city": "Blackpool", "capacity": 16616, "founded": 1887, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/The_Armfield_South_Stand_at_Bloomfield_Road_-_geograph.org.uk_-_6245667.jpg/1280px-The_Armfield_South_Stand_at_Bloomfield_Road_-_geograph.org.uk_-_6245667.jpg"},
+    {"fc27": "MK Dons", "name": "MK Dons", "short": "MKD", "division": "EFL League One", "tier": 3, "primary": "#FFFFFF", "secondary": "#111111", "budgetM": 6, "tm": 991, "stadium": "Stadium MK", "city": "Milton Keynes", "capacity": 30500, "founded": 2004, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/31/Stadium_MK.jpg/1280px-Stadium_MK.jpg"},
+    {"fc27": "Leyton Orient", "name": "Leyton Orient", "short": "LEY", "division": "EFL League One", "tier": 3, "primary": "#D91920", "secondary": "#FFFFFF", "budgetM": 5, "tm": 1150, "stadium": "Brisbane Road", "city": "London", "capacity": 9271, "founded": 1881, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/Brisbane_Road.jpg/1280px-Brisbane_Road.jpg"},
+    {"fc27": "Bradford City", "name": "Bradford City", "short": "BRA", "division": "EFL League One", "tier": 3, "primary": "#7A1230", "secondary": "#F5A623", "budgetM": 5, "tm": 1027, "stadium": "Valley Parade", "city": "Bradford", "capacity": 24840, "founded": 1903, "img": ""},
+    {"fc27": "Stockport", "name": "Stockport County", "short": "STO", "division": "EFL League One", "tier": 3, "primary": "#004B9B", "secondary": "#FFFFFF", "budgetM": 6, "tm": 1098, "stadium": "Edgeley Park", "city": "Stockport", "capacity": 10852, "founded": 1883, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Edgeley_park_2021.jpg/1280px-Edgeley_park_2021.jpg"},
+    {"fc27": "Wycombe", "name": "Wycombe Wanderers", "short": "WYC", "division": "EFL League One", "tier": 3, "primary": "#009CE6", "secondary": "#1A3151", "budgetM": 5, "tm": 2805, "stadium": "Adams Park", "city": "High Wycombe", "capacity": 10137, "founded": 1887, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/Adams_Park_from_a_northerly_direction.JPG/1280px-Adams_Park_from_a_northerly_direction.JPG"},
+    {"fc27": "Plymouth Argyle", "name": "Plymouth Argyle", "short": "PLY", "division": "EFL League One", "tier": 3, "primary": "#00482B", "secondary": "#FFFFFF", "budgetM": 6, "tm": 2262, "stadium": "Home Park", "city": "Plymouth", "capacity": 17900, "founded": 1886, "img": "https://upload.wikimedia.org/wikipedia/commons/8/8e/Homepark2.png"},
+    {"fc27": "Barnsley", "name": "Barnsley", "short": "BAR", "division": "EFL League One", "tier": 3, "primary": "#E31B23", "secondary": "#FFFFFF", "budgetM": 5, "tm": 349, "stadium": "Oakwell", "city": "Barnsley", "capacity": 23287, "founded": 1887, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Oakwell_Stadium-1.Cropped.jpg/1280px-Oakwell_Stadium-1.Cropped.jpg"},
+    {"fc27": "Wigan Athletic", "name": "Wigan Athletic", "short": "WIG", "division": "EFL League One", "tier": 3, "primary": "#0054A6", "secondary": "#FFFFFF", "budgetM": 5, "tm": 1071, "stadium": "Brick Community Stadium", "city": "Wigan", "capacity": 25138, "founded": 1932, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Wigan_athletics_dw_stadium.jpg/1280px-Wigan_athletics_dw_stadium.jpg"},
+    {"fc27": "Notts County", "name": "Notts County", "short": "NOT", "division": "EFL League One", "tier": 3, "primary": "#111111", "secondary": "#FFFFFF", "budgetM": 4, "tm": 1045, "stadium": "Meadow Lane", "city": "Nottingham", "capacity": 19841, "founded": 1862, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Nottingham_county_fc_notts_stadium.jpg/1280px-Nottingham_county_fc_notts_stadium.jpg"},
+    # --- EFL League Two (4 clubs, tier 4) ---
+    {"fc27": "Salford City", "name": "Salford City", "short": "SAL", "division": "EFL League Two", "tier": 4, "primary": "#DA1F26", "secondary": "#111111", "budgetM": 3, "tm": 34888, "stadium": "Peninsula Stadium", "city": "Salford", "capacity": 5108, "founded": 1940, "img": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/08/The_Peninsula_Stadium_at_night_-_Salford_City_-_Aug_24.jpg/1280px-The_Peninsula_Stadium_at_night_-_Salford_City_-_Aug_24.jpg"},
+    {"fc27": "Port Vale", "name": "Port Vale", "short": "PVL", "division": "EFL League Two", "tier": 4, "primary": "#FFFFFF", "secondary": "#111111", "budgetM": 3, "tm": 1211, "stadium": "Vale Park", "city": "Stoke-on-Trent", "capacity": 15036, "founded": 1876, "img": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Port_Vale_Football_Club_-_geograph.org.uk_-_627252.jpg"},
+    {"fc27": "Swindon Town", "name": "Swindon Town", "short": "SWI", "division": "EFL League Two", "tier": 4, "primary": "#E01A22", "secondary": "#FFFFFF", "budgetM": 2, "tm": 352, "stadium": "County Ground", "city": "Swindon", "capacity": 15728, "founded": 1879, "img": "https://upload.wikimedia.org/wikipedia/commons/c/cc/Don_Rogers_Stand_2014-05-03_14-42.jpg"},
+    {"fc27": "Chesterfield", "name": "Chesterfield", "short": "CHF", "division": "EFL League Two", "tier": 4, "primary": "#004C99", "secondary": "#FFFFFF", "budgetM": 2, "tm": 1219, "stadium": "SMH Group Stadium", "city": "Chesterfield", "capacity": 10504, "founded": 1866, "img": "https://upload.wikimedia.org/wikipedia/commons/6/64/B2net_Stadium_1_-_geograph-1998863.jpg"},
+]
+
+FC27_TO_EFL_CLUB: dict[str, dict[str, Any]] = {
+    (c["fc27"], c["division"]): c for c in EFL_CLUBS
 }
 
 CLUB_VISUALS: dict[str, dict[str, Any]] = {
@@ -394,6 +449,8 @@ def main() -> None:
                 "id": idx,
                 "name": name,
                 "shortName": vis["short"],
+                "division": "Premier League",
+                "tier": 1,
                 "primaryColor": vis["primary"],
                 "secondaryColor": vis["secondary"],
                 "badgeUrl": vis["badgeUrl"],
@@ -415,7 +472,41 @@ def main() -> None:
                 "avgOverall": 75,
             })
 
-    # 3. Players (PL 26/27 + Top Market Players)
+    # Add 44 EFL Championship / League One / League Two clubs
+    next_club_id = len(clubs) + 1
+    for spec in EFL_CLUBS:
+        cname = spec["name"]
+        club_id_by_name[cname] = next_club_id
+        budget_eur = spec["budgetM"] * 1_000_000
+        clubs.append({
+            "id": next_club_id,
+            "name": cname,
+            "shortName": spec["short"],
+            "division": spec["division"],
+            "tier": spec["tier"],
+            "primaryColor": spec["primary"],
+            "secondaryColor": spec["secondary"],
+            "badgeUrl": f"https://tmssl.akamaized.net//images/wappen/head/{spec['tm']}.png",
+            "stadiumImageUrl": spec["img"],
+            "stadium": spec["stadium"],
+            "city": spec["city"],
+            "capacity": spec["capacity"],
+            "capacityNote": "",
+            "foundedYear": spec["founded"],
+            "status": spec["division"],
+            "previousSeasonContext": f"Disputando a {spec['division']} e a Copa da Inglaterra (FA Cup) na temporada 2026/27.",
+            "manager": "Técnico Principal",
+            "managerNationality": "England",
+            "managerAppointed": "2026",
+            "previousClub": "",
+            "notableHonours": "",
+            "transferBudgetEur": budget_eur,
+            "wageBudgetWeeklyEur": max(60_000, int(round(budget_eur * 0.024 / 1000) * 1000)),
+            "avgOverall": 70 - (spec["tier"] - 1) * 4,
+        })
+        next_club_id += 1
+
+    # 3. Players (64 English Clubs across 4 Divisions + Top International Market Players)
     players: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str]] = set()
 
@@ -431,8 +522,10 @@ def main() -> None:
             overall = to_int(row.get("overall"), 70)
 
             is_pl = league == "Premier League" and raw_club in FC27_TO_PL_CLUB
-            is_market = (not is_pl) and (league in MARKET_LEAGUES) and overall >= 78
-            if not is_pl and not is_market:
+            efl_spec = FC27_TO_EFL_CLUB.get((raw_club, league))
+            is_english_club = is_pl or (efl_spec is not None)
+            is_market = (not is_english_club) and (league in MARKET_LEAGUES) and overall >= 79
+            if not is_english_club and not is_market:
                 continue
 
             player_name = (row.get("player_name") or "").strip()
@@ -442,8 +535,18 @@ def main() -> None:
                 continue
             seen_keys.add(dedup_key)
 
-            club_name = FC27_TO_PL_CLUB[raw_club] if is_pl else raw_club
-            club_id = club_id_by_name[club_name] if is_pl else None
+            if is_pl:
+                club_name = FC27_TO_PL_CLUB[raw_club]
+                club_id = club_id_by_name[club_name]
+                player_league = "Premier League"
+            elif efl_spec is not None:
+                club_name = efl_spec["name"]
+                club_id = club_id_by_name[club_name]
+                player_league = efl_spec["division"]
+            else:
+                club_name = raw_club
+                club_id = None
+                player_league = league
 
             raw_positions = [p.strip() for p in (row.get("positions") or "CM").split(",") if p.strip()]
             primary_pos = raw_positions[0] if raw_positions else "CM"
@@ -526,7 +629,7 @@ def main() -> None:
                 "fullName": full_name,
                 "clubId": club_id,
                 "clubName": club_name,
-                "league": "Premier League" if is_pl else league,
+                "league": player_league,
                 "overall": overall,
                 "potential": min(96, overall + (6 if age <= 21 else 3 if age <= 24 else 1 if age <= 27 else 0)),
                 "primaryPosition": primary_pos,
@@ -567,6 +670,139 @@ def main() -> None:
                 "seasonAvgRating": 0,
             })
             next_player_id += 1
+
+    # Ensure every English club (all 64) has >= 18 players and positional balance (>=2 GK, >=6 DEF, >=5 MID, >=4 ATT)
+    first_names_uk = [
+        "Oliver", "Jack", "Harry", "George", "Charlie", "Callum", "Liam", "Alfie", "Ethan",
+        "Mason", "Noah", "Harvey", "Lewis", "Kieran", "Sam", "Nathan", "Toby", "Dan", "Ben", "Josh",
+    ]
+    last_names_uk = [
+        "Smith", "Jones", "Taylor", "Brown", "Wilson", "Evans", "Thomas", "Roberts", "Walker",
+        "Wright", "Thompson", "White", "Hughes", "Edwards", "Green", "Hall", "Wood", "Clarke", "Cooper", "Ward",
+    ]
+    pos_by_cat = {
+        "GK": "GK",
+        "DEF": ["CB", "LB", "RB", "CB"],
+        "MID": ["CM", "CDM", "CAM", "RM"],
+        "ATT": ["ST", "LW", "RW", "ST"],
+    }
+
+    def make_depth_player(club: dict[str, Any], cat: str, seq_idx: int) -> dict[str, Any]:
+        nonlocal next_player_id
+        tier = club["tier"]
+        base_min = {1: 68, 2: 64, 3: 59, 4: 56}.get(tier, 62)
+        overall = base_min + ((club["id"] * 7 + seq_idx * 3) % 6)
+        age = 19 + ((club["id"] + seq_idx * 5) % 10)
+        fn = first_names_uk[(club["id"] * 3 + seq_idx) % len(first_names_uk)]
+        ln = last_names_uk[(club["id"] * 5 + seq_idx * 2) % len(last_names_uk)]
+        short_n = f"{fn[0]}. {ln}"
+        full_n = f"{fn} {ln}"
+        pos_list = pos_by_cat[cat]
+        primary_pos = pos_list if isinstance(pos_list, str) else pos_list[seq_idx % len(pos_list)]
+        is_gk = cat == "GK"
+        pace = max(40, overall - (18 if is_gk else 1))
+        shooting = max(35, overall - (30 if is_gk else 14 if cat == "DEF" else 3))
+        passing = max(45, overall - (12 if is_gk else 3))
+        dribbling = max(40, overall - (16 if is_gk else 4))
+        defending = max(35, overall if (is_gk or cat == "DEF") else overall - 22 if cat == "ATT" else overall - 8)
+        physicality = max(50, overall - 2)
+        mv = estimate_market_value(overall, age)
+        wage = estimate_weekly_wage(overall, mv)
+        pid = next_player_id
+        next_player_id += 1
+        return {
+            "id": pid,
+            "eaId": 900000 + pid,
+            "name": short_n,
+            "fullName": full_n,
+            "clubId": club["id"],
+            "clubName": club["name"],
+            "league": club["division"],
+            "overall": overall,
+            "potential": min(85, overall + (6 if age <= 21 else 3)),
+            "primaryPosition": primary_pos,
+            "positions": [primary_pos],
+            "roleCategory": cat,
+            "nationality": "England",
+            "age": age,
+            "heightCm": 188 if is_gk else 179,
+            "weightKg": 82 if is_gk else 74,
+            "preferredFoot": "Left" if seq_idx % 4 == 0 else "Right",
+            "weakFoot": 3,
+            "skillMoves": 2 if (is_gk or cat == "DEF") else 3,
+            "accelerateType": "Controlled",
+            "playstylesPlus": [],
+            "playstylesBase": [],
+            "fcIqRoles": "",
+            "faceStats": {
+                "pace": pace,
+                "shooting": shooting,
+                "passing": passing,
+                "dribbling": dribbling,
+                "defending": defending,
+                "physicality": physicality,
+                "reflexes": overall if is_gk else max(50, overall - 4),
+            },
+            "stats": {
+                "acceleration": pace,
+                "sprintSpeed": pace,
+                "positioning": overall if is_gk else max(45, shooting + 2),
+                "finishing": shooting,
+                "shotPower": max(shooting, physicality - 4),
+                "longShots": max(35, shooting - 3),
+                "vision": passing,
+                "crossing": max(40, passing - 3),
+                "shortPassing": min(95, passing + 2),
+                "longPassing": max(40, passing - 2),
+                "dribbling": dribbling,
+                "agility": dribbling,
+                "reactions": overall,
+                "ballControl": dribbling,
+                "composure": max(45, overall - 2),
+                "interceptions": defending,
+                "headingAccuracy": round((defending + physicality) / 2),
+                "defensiveAwareness": defending,
+                "standingTackle": defending,
+                "slidingTackle": max(35, defending - 3),
+                "jumping": physicality,
+                "stamina": min(92, physicality + 4),
+                "strength": physicality,
+                "aggression": max(45, physicality - 3),
+            },
+            "imageUrl": "",
+            "marketValueEur": mv,
+            "wageEur": wage,
+            "contractUntil": "2028-06-30",
+            "morale": 80,
+            "stamina": 100,
+            "seasonGoals": 0,
+            "seasonAssists": 0,
+            "seasonAppearances": 0,
+            "seasonYellowCards": 0,
+            "seasonRedCards": 0,
+            "seasonAvgRating": 0,
+        }
+
+    for club in clubs:
+        c_squad = [p for p in players if p["clubId"] == club["id"]]
+        counts = {"GK": 0, "DEF": 0, "MID": 0, "ATT": 0}
+        for p in c_squad:
+            counts[p["roleCategory"]] = counts.get(p["roleCategory"], 0) + 1
+        seq = 1
+        for cat, req_n in [("GK", 2), ("DEF", 6), ("MID", 5), ("ATT", 4)]:
+            while counts[cat] < req_n:
+                np_obj = make_depth_player(club, cat, seq)
+                players.append(np_obj)
+                c_squad.append(np_obj)
+                counts[cat] += 1
+                seq += 1
+        rot = ["DEF", "MID", "ATT", "MID", "DEF"]
+        while len(c_squad) < 18:
+            cat = rot[seq % len(rot)]
+            np_obj = make_depth_player(club, cat, seq)
+            players.append(np_obj)
+            c_squad.append(np_obj)
+            seq += 1
 
     # Update club average overalls
     for club in clubs:
@@ -610,6 +846,8 @@ def main() -> None:
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             short_name TEXT NOT NULL,
+            division TEXT NOT NULL,
+            tier INTEGER NOT NULL,
             primary_color TEXT NOT NULL,
             secondary_color TEXT NOT NULL,
             badge_url TEXT,
@@ -692,11 +930,12 @@ def main() -> None:
 
     cur.executemany(
         """
-        INSERT INTO clubs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO clubs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
-                c["id"], c["name"], c["shortName"], c["primaryColor"], c["secondaryColor"],
+                c["id"], c["name"], c["shortName"], c["division"], c["tier"],
+                c["primaryColor"], c["secondaryColor"],
                 c["badgeUrl"], c["stadiumImageUrl"],
                 c["stadium"], c["city"], c["capacity"], c["capacityNote"], c["foundedYear"],
                 c["status"], c["previousSeasonContext"], c["manager"], c["managerNationality"],

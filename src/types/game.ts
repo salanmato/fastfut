@@ -20,10 +20,18 @@ export interface StadiumConfig {
   avgAttendance: number;
 }
 
+export type EnglishDivision =
+  | "Premier League"
+  | "EFL Championship"
+  | "EFL League One"
+  | "EFL League Two";
+
 export interface Club {
   id: number;
   name: string;
   shortName: string;
+  division?: EnglishDivision;
+  tier?: number; // 1..4
   primaryColor: string;
   secondaryColor: string;
   badgeUrl?: string;
@@ -227,10 +235,41 @@ export interface StandingRow {
 export interface NewsItem {
   id: string;
   matchweek: number;
-  category: "match" | "transfer" | "league" | "injury" | "stadium";
+  category: "match" | "transfer" | "league" | "injury" | "stadium" | "cup";
   title: string;
   body: string;
   clubId?: number;
+}
+
+export interface FACupTie {
+  id: string;
+  roundIndex: number; // 0..5
+  homeClubId: number;
+  awayClubId: number;
+  played: boolean;
+  homeGoals: number | null;
+  awayGoals: number | null;
+  homePenalties?: number | null;
+  awayPenalties?: number | null;
+  winnerClubId: number | null;
+}
+
+export interface FACupRound {
+  index: number; // 0..5
+  name: string;
+  shortName: string;
+  triggerMatchweek: number;
+  date: string;
+  prizeEur: number;
+  completed: boolean;
+  ties: FACupTie[];
+}
+
+export interface FACupState {
+  season: string;
+  currentRoundIndex: number;
+  championClubId: number | null;
+  rounds: FACupRound[];
 }
 
 export interface RawDatabase {
@@ -259,5 +298,6 @@ export interface SaveState {
   currentDate?: string;
   shortlistIds?: number[];
   allowTransfersOutsideWindow?: boolean;
+  faCup?: FACupState;
   news: NewsItem[];
 }

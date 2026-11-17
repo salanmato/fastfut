@@ -405,7 +405,7 @@ export const StadiumHub: React.FC<StadiumHubProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-3.5">
           <div>
             <h3 className="text-sm font-bold text-white">
-              Guia de Estádios da Premier League 2026/27
+              Guia de Estádios da Inglaterra 2026/27 ({clubs.length} clubes)
             </h3>
             <p className="text-xs text-slate-400">
               Capacidades oficiais, fator mandante e notas reais de infraestrutura da temporada.

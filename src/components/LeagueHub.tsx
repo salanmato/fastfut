@@ -1,8 +1,18 @@
 import React, { useMemo, useState } from "react";
-import { Trophy, Calendar, Award, ChevronLeft, ChevronRight, Tv, MapPin } from "lucide-react";
-import type { Club, Fixture, Player, StandingRow } from "../types/game";
+import {
+  Trophy,
+  Calendar,
+  Award,
+  ChevronLeft,
+  ChevronRight,
+  Tv,
+  MapPin,
+  Layers,
+  Users,
+} from "lucide-react";
+import type { Club, EnglishDivision, Fixture, Player, StandingRow } from "../types/game";
 import { getTopAssisters, getTopScorers } from "../engine/standings";
-import { formatMoney } from "../utils/format";
+import { formatMoney, getOverallColor, getRoleBadgeClass } from "../utils/format";
 import { ClubBadge } from "./ClubBadge";
 import { PlayerAvatar } from "./PlayerAvatar";
 
@@ -16,6 +26,13 @@ interface LeagueHubProps {
   onSelectPlayer: (player: Player) => void;
 }
 
+const ENGLISH_DIVISIONS: EnglishDivision[] = [
+  "Premier League",
+  "EFL Championship",
+  "EFL League One",
+  "EFL League Two",
+];
+
 export const LeagueHub: React.FC<LeagueHubProps> = ({
   userClubId,
   currentMatchweek,
@@ -25,13 +42,42 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
   standings,
   onSelectPlayer,
 }) => {
-  const [subTab, setSubTab] = useState<"table" | "stats" | "fixtures">("table");
+  const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
+  const userClub = clubMap.get(userClubId);
+  const userDivision: EnglishDivision = userClub?.division ?? "Premier League";
+
+  const [subTab, setSubTab] = useState<"table" | "divisions" | "stats" | "fixtures">("table");
+  const [selectedDivision, setSelectedDivision] = useState<EnglishDivision>(userDivision);
+  const [expandedDivClubId, setExpandedDivClubId] = useState<number | null>(null);
   const [viewWeek, setViewWeek] = useState<number>(Math.min(38, currentMatchweek));
   const [expandedFixtureId, setExpandedFixtureId] = useState<number | null>(null);
 
-  const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
-  const topScorers = useMemo(() => getTopScorers(players, 15), [players]);
-  const topAssisters = useMemo(() => getTopAssisters(players, 15), [players]);
+  const activeLeagueClubIds = useMemo(
+    () => new Set(standings.map((row) => row.club.id)),
+    [standings]
+  );
+
+  const divisionScopedPlayers = useMemo(
+    () => players.filter((p) => p.clubId !== null && activeLeagueClubIds.has(p.clubId)),
+    [players, activeLeagueClubIds]
+  );
+
+  const topScorers = useMemo(
+    () => getTopScorers(divisionScopedPlayers, 15),
+    [divisionScopedPlayers]
+  );
+  const topAssisters = useMemo(
+    () => getTopAssisters(divisionScopedPlayers, 15),
+    [divisionScopedPlayers]
+  );
+
+  const divisionClubs = useMemo(
+    () =>
+      clubs
+        .filter((c) => (c.division ?? "Premier League") === selectedDivision)
+        .sort((a, b) => b.avgOverall - a.avgOverall || b.transferBudgetEur - a.transferBudgetEur),
+    [clubs, selectedDivision]
+  );
 
   const weekFixtures = useMemo(
     () => fixtures.filter((f) => f.matchweek === viewWeek),
@@ -43,7 +89,8 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
       {/* Sub-navigation */}
       <div className="flex flex-wrap gap-2">
         {[
-          { id: "table" as const, label: "Classificação", icon: Trophy },
+          { id: "table" as const, label: `Classificação (${userDivision})`, icon: Trophy },
+          { id: "divisions" as const, label: "Divisões da Inglaterra (64)", icon: Layers },
           { id: "stats" as const, label: "Artilharia & Assistências", icon: Award },
           { id: "fixtures" as const, label: "Calendário (38 Rodadas)", icon: Calendar },
         ].map((tab) => {
@@ -157,15 +204,153 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
             </table>
           </div>
           <div className="flex flex-wrap gap-4 border-t border-slate-800 bg-slate-950/50 px-4 py-2.5 text-[11px] text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 1º–4º UEFA Champions League
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> 5º UEFA Europa League
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 18º–20º Rebaixamento
-            </span>
+            {userDivision === "Premier League" ? (
+              <>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 1º–4º UEFA Champions League
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> 5º UEFA Europa League
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 18º–20º Rebaixamento
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Zona de Acesso / Título
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> Playoffs de Acesso
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> Zona de Rebaixamento
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* All 4 English Divisions Browser */}
+      {subTab === "divisions" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {ENGLISH_DIVISIONS.map((div) => {
+              const cnt = clubs.filter(
+                (c) => (c.division ?? "Premier League") === div
+              ).length;
+              return (
+                <button
+                  key={div}
+                  onClick={() => {
+                    setSelectedDivision(div);
+                    setExpandedDivClubId(null);
+                  }}
+                  className={`rounded-lg px-3.5 py-2 text-xs font-bold transition ${
+                    selectedDivision === div
+                      ? "bg-emerald-500 text-slate-950"
+                      : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                  }`}
+                >
+                  {div} ({cnt})
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {divisionClubs.map((club) => {
+              const squad = players
+                .filter((p) => p.clubId === club.id)
+                .sort((a, b) => b.overall - a.overall);
+              const isOpen = expandedDivClubId === club.id;
+              const isUser = club.id === userClubId;
+
+              return (
+                <div
+                  key={club.id}
+                  className={`rounded-lg border p-4 ${
+                    isUser
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-800 bg-slate-900"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <ClubBadge club={club} size="md" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-bold text-white">
+                            {club.name}
+                          </span>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[10px] font-black ${getOverallColor(
+                              Math.round(club.avgOverall)
+                            )}`}
+                          >
+                            OVR {club.avgOverall}
+                          </span>
+                        </div>
+                        <div className="truncate text-xs text-slate-400">
+                          {club.stadium} ({club.capacity.toLocaleString("pt-BR")}) • Verba:{" "}
+                          <span className="text-emerald-400 font-semibold">
+                            {formatMoney(club.transferBudgetEur)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setExpandedDivClubId(isOpen ? null : club.id)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 hover:bg-slate-700"
+                    >
+                      <Users className="h-3 w-3 text-sky-400" />
+                      {isOpen ? "Ocultar" : `Elenco (${squad.length})`}
+                    </button>
+                  </div>
+
+                  {isOpen && (
+                    <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto border-t border-slate-800 pt-3 pr-1">
+                      {squad.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => onSelectPlayer(p)}
+                          className="flex w-full items-center justify-between rounded border border-slate-800 bg-slate-950/60 px-2.5 py-1.5 text-left text-xs hover:border-slate-700"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`w-9 shrink-0 rounded border py-0.5 text-center text-[9px] font-bold ${getRoleBadgeClass(
+                                p.roleCategory
+                              )}`}
+                            >
+                              {p.primaryPosition}
+                            </span>
+                            <span className="truncate font-semibold text-white">{p.name}</span>
+                            <span className="shrink-0 text-[10px] text-slate-500">
+                              {p.age}a
+                            </span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="text-[11px] text-emerald-400">
+                              {formatMoney(p.marketValueEur)}
+                            </span>
+                            <span
+                              className={`rounded border px-1.5 py-0.5 text-[10px] font-black ${getOverallColor(
+                                p.overall
+                              )}`}
+                            >
+                              {p.overall}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -174,7 +359,7 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
       {subTab === "stats" && (
         <div className="grid gap-6 md:grid-cols-2">
           {[
-            { title: "Artilharia da Premier League", list: topScorers, metric: "Gols" },
+            { title: `Artilharia (${userDivision})`, list: topScorers, metric: "Gols" },
             { title: "Líderes em Assistências", list: topAssisters, metric: "Assist." },
           ].map((panel) => (
             <div

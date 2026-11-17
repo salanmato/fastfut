@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type {
   Club,
+  FACupState,
   Fixture,
   NewsItem,
   Player,
@@ -40,6 +41,7 @@ interface DashboardProps {
   seasonFinished: boolean;
   currentDate: string;
   windowStatus: TransferWindowStatus;
+  faCup?: FACupState;
   clubs: Club[];
   players: Player[];
   fixtures: Fixture[];
@@ -50,7 +52,9 @@ interface DashboardProps {
   userKitVariant?: "home" | "away";
   news: NewsItem[];
   onStartMatchday: () => void;
-  onNavigate: (tab: "tactics" | "league" | "market" | "stadium" | "calendar") => void;
+  onNavigate: (
+    tab: "tactics" | "league" | "market" | "stadium" | "calendar" | "facup"
+  ) => void;
   onSelectPlayer: (player: Player) => void;
 }
 
@@ -61,6 +65,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   seasonFinished,
   currentDate,
   windowStatus,
+  faCup,
   clubs,
   players,
   fixtures,
@@ -74,6 +79,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigate,
   onSelectPlayer,
 }) => {
+  const userDivision = userClub.division ?? "Premier League";
+  const currentCupRound = faCup ? faCup.rounds[faCup.currentRoundIndex] : undefined;
   const clubMap = new Map(clubs.map((c) => [c.id, c]));
   const playerMap = new Map(players.map((p) => [p.id, p]));
   const userStanding = standings.find((s) => s.club.id === userClub.id);
@@ -171,7 +178,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {faCup && (
+            <button
+              onClick={() => onNavigate("facup")}
+              className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20"
+            >
+              🏆 FA Cup{currentCupRound ? ` (${currentCupRound.shortName})` : ""}
+            </button>
+          )}
           <button
             onClick={() => onNavigate("calendar")}
             className="rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs font-bold text-slate-200 transition hover:border-sky-500/50 hover:text-white"
@@ -205,7 +220,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
                 <h2 className="text-2xl font-black text-white">
                   {champion?.club.id === userClub.id
-                    ? `CAMPEÃO DA PREMIER LEAGUE! Parabéns, ${managerName}!`
+                    ? `CAMPEÃO DA ${userDivision.toUpperCase()}! Parabéns, ${managerName}!`
                     : `${champion?.club.name} conquistou o título • Você terminou em ${userStanding?.position}º lugar`}
                 </h2>
                 <p className="mt-1 text-sm text-slate-300">
@@ -396,7 +411,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 lg:col-span-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-lg text-white">
-              <Trophy className="h-4 w-4 text-emerald-400" /> Premier League 26/27
+              <Trophy className="h-4 w-4 text-emerald-400" /> {userDivision} 26/27
             </h2>
             <button
               onClick={() => onNavigate("league")}
