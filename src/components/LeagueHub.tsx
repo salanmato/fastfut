@@ -110,11 +110,6 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
                         <div className="flex items-center gap-2.5">
                           <ClubBadge club={row.club} size="sm" />
                           <span className="font-semibold text-white">{row.club.name}</span>
-                          {isUser && (
-                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                              VOCÊ
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-center">{row.played}</td>
