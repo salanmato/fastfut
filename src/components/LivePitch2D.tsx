@@ -36,6 +36,15 @@ interface PitchTrail {
 interface EventBanner {
   text: string;
   tone: "goal" | "save" | "chance" | "card";
+  minute?: number;
+  clubName?: string;
+  clubColor?: string;
+  scorerName?: string;
+  scorerShirt?: number;
+  scorerRating?: string;
+  assistName?: string;
+  assistShirt?: number;
+  assistRating?: string;
 }
 
 function clamp(val: number, min: number, max: number): number {
@@ -245,6 +254,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       };
       const goalX = isHomeEvent ? 98.2 : 1.8;
       const goalY = 47 + Math.random() * 6;
+      const scoringClub = isHomeEvent ? homeClub : awayClub;
+      const scorer = playerMap.get(latest.playerId);
+      const assister = latest.assistPlayerId ? playerMap.get(latest.assistPlayerId) : undefined;
 
       setCarrierId(latest.playerId);
       setCarrierClubId(latest.clubId);
@@ -257,10 +269,21 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       });
       setBallPos({ x: goalX, y: goalY });
       setBanner({
-        text: `GOOOOL! ${latest.playerName} (${latest.minute}')`,
+        text: "GOOOOL!",
         tone: "goal",
+        minute: latest.minute,
+        clubName: scoringClub.name,
+        clubColor: scoringClub.primaryColor,
+        scorerName: latest.playerName,
+        scorerShirt: scorer?.shirtNumber,
+        scorerRating: (session.playerRatings[latest.playerId] ?? 7.6).toFixed(1),
+        assistName: latest.assistPlayerName,
+        assistShirt: assister?.shirtNumber,
+        assistRating: latest.assistPlayerId
+          ? (session.playerRatings[latest.assistPlayerId] ?? 7.1).toFixed(1)
+          : undefined,
       });
-      highlightPauseUntilRef.current = now + 1800;
+      highlightPauseUntilRef.current = now + 2400;
     } else if (latest.type === "save") {
       const keeperPos = playerPositions.get(latest.playerId)?.coord ?? {
         x: isHomeEvent ? 6.5 : 93.5,
@@ -322,10 +345,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   // Clear banner smoothly after highlight window
   useEffect(() => {
     if (!banner) return;
+    const durationMs = banner.tone === "goal" ? 2600 : 1800;
     const t = window.setTimeout(() => {
       setBanner(null);
       setTrail(null);
-    }, 2000);
+    }, durationMs);
     return () => window.clearTimeout(t);
   }, [banner]);
 
@@ -608,23 +632,94 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         </svg>
 
         {/* Event Banner Overlay */}
-        {banner && (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
-            <div
-              className={`rounded-md px-4 py-1.5 text-xs font-black tracking-wide border-2 ${
-                banner.tone === "goal"
-                  ? "bg-amber-400 text-slate-950 ring-white animate-bounce"
-                  : banner.tone === "save"
-                  ? "bg-sky-500 text-white ring-sky-200"
-                  : banner.tone === "chance"
-                  ? "bg-emerald-500 text-slate-950 ring-emerald-200"
-                  : "bg-rose-500 text-white ring-rose-200"
-              }`}
-            >
-              {banner.text}
+        {banner &&
+          (banner.tone === "goal" ? (
+            <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55">
+              <div className="w-full max-w-md overflow-hidden rounded-md border-2 border-amber-400 bg-slate-950 text-center">
+                <div
+                  className="h-2 w-full"
+                  style={{ backgroundColor: banner.clubColor ?? "#fbbf24" }}
+                />
+                <div className="px-6 py-5 space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-widest text-slate-300">
+                    {banner.clubName} • {banner.minute}'
+                  </div>
+
+                  <h1 className="font-h1 text-4xl sm:text-5xl tracking-wider text-amber-400">
+                    GOOOOL!
+                  </h1>
+
+                  <div className="space-y-2 border-t border-slate-800 pt-3 text-left">
+                    {/* Scorer Row */}
+                    <div className="flex items-center justify-between gap-3 rounded border border-emerald-500/40 bg-emerald-500/15 px-3 py-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
+                          ⚽ GOL
+                        </span>
+                        {banner.scorerShirt !== undefined && (
+                          <span className="shrink-0 text-xs font-black text-amber-300">
+                            #{banner.scorerShirt}
+                          </span>
+                        )}
+                        <span className="truncate text-sm font-black text-white">
+                          {banner.scorerName}
+                        </span>
+                      </div>
+                      {banner.scorerRating && (
+                        <span className="shrink-0 rounded border border-emerald-400/50 bg-slate-900 px-2 py-0.5 text-xs font-black text-emerald-300">
+                          Nota {banner.scorerRating}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Assister Row */}
+                    <div className="flex items-center justify-between gap-3 rounded border border-slate-800 bg-slate-900 px-3 py-2">
+                      {banner.assistName ? (
+                        <>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 rounded bg-sky-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
+                              👟 ASSIST
+                            </span>
+                            {banner.assistShirt !== undefined && (
+                              <span className="shrink-0 text-xs font-black text-sky-300">
+                                #{banner.assistShirt}
+                              </span>
+                            )}
+                            <span className="truncate text-xs font-bold text-slate-100">
+                              {banner.assistName}
+                            </span>
+                          </div>
+                          {banner.assistRating && (
+                            <span className="shrink-0 rounded border border-sky-400/40 bg-slate-950 px-2 py-0.5 text-xs font-black text-sky-300">
+                              Nota {banner.assistRating}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex w-full items-center justify-center text-[11px] font-semibold text-slate-400">
+                          Jogada Individual (sem assistência)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
+              <div
+                className={`rounded-md px-4 py-1.5 text-xs font-black tracking-wide border-2 ${
+                  banner.tone === "save"
+                    ? "bg-sky-500 text-white border-sky-200"
+                    : banner.tone === "chance"
+                    ? "bg-emerald-500 text-slate-950 border-emerald-200"
+                    : "bg-rose-500 text-white border-rose-200"
+                }`}
+              >
+                {banner.text}
+              </div>
+            </div>
+          ))}
 
         {/* 22 Active Players */}
         {Array.from(playerPositions.entries()).map(([playerId, info]) => {
