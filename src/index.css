@@ -9,7 +9,7 @@
   --radius-md: 4px;
   --radius-lg: 4px;
   --radius-xl: 8px;
-  --radius-2xl: 16px;
+  --radius-2xl: 8px;
 }
 
 @layer base {
@@ -65,12 +65,9 @@
   border-radius: 4px !important;
 }
 
-.rounded-xl {
-  border-radius: 8px !important;
-}
-
+.rounded-xl,
 .rounded-2xl {
-  border-radius: 16px !important;
+  border-radius: 8px !important;
 }
 
 /* Dynamic Flat Club Theme Surfaces (100% solid opaque fills) */
