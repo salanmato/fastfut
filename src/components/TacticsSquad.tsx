@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ArrowLeftRight, Sparkles, Info, Shield, Zap, Compass } from "lucide-react";
+import { ArrowLeftRight, Sparkles, Info, Shield, Zap, Compass, Shirt } from "lucide-react";
 import type {
   Club,
   Formation,
@@ -16,7 +16,10 @@ import {
   getRoleBadgeClass,
   getStaminaColor,
 } from "../utils/format";
+import { evaluateShirtNumberAffinity } from "../utils/shirtNumbers";
 import { PlayerAvatar } from "./PlayerAvatar";
+
+const SHIRT_NUMBERS_1_TO_99 = Array.from({ length: 99 }, (_, i) => i + 1);
 
 interface TacticsSquadProps {
   club: Club;
@@ -24,6 +27,8 @@ interface TacticsSquadProps {
   tactics: Tactics;
   onChangeTactics: (next: Tactics) => void;
   onSelectPlayer: (player: Player) => void;
+  onChangeShirtNumber?: (playerId: number, newNumber: number) => void;
+  onAutoAssignShirtNumbers?: () => void;
 }
 
 const FORMATIONS: Formation[] = ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2", "5-3-2"];
@@ -34,6 +39,8 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   tactics,
   onChangeTactics,
   onSelectPlayer,
+  onChangeShirtNumber,
+  onAutoAssignShirtNumbers,
 }) => {
   const [swapId, setSwapId] = useState<number | null>(null);
   const [injuryWarning, setInjuryWarning] = useState<string | null>(null);
@@ -129,6 +136,8 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   const renderRow = (p: Player, slotLabel: string, indexLabel: string) => {
     const isSelectedForSwap = swapId === p.id;
     const injLeft = p.injuryMatchesLeft ?? 0;
+    const affinity = evaluateShirtNumberAffinity(p);
+    const affinityTitle = `${affinity.label} (${affinity.bonusPctText}) • Já usou: #${affinity.historyNumbers.join(", #")} • Função (${p.primaryPosition}): #${affinity.roleNumbers.join(", #")}`;
     return (
       <div
         key={p.id}
@@ -140,10 +149,42 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
             : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700"
         }`}
       >
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="w-9 shrink-0 text-center text-[10px] font-bold text-slate-400">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="hidden sm:inline-block w-9 shrink-0 text-center text-[10px] font-bold text-slate-400">
             {indexLabel}
           </span>
+          {onChangeShirtNumber ? (
+            <select
+              value={p.shirtNumber ?? 1}
+              title={affinityTitle}
+              onChange={(e) => onChangeShirtNumber(p.id, Number(e.target.value))}
+              className={`w-14 shrink-0 rounded border px-1 py-0.5 text-center text-[11px] font-black outline-none ${
+                affinity.tier === "perfect"
+                  ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300"
+                  : affinity.tier === "good"
+                  ? "border-sky-500/50 bg-sky-500/15 text-sky-300"
+                  : affinity.tier === "awkward"
+                  ? "border-rose-500/60 bg-rose-500/15 text-rose-300"
+                  : "border-slate-700 bg-slate-900 text-slate-200"
+              }`}
+            >
+              {SHIRT_NUMBERS_1_TO_99.map((n) => {
+                const isHist = affinity.historyNumbers.includes(n);
+                const isRole = affinity.roleNumbers.includes(n);
+                const mark = isHist && isRole ? " ★★" : isHist ? " ★" : isRole ? " •" : "";
+                return (
+                  <option key={n} value={n}>
+                    #{n}
+                    {mark}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            <span className="w-9 shrink-0 rounded border border-slate-700 bg-slate-900 py-0.5 text-center text-[10px] font-black text-slate-200">
+              #{p.shirtNumber ?? "-"}
+            </span>
+          )}
           <span
             className={`w-10 shrink-0 rounded border py-0.5 text-center text-[10px] font-bold ${getRoleBadgeClass(
               p.roleCategory
@@ -153,7 +194,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
           </span>
           <button
             onClick={() => onSelectPlayer(p)}
-            className="flex min-w-0 items-center gap-2.5 text-left group"
+            className="flex min-w-0 items-center gap-2 text-left group"
           >
             <PlayerAvatar
               name={p.name}
@@ -164,6 +205,20 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 truncate text-xs font-bold text-white group-hover:text-emerald-300">
                 <span className="truncate">{p.name}</span>
+                {affinity.tier !== "neutral" && (
+                  <span
+                    title={affinityTitle}
+                    className={`hidden md:inline-block shrink-0 rounded border px-1 py-0.2 text-[9px] font-black ${
+                      affinity.tier === "perfect"
+                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
+                        : affinity.tier === "good"
+                        ? "border-sky-500/50 bg-sky-500/15 text-sky-300"
+                        : "border-rose-500/50 bg-rose-500/15 text-rose-300"
+                    }`}
+                  >
+                    {affinity.bonusPctText}
+                  </span>
+                )}
                 {injLeft > 0 && (
                   <span className="shrink-0 rounded bg-rose-600 px-1.5 py-0.2 text-[9px] font-black text-white">
                     DM {injLeft}j
@@ -253,12 +308,23 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
               <h2 className="flex items-center gap-2 text-sm font-bold text-white">
                 <Compass className="h-4 w-4 text-emerald-400" /> Prancheta Tática
               </h2>
-              <button
-                onClick={handleAutoPick}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25"
-              >
-                <Sparkles className="h-3.5 w-3.5" /> Escalar Melhor 11
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {onAutoAssignShirtNumbers && (
+                  <button
+                    onClick={onAutoAssignShirtNumbers}
+                    title="Distribui automaticamente as camisas ideais conforme função e histórico de cada jogador"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-bold text-sky-300 border border-sky-500/35 transition hover:bg-sky-500/25"
+                  >
+                    <Shirt className="h-3.5 w-3.5" /> Otimizar Camisas
+                  </button>
+                )}
+                <button
+                  onClick={handleAutoPick}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Escalar Melhor 11
+                </button>
+              </div>
             </div>
 
             {/* Formation selector */}
@@ -404,6 +470,9 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-1 rounded bg-slate-950 px-1.5 py-0.5 text-[10px] font-bold text-white border border-slate-800">
+                      {p.shirtNumber && (
+                        <span className="text-amber-300">#{p.shirtNumber}</span>
+                      )}
                       <span className="text-emerald-400">{slot.label}</span>
                       <span className="max-w-[68px] truncate">{surname}</span>
                     </div>

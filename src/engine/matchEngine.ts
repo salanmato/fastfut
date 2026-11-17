@@ -12,6 +12,7 @@ import type {
   Tactics,
 } from "../types/game";
 import { getFormationSlots } from "../utils/format";
+import { evaluateShirtNumberAffinity } from "../utils/shirtNumbers";
 
 export interface TeamPower {
   attack: number;
@@ -227,7 +228,8 @@ export function computeTeamPower(
   const getEff = (p: Player, val: number) => {
     const stam = staminaOverrides?.[p.id] ?? p.stamina;
     const fatigueFactor = 0.72 + 0.28 * (Math.max(15, stam) / 100);
-    return val * fatigueFactor;
+    const shirtFactor = evaluateShirtNumberAffinity(p).multiplier;
+    return val * fatigueFactor * shirtFactor;
   };
 
   const gks = activePlayers.filter((p) => p.roleCategory === "GK");
@@ -784,7 +786,7 @@ export function stepLiveMatchMinute(
 
     const shooter = weightedPick(attackers, (p) => {
       const roleMult = p.roleCategory === "ATT" ? 3.2 : p.roleCategory === "MID" ? 1.4 : 0.35;
-      return roleMult * (0.5 + p.stats.finishing / 100);
+      return roleMult * (0.5 + p.stats.finishing / 100) * evaluateShirtNumberAffinity(p).multiplier;
     });
 
     const possibleAssisters = attackers.filter((p) => p.id !== shooter.id);
@@ -792,16 +794,17 @@ export function stepLiveMatchMinute(
       possibleAssisters.length > 0 && Math.random() < 0.72
         ? weightedPick(possibleAssisters, (p) => {
             const roleMult = p.roleCategory === "MID" ? 2.2 : p.roleCategory === "ATT" ? 1.5 : 0.7;
-            return roleMult * (0.5 + p.faceStats.passing / 100);
+            return roleMult * (0.5 + p.faceStats.passing / 100) * evaluateShirtNumberAffinity(p).multiplier;
           })
         : undefined;
 
     const keeper = defTeam.find((p) => p.roleCategory === "GK");
+    const shooterShirtMult = evaluateShirtNumberAffinity(shooter).multiplier;
 
     stats.shots += 1;
     const shotQuality =
       0.08 +
-      Math.max(0, (shooter.stats.finishing - defPower.defense) * 0.0032) +
+      Math.max(0, (shooter.stats.finishing * shooterShirtMult - defPower.defense) * 0.0032) +
       Math.random() * 0.22;
     const xg = Math.round(Math.min(0.55, Math.max(0.04, shotQuality)) * 100) / 100;
     stats.xg = Math.round((stats.xg + xg) * 100) / 100;
@@ -810,7 +813,10 @@ export function stepLiveMatchMinute(
       stats.corners += 1;
     }
 
-    const onTargetProb = Math.max(0.28, Math.min(0.62, 0.38 + (shooter.faceStats.shooting - 72) * 0.004));
+    const onTargetProb = Math.max(
+      0.28,
+      Math.min(0.62, 0.38 + (shooter.faceStats.shooting * shooterShirtMult - 72) * 0.004)
+    );
     if (Math.random() > onTargetProb) {
       if (xg >= 0.22) {
         session.events.push({
@@ -829,10 +835,16 @@ export function stepLiveMatchMinute(
     stats.shotsOnTarget += 1;
 
     // Goal vs GK Save
-    const gkAbility = keeper ? (keeper.overall * 0.6 + keeper.faceStats.reflexes * 0.4) : 55;
+    const keeperShirtMult = keeper ? evaluateShirtNumberAffinity(keeper).multiplier : 1.0;
+    const gkAbility = keeper
+      ? (keeper.overall * 0.6 + keeper.faceStats.reflexes * 0.4) * keeperShirtMult
+      : 55;
     const goalProb = Math.max(
       0.16,
-      Math.min(0.46, 0.27 + (shooter.stats.finishing - gkAbility) * 0.005 + (xg - 0.16) * 0.4)
+      Math.min(
+        0.46,
+        0.27 + (shooter.stats.finishing * shooterShirtMult - gkAbility) * 0.005 + (xg - 0.16) * 0.4
+      )
     );
 
     if (Math.random() < goalProb) {

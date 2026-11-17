@@ -8,9 +8,11 @@ import {
   Calendar,
   HeartPulse,
   Star,
+  Shirt,
 } from "lucide-react";
 import type { Player } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
+import { evaluateShirtNumberAffinity } from "../utils/shirtNumbers";
 import {
   formatMoney,
   formatWage,
@@ -21,6 +23,8 @@ import {
 } from "../utils/format";
 import { PlayerAvatar } from "./PlayerAvatar";
 
+const MODAL_SHIRT_NUMBERS = Array.from({ length: 99 }, (_, i) => i + 1);
+
 interface PlayerProfileModalProps {
   player: Player | null;
   userClubId: number;
@@ -29,6 +33,7 @@ interface PlayerProfileModalProps {
   windowStatus?: TransferWindowStatus;
   isShortlisted?: boolean;
   onToggleShortlist?: (playerId: number) => void;
+  onChangeShirtNumber?: (playerId: number, newNumber: number) => void;
   onClose: () => void;
   onBuyPlayer?: (player: Player) => void;
   onSellPlayer?: (player: Player) => void;
@@ -42,6 +47,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   windowStatus,
   isShortlisted = false,
   onToggleShortlist,
+  onChangeShirtNumber,
   onClose,
   onBuyPlayer,
   onSellPlayer,
@@ -53,6 +59,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   const canSell = isOwned && Boolean(onSellPlayer);
   const canAfford = userBudgetEur >= player.marketValueEur;
   const windowClosed = Boolean(windowStatus && !windowStatus.isOpen);
+  const shirtAffinity = evaluateShirtNumberAffinity(player);
 
   const statGroups: Array<{ title: string; items: Array<[string, number]> }> = [
     {
@@ -199,6 +206,113 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
               </div>
               <div className="text-[11px] text-slate-400">
                 Energia {Math.round(player.stamina)}% • Moral {player.morale}%
+              </div>
+            </div>
+          </div>
+
+          {/* Shirt Number & Performance Affinity */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 font-black text-white">
+                  #{player.shirtNumber ?? "-"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-300">
+                    <Shirt className="h-3.5 w-3.5 text-amber-400" /> Numeração & Afinidade em Campo
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    {shirtAffinity.label}{" "}
+                    <span
+                      className={`font-black ${
+                        shirtAffinity.tier === "perfect"
+                          ? "text-emerald-400"
+                          : shirtAffinity.tier === "good"
+                          ? "text-sky-400"
+                          : shirtAffinity.tier === "awkward"
+                          ? "text-rose-400"
+                          : "text-slate-300"
+                      }`}
+                    >
+                      ({shirtAffinity.bonusPctText} de rendimento)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {isOwned && onChangeShirtNumber && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-400">Alterar:</span>
+                  <select
+                    value={player.shirtNumber ?? 1}
+                    onChange={(e) => onChangeShirtNumber(player.id, Number(e.target.value))}
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-black text-white outline-none"
+                  >
+                    {MODAL_SHIRT_NUMBERS.map((n) => (
+                      <option key={n} value={n}>
+                        Camisa #{n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+              <div>
+                <div className="mb-1.5 text-[11px] font-bold text-slate-400">
+                  Números que já usou (Histórico):
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {shirtAffinity.historyNumbers.map((num) => {
+                    const active = player.shirtNumber === num;
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        disabled={!isOwned || !onChangeShirtNumber}
+                        onClick={() => onChangeShirtNumber?.(player.id, num)}
+                        className={`rounded border px-2 py-0.5 text-xs font-black transition ${
+                          active
+                            ? "border-emerald-400 bg-emerald-500 text-slate-950"
+                            : isOwned && onChangeShirtNumber
+                            ? "border-amber-400/50 bg-amber-400/15 text-amber-300 hover:bg-amber-400/25"
+                            : "border-slate-700 bg-slate-900 text-slate-300"
+                        }`}
+                      >
+                        #{num}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1.5 text-[11px] font-bold text-slate-400">
+                  Números ideais da função ({player.primaryPosition}):
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {shirtAffinity.roleNumbers.map((num) => {
+                    const active = player.shirtNumber === num;
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        disabled={!isOwned || !onChangeShirtNumber}
+                        onClick={() => onChangeShirtNumber?.(player.id, num)}
+                        className={`rounded border px-2 py-0.5 text-xs font-black transition ${
+                          active
+                            ? "border-emerald-400 bg-emerald-500 text-slate-950"
+                            : isOwned && onChangeShirtNumber
+                            ? "border-sky-500/40 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
+                            : "border-slate-700 bg-slate-900 text-slate-300"
+                        }`}
+                      >
+                        #{num}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

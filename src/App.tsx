@@ -41,6 +41,12 @@ import {
 import { formatMoney } from "./utils/format";
 import { getKitThemePalette } from "./utils/clubVisuals";
 import {
+  autoAssignClubShirtNumbers,
+  changeClubPlayerShirtNumber,
+  ensureAllPlayersShirtNumbers,
+  evaluateShirtNumberAffinity,
+} from "./utils/shirtNumbers";
+import {
   addDaysIso,
   formatDatePtBr,
   getDefaultDateForMatchweek,
@@ -100,6 +106,7 @@ function hydrateSave(parsed: SaveState): SaveState {
   );
   return {
     ...parsed,
+    players: ensureAllPlayersShirtNumbers(parsed.players),
     stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
     kitTheme: parsed.kitTheme ?? "home",
     autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
@@ -265,16 +272,21 @@ export const App: React.FC = () => {
   ) => {
     if (!rawDb) return;
     const clubs = rawDb.clubs.map((c) => ({ ...c }));
-    const players = rawDb.players.map((p) => ({ ...p }));
+    const rawPlayers = ensureAllPlayersShirtNumbers(rawDb.players.map((p) => ({ ...p })));
     const referees = rawDb.referees.map((r) => ({ ...r }));
 
     const tacticsByClub: Record<number, Tactics> = {};
     for (const club of clubs) {
-      const squad = players.filter((p) => p.clubId === club.id);
+      const squad = rawPlayers.filter((p) => p.clubId === club.id);
       tacticsByClub[club.id] = createDefaultTactics(squad, club.avgOverall);
     }
 
     const chosenClub = clubs.find((c) => c.id === clubId)!;
+    const players = autoAssignClubShirtNumbers(
+      rawPlayers,
+      clubId,
+      tacticsByClub[clubId]?.starters ?? []
+    );
     const chosenDivision = chosenClub.division ?? "Premier League";
     const fixtures =
       chosenDivision !== "Premier League"
@@ -946,16 +958,18 @@ export const App: React.FC = () => {
       return c;
     });
 
-    const nextPlayers = save.players.map((p) =>
+    const mappedPlayers = save.players.map((p) =>
       p.id === target.id
         ? {
             ...p,
             clubId: userClub.id,
             clubName: userClub.name,
             league: userClub.division ?? "Premier League",
+            shirtNumber: undefined,
           }
         : p
     );
+    const nextPlayers = ensureAllPlayersShirtNumbers(mappedPlayers);
 
     const nextTacticsByClub = { ...save.tacticsByClub };
     // Remove from seller's tactics if seller is in PL
@@ -979,6 +993,7 @@ export const App: React.FC = () => {
       };
     }
 
+    const boughtPlayer = nextPlayers.find((p) => p.id === target.id);
     const newsItem: NewsItem = {
       id: `buy-${target.id}-${Date.now()}`,
       matchweek: save.currentMatchweek,
@@ -987,7 +1002,7 @@ export const App: React.FC = () => {
       title: `OFICIAL: ${target.name} assina com o ${userClub.name}!`,
       body: `Contratação fechada junto ao ${target.clubName} por ${formatMoney(
         target.marketValueEur
-      )}.`,
+      )}${boughtPlayer?.shirtNumber ? ` (vestirá a camisa #${boughtPlayer.shirtNumber})` : ""}.`,
     };
 
     setSave({
@@ -998,6 +1013,37 @@ export const App: React.FC = () => {
       news: [newsItem, ...save.news].slice(0, 40),
     });
     setToast(`${target.name} contratado por ${formatMoney(target.marketValueEur)}!`);
+  };
+
+  const handleChangeShirtNumber = (playerId: number, newNumber: number) => {
+    if (!save) return;
+    const { nextPlayers, swappedWith } = changeClubPlayerShirtNumber(
+      save.players,
+      save.userClubId,
+      playerId,
+      newNumber
+    );
+    setSave({ ...save, players: nextPlayers });
+    const updated = nextPlayers.find((p) => p.id === playerId);
+    if (updated) {
+      const aff = evaluateShirtNumberAffinity(updated);
+      const swapTxt = swappedWith ? ` (trocou com ${swappedWith.name})` : "";
+      setToast(
+        `Camisa #${updated.shirtNumber} atribuída a ${updated.name}: ${aff.label} (${aff.bonusPctText})${swapTxt}`
+      );
+    }
+  };
+
+  const handleAutoAssignShirtNumbers = () => {
+    if (!save) return;
+    const userTac = save.tacticsByClub[save.userClubId];
+    const nextPlayers = autoAssignClubShirtNumbers(
+      save.players,
+      save.userClubId,
+      userTac?.starters ?? []
+    );
+    setSave({ ...save, players: nextPlayers });
+    setToast("Numeração do elenco otimizada conforme histórico e função de cada atleta!");
   };
 
   const handleSellPlayer = (target: Player) => {
@@ -1359,6 +1405,8 @@ export const App: React.FC = () => {
               })
             }
             onSelectPlayer={setInspectedPlayer}
+            onChangeShirtNumber={handleChangeShirtNumber}
+            onAutoAssignShirtNumbers={handleAutoAssignShirtNumbers}
           />
         )}
 
@@ -1436,7 +1484,11 @@ export const App: React.FC = () => {
 
       {/* Player Modal */}
       <PlayerProfileModal
-        player={inspectedPlayer}
+        player={
+          inspectedPlayer
+            ? save.players.find((p) => p.id === inspectedPlayer.id) ?? inspectedPlayer
+            : null
+        }
         userClubId={userClub.id}
         userBudgetEur={userClub.transferBudgetEur}
         userSquadSize={userSquad.length}
@@ -1445,6 +1497,7 @@ export const App: React.FC = () => {
           inspectedPlayer ? (save.shortlistIds ?? []).includes(inspectedPlayer.id) : false
         }
         onToggleShortlist={handleToggleShortlist}
+        onChangeShirtNumber={handleChangeShirtNumber}
         onClose={() => setInspectedPlayer(null)}
         onBuyPlayer={handleBuyPlayer}
         onSellPlayer={handleSellPlayer}

@@ -135,6 +135,8 @@ export interface Player {
   seasonYellowCards: number;
   seasonRedCards: number;
   seasonAvgRating: number;
+  shirtNumber?: number;
+  preferredNumbers?: number[];
   injuryMatchesLeft?: number;
   injuryType?: string;
 }

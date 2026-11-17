@@ -674,7 +674,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     club={club}
                     variant={variant}
                     size="sm"
-                    number={info.label.slice(0, 2)}
+                    number={player.shirtNumber ?? info.label.slice(0, 2)}
                   />
                   {hasYellow && (
                     <span className="absolute -left-0.5 -top-0.5 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
@@ -706,7 +706,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     borderWidth: "1.5px",
                   }}
                 >
-                  {info.label.slice(0, 2)}
+                  {player.shirtNumber ?? info.label.slice(0, 2)}
 
                   {hasYellow && (
                     <span className="absolute -left-1 -top-1 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
