@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Search, Trophy, MapPin, Banknote, Users, Sparkles } from "lucide-react";
+import { Search, Trophy, MapPin, Banknote, Users, Sparkles, ArrowLeft } from "lucide-react";
 import type { Club, Player } from "../types/game";
 import { formatMoney, getOverallColor } from "../utils/format";
 import { getClubVisuals, getKitThemePalette } from "../utils/clubVisuals";
@@ -10,12 +10,14 @@ interface ClubSelectionProps {
   clubs: Club[];
   players: Player[];
   onSelectClub: (clubId: number, managerName: string, kitTheme: "home" | "away") => void;
+  onBackToMenu?: () => void;
 }
 
 export const ClubSelection: React.FC<ClubSelectionProps> = ({
   clubs,
   players,
   onSelectClub,
+  onBackToMenu,
 }) => {
   const [managerName, setManagerName] = useState("Alan Matos");
   const [search, setSearch] = useState("");
@@ -53,8 +55,18 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                <Trophy className="h-3.5 w-3.5" /> Premier League 2026/27 • Dados Reais (EA FC 27 + Transfermarkt)
+              <div className="flex flex-wrap items-center gap-2">
+                {onBackToMenu && (
+                  <button
+                    onClick={onBackToMenu}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs font-bold text-slate-200 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" /> Menu Principal
+                  </button>
+                )}
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                  <Trophy className="h-3.5 w-3.5" /> Premier League 2026/27 • Dados Reais
+                </div>
               </div>
               <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
                 Football Manager <span className="text-emerald-400">26/27</span>

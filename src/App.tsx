@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Download,
   Loader2,
+  Home,
 } from "lucide-react";
 import type {
   MatchInjury,
@@ -30,6 +31,7 @@ import { formatMoney } from "./utils/format";
 import { getKitThemePalette } from "./utils/clubVisuals";
 import { ClubBadge } from "./components/ClubBadge";
 import { ClubKit } from "./components/ClubKit";
+import { MainMenu } from "./components/MainMenu";
 import { ClubSelection } from "./components/ClubSelection";
 import { Dashboard } from "./components/Dashboard";
 import { TacticsSquad } from "./components/TacticsSquad";
@@ -42,6 +44,7 @@ import { PlayerProfileModal } from "./components/PlayerProfileModal";
 const SAVE_KEY = "fm2627_pl_save_v1";
 
 type Tab = "dashboard" | "tactics" | "stadium" | "league" | "market" | "matchday";
+type Screen = "menu" | "select_club" | "game";
 
 function ensureStadiumMap(
   clubs: SaveState["clubs"],
@@ -74,6 +77,7 @@ export const App: React.FC = () => {
       return null;
     }
   });
+  const [screen, setScreen] = useState<Screen>("menu");
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [inspectedPlayer, setInspectedPlayer] = useState<Player | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -168,6 +172,7 @@ export const App: React.FC = () => {
 
     setSave(newSave);
     setActiveTab("dashboard");
+    setScreen("game");
   };
 
   const handleResetSave = () => {
@@ -175,6 +180,50 @@ export const App: React.FC = () => {
     localStorage.removeItem(SAVE_KEY);
     setSave(null);
     setActiveTab("dashboard");
+    setScreen("select_club");
+  };
+
+  const handleDeleteSave = () => {
+    if (!window.confirm("Apagar o save local armazenado neste navegador?")) return;
+    localStorage.removeItem(SAVE_KEY);
+    setSave(null);
+    setActiveTab("dashboard");
+    setScreen("menu");
+    setToast("Save local removido.");
+  };
+
+  const handleImportSave = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as SaveState;
+        if (
+          !parsed ||
+          typeof parsed.userClubId !== "number" ||
+          !Array.isArray(parsed.clubs) ||
+          !Array.isArray(parsed.players) ||
+          !Array.isArray(parsed.fixtures)
+        ) {
+          throw new Error("Arquivo de save inválido.");
+        }
+        const hydrated: SaveState = {
+          ...parsed,
+          stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
+          kitTheme: parsed.kitTheme ?? "home",
+          autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
+        };
+        setSave(hydrated);
+        setActiveTab("dashboard");
+        setScreen("game");
+        const club = hydrated.clubs.find((c) => c.id === hydrated.userClubId);
+        setToast(
+          `Save carregado: ${club?.name ?? "Clube"} (Rodada ${hydrated.currentMatchweek})`
+        );
+      } catch {
+        setToast("Erro: o arquivo selecionado não é um save válido do FM 26/27.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleExportSave = () => {
@@ -694,12 +743,55 @@ export const App: React.FC = () => {
     );
   }
 
-  if (!save && rawDb) {
+  const handleToggleSaveKitTheme = () => {
+    if (!save) return;
+    const club = save.clubs.find((c) => c.id === save.userClubId);
+    const nextTheme: "home" | "away" = (save.kitTheme ?? "home") === "home" ? "away" : "home";
+    setSave({ ...save, kitTheme: nextTheme });
+    setToast(
+      nextTheme === "home"
+        ? `Tema alterado: Uniforme 1 (Titular)${club ? ` do ${club.shortName}` : ""}`
+        : `Tema alterado: Uniforme 2 (Reserva)${club ? ` do ${club.shortName}` : ""}`
+    );
+  };
+
+  if (screen === "menu") {
+    return (
+      <>
+        <MainMenu
+          rawDb={rawDb}
+          save={save}
+          standings={standings}
+          onContinue={() => setScreen("game")}
+          onNewGame={() => setScreen("select_club")}
+          onImportSave={handleImportSave}
+          onExportSave={handleExportSave}
+          onDeleteSave={handleDeleteSave}
+          onToggleKitTheme={handleToggleSaveKitTheme}
+          onToggleAutoFormation={() =>
+            save &&
+            setSave({
+              ...save,
+              autoOpenFormationOnRedCard: !(save.autoOpenFormationOnRedCard ?? true),
+            })
+          }
+        />
+        {toast && (
+          <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-bold text-emerald-300 shadow-2xl backdrop-blur">
+            {toast}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if ((screen === "select_club" || !save) && rawDb) {
     return (
       <ClubSelection
         clubs={rawDb.clubs}
         players={rawDb.players}
         onSelectClub={handleSelectClub}
+        onBackToMenu={() => setScreen("menu")}
       />
     );
   }
@@ -712,15 +804,7 @@ export const App: React.FC = () => {
   const kitTheme: "home" | "away" = save.kitTheme ?? "home";
   const palette = getKitThemePalette(userClub, kitTheme);
 
-  const handleToggleKitTheme = () => {
-    const nextTheme: "home" | "away" = kitTheme === "home" ? "away" : "home";
-    setSave({ ...save, kitTheme: nextTheme });
-    setToast(
-      nextTheme === "home"
-        ? `Tema alterado: Uniforme 1 (Titular) do ${userClub.shortName}`
-        : `Tema alterado: Uniforme 2 (Reserva) do ${userClub.shortName}`
-    );
-  };
+  const handleToggleKitTheme = handleToggleSaveKitTheme;
 
   return (
     <div
@@ -795,6 +879,15 @@ export const App: React.FC = () => {
 
           {/* Utility Buttons + Uniform Theme Switcher */}
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setScreen("menu")}
+              disabled={activeTab === "matchday"}
+              title="Voltar ao Menu Inicial"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/25 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+            >
+              <Home className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Menu</span>
+            </button>
             <button
               onClick={handleToggleKitTheme}
               title="Alternar tema entre Uniforme 1 (Titular) e Uniforme 2 (Reserva)"
