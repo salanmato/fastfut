@@ -415,7 +415,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const carrierPlayer = carrierId ? playerMap.get(carrierId) : undefined;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-xl">
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
       {/* Pitch Header Controls */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex flex-wrap items-center gap-3">
@@ -486,7 +486,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       {/* Horizontal 2D Pitch */}
       <div
-        className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border-2 border-emerald-900/80 shadow-inner select-none"
+        className="relative aspect-[16/9] w-full overflow-hidden rounded-md border-2 border-emerald-800 select-none"
         style={{
           backgroundImage:
             "repeating-linear-gradient(90deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",
@@ -611,7 +611,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         {banner && (
           <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
             <div
-              className={`rounded-full px-4 py-1.5 text-xs font-black tracking-wide shadow-2xl ring-2 ${
+              className={`rounded-md px-4 py-1.5 text-xs font-black tracking-wide border-2 ${
                 banner.tone === "goal"
                   ? "bg-amber-400 text-slate-950 ring-white animate-bounce"
                   : banner.tone === "save"
@@ -692,7 +692,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               ) : (
                 <div
-                  className={`relative flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full text-[9px] font-black shadow-md transition ${
+                  className={`relative flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full text-[9px] font-black transition ${
                     isSubSelected
                       ? "ring-2 ring-amber-400 scale-115"
                       : isCarrier
@@ -728,10 +728,10 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               {/* Name & Stamina pill */}
               {showNames && (
                 <div className="mt-0.5 flex flex-col items-center">
-                  <span className="max-w-[66px] truncate rounded bg-slate-950/80 px-1 text-[9px] font-semibold leading-tight text-white shadow">
+                  <span className="max-w-[66px] truncate rounded bg-slate-950/90 px-1 text-[9px] font-semibold leading-tight text-white">
                     {surname}
                   </span>
-                  <div className="mt-0.5 h-0.5 w-6 overflow-hidden rounded-full bg-slate-900/90">
+                  <div className="mt-0.5 h-0.5 w-6 overflow-hidden rounded-full bg-slate-900">
                     <div
                       className={`h-full ${getStaminaColor(stamina)}`}
                       style={{ width: `${stamina}%` }}
@@ -748,7 +748,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           style={{ left: `${ballPos.x}%`, top: `${ballPos.y}%` }}
           className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out"
         >
-          <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.95)] ring-2 ring-slate-900" />
+          <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950" />
         </div>
       </div>
 

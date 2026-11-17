@@ -49,7 +49,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
     >
       {/* Top Hero */}
       <div
-        className="border-b border-slate-800/80 backdrop-blur"
+        className="border-b-2 border-slate-800"
         style={palette?.headerStyle}
       >
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -98,7 +98,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                     ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
                     : undefined
                 }
-                className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-black shadow-lg transition hover:brightness-110"
+                className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-black transition hover:brightness-110"
               >
                 <Sparkles className="h-4 w-4" /> Assumir {selectedClub?.shortName}
               </button>
@@ -129,10 +129,10 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                 <button
                   key={club.id}
                   onClick={() => setSelectedId(club.id)}
-                  className={`group flex items-center justify-between gap-3 rounded-xl border p-3.5 text-left transition ${
+                  className={`group flex items-center justify-between gap-3 rounded-lg border p-3.5 text-left transition ${
                     isSelected
-                      ? "border-emerald-500 bg-emerald-500/10 shadow-md shadow-emerald-950/40"
-                      : "border-slate-800/90 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900"
+                      ? "border-emerald-500 bg-emerald-500/15"
+                      : "border-slate-800 bg-slate-900 hover:border-slate-700"
                   }`}
                 >
                   <div className="flex min-w-0 items-center gap-3">
@@ -165,19 +165,18 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
         {/* Selected Club Inspector */}
         {selectedClub && (
           <div className="lg:col-span-5">
-            <div className="sticky top-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-xl">
+            <div className="sticky top-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
               {/* Stadium Photo Hero Banner */}
               <div className="relative h-36 w-full overflow-hidden bg-slate-950">
                 {getClubVisuals(selectedClub).stadiumImageUrl && (
                   <img
                     src={getClubVisuals(selectedClub).stadiumImageUrl}
                     alt={selectedClub.stadium}
-                    className="h-full w-full object-cover opacity-65 transition duration-500"
+                    className="h-full w-full object-cover opacity-55"
                     loading="lazy"
                   />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
-                <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-3">
+                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 border-t border-slate-800 bg-slate-950/90 px-4 py-2.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <ClubBadge club={selectedClub} size="lg" />
                     <div className="min-w-0">
@@ -185,7 +184,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                         <h2 className="truncate text-xl font-black text-white">
                           {selectedClub.name}
                         </h2>
-                        <span className="shrink-0 rounded-md bg-slate-950/80 px-2 py-0.5 text-[10px] font-semibold text-slate-300 ring-1 ring-white/10">
+                        <span className="shrink-0 rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-slate-300 border border-slate-700">
                           Est. {selectedClub.foundedYear}
                         </span>
                       </div>
@@ -306,7 +305,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                     ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
                     : undefined
                 }
-                className="w-full rounded-xl py-3.5 text-sm font-black shadow-lg transition hover:brightness-110"
+                className="w-full rounded-lg py-3.5 text-sm font-black transition hover:brightness-110"
               >
                 Iniciar Carreira no {selectedClub.name}
               </button>

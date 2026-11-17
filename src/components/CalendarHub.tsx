@@ -178,7 +178,7 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
   return (
     <div className="space-y-6">
       {/* Header: Current Date & Progression */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-5 shadow-xl">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -245,14 +245,14 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
                 {isOnOrAfterMatchDate ? (
                   <button
                     onClick={onStartMatchday}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg transition hover:bg-amber-300"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-2.5 text-xs font-black text-slate-950 transition hover:bg-amber-300"
                   >
                     <Play className="h-3.5 w-3.5 fill-current" /> Ir para Dia de Jogo
                   </button>
                 ) : (
                   <button
                     onClick={onAdvanceToMatchday}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg transition hover:bg-emerald-400"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2.5 text-xs font-black text-slate-950 transition hover:bg-emerald-400"
                   >
                     <FastForward className="h-3.5 w-3.5" /> Avançar até o Jogo
                   </button>

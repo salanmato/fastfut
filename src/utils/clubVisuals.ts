@@ -231,11 +231,6 @@ function mixHex(hexA: string, hexB: string, weightA: number): string {
   return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function hexRgba(hex: string, alpha: number): string {
-  const [r, g, b] = parseHexRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 export function getKitThemePalette(
   club: Pick<Club, "name" | "primaryColor" | "secondaryColor" | "badgeUrl" | "stadiumImageUrl">,
   variant: "home" | "away" = "home"
@@ -254,12 +249,9 @@ export function getKitThemePalette(
         : kit.trim
       : kit.primary;
 
-  const secondaryGlowSource =
-    primLum > 0.62 ? kit.primary : kit.secondary;
-
-  const bgBase = mixHex(atmosphereSource, "#020617", 0.24);
-  const bgSurface = mixHex(atmosphereSource, "#090d18", 0.16);
-  const bgHeader = mixHex(atmosphereSource, "#030712", 0.34);
+  const bgBase = mixHex(atmosphereSource, "#090d16", 0.22);
+  const bgSurface = mixHex(atmosphereSource, "#111827", 0.18);
+  const bgHeader = mixHex(atmosphereSource, "#060911", 0.32);
 
   // Ensure active accent pops cleanly against dark UI
   let accentPrimary = kit.primary;
@@ -267,22 +259,17 @@ export function getKitThemePalette(
     accentPrimary = secLum > 0.12 ? kit.secondary : kit.trim;
   }
   const accentText = relativeLuminance(accentPrimary) > 0.48 ? "#0f172a" : "#ffffff";
-  const borderTint = hexRgba(accentPrimary, 0.28);
+  const borderTint = mixHex(accentPrimary, "#1e293b", 0.35);
 
   const pageBackgroundStyle: CSSProperties = {
     backgroundColor: bgBase,
-    backgroundImage: [
-      `radial-gradient(ellipse 80% 50% at 12% 0%, ${hexRgba(kit.primary, primLum > 0.65 ? 0.22 : 0.34)} 0%, transparent 62%)`,
-      `radial-gradient(ellipse 65% 45% at 88% 8%, ${hexRgba(secondaryGlowSource, 0.24)} 0%, transparent 60%)`,
-      `radial-gradient(ellipse 70% 55% at 50% 100%, ${hexRgba(kit.trim, 0.16)} 0%, transparent 65%)`,
-      `linear-gradient(180deg, ${mixHex(atmosphereSource, "#020617", 0.28)} 0%, ${bgBase} 55%, #020617 100%)`,
-    ].join(", "),
-    backgroundAttachment: "fixed",
+    backgroundImage: "none",
   };
 
   const headerStyle: CSSProperties = {
-    backgroundColor: hexRgba(bgHeader, 0.88),
-    borderBottomColor: hexRgba(accentPrimary, 0.28),
+    backgroundColor: bgHeader,
+    borderBottomColor: accentPrimary,
+    borderBottomWidth: "2px",
   };
 
   const cssVars = {

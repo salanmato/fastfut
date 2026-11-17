@@ -355,7 +355,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
           </div>
 
           {/* 2D Football Pitch */}
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl border border-emerald-900/60 bg-gradient-to-b from-emerald-950 via-emerald-900/80 to-emerald-950 shadow-inner select-none">
+          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-lg border-2 border-emerald-700 bg-[#065f46] select-none">
             {/* Pitch markings */}
             <div className="pointer-events-none absolute inset-4 rounded-lg border border-white/15">
               {/* Halfway line */}
@@ -389,7 +389,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                     <div
                       className={`relative rounded-full p-0.5 ${
                         isSelected
-                          ? "ring-2 ring-amber-400 shadow-lg shadow-amber-400/30"
+                          ? "ring-2 ring-amber-400"
                           : "ring-1 ring-white/25"
                       }`}
                     >
@@ -403,7 +403,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                         {p.overall}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center gap-1 rounded-md bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-bold text-white shadow ring-1 ring-white/10">
+                    <div className="mt-1 flex items-center gap-1 rounded bg-slate-950 px-1.5 py-0.5 text-[10px] font-bold text-white border border-slate-800">
                       <span className="text-emerald-400">{slot.label}</span>
                       <span className="max-w-[68px] truncate">{surname}</span>
                     </div>

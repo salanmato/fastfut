@@ -1020,7 +1020,7 @@ export const App: React.FC = () => {
           }}
         />
         {toast && (
-          <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-bold text-emerald-300 shadow-2xl backdrop-blur">
+          <div className="fixed bottom-5 right-5 z-50 rounded-lg border border-emerald-500/60 bg-slate-900 px-4 py-3 text-xs font-bold text-emerald-300">
             {toast}
           </div>
         )}
@@ -1056,7 +1056,7 @@ export const App: React.FC = () => {
     >
       {/* Top Navbar */}
       <header
-        className="sticky top-0 z-30 border-b backdrop-blur-md transition-colors duration-300"
+        className="sticky top-0 z-30 border-b transition-colors duration-300"
         style={palette.headerStyle}
       >
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
@@ -1124,9 +1124,9 @@ export const App: React.FC = () => {
                       ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
                       : undefined
                   }
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition ${
                     isActive
-                      ? "shadow-md"
+                      ? "ring-0"
                       : "text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40"
                   }`}
                 >
@@ -1187,7 +1187,7 @@ export const App: React.FC = () => {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-bold text-emerald-300 shadow-2xl backdrop-blur">
+        <div className="fixed bottom-5 right-5 z-50 rounded-lg border border-emerald-500/60 bg-slate-900 px-4 py-3 text-xs font-bold text-emerald-300">
           {toast}
         </div>
       )}

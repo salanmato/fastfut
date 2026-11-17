@@ -137,7 +137,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-6">
       {/* Calendar & Transfer Window Status Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 px-5 py-3.5 shadow-lg">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 px-5 py-3.5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30">
             <Calendar className="h-4 w-4" />
@@ -193,10 +193,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Top Banner: Next Match or Season Complete */}
       {seasonFinished ? (
-        <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/60 via-slate-900 to-emerald-950/50 p-6 shadow-xl">
+        <div className="rounded-lg border border-slate-800 border-l-4 border-l-amber-400 bg-slate-900 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40">
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 <Trophy className="h-8 w-8" />
               </div>
               <div>
@@ -219,7 +219,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <button
               onClick={() => onNavigate("league")}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-300"
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-300"
             >
               Ver Classificação Final <ArrowRight className="h-4 w-4" />
             </button>
@@ -231,15 +231,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         awayClub &&
         homePower &&
         awayPower && (
-          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl">
+          <div className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
             {getClubVisuals(homeClub).stadiumImageUrl && (
               <img
                 src={getClubVisuals(homeClub).stadiumImageUrl}
                 alt={homeClub.stadium}
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-15"
               />
             )}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-900/75 to-slate-950/90" />
+            <div className="pointer-events-none absolute inset-0 bg-slate-950/80" />
 
             <div className="relative flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-950/60 px-5 py-3 text-xs text-slate-300">
               <div className="flex flex-wrap items-center gap-3">
@@ -379,7 +379,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </button>
                   <button
                     onClick={onStartMatchday}
-                    className="flex-[1.6] inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                    className="flex-[1.6] inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-400"
                   >
                     <Play className="h-4 w-4 fill-current" /> Jogar Rodada {currentMatchweek}
                   </button>

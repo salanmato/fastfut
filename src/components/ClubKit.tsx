@@ -46,16 +46,11 @@ export const ClubKit: React.FC<ClubKitProps> = ({
 
   return (
     <div className="inline-flex flex-col items-center select-none" title={`${club.name} (${variant === "home" ? "Titular" : "Reserva"})`}>
-      <svg viewBox="0 0 64 64" className={`${sizeClass} drop-shadow-md`}>
+      <svg viewBox="0 0 64 64" className={sizeClass}>
         <defs>
           <clipPath id={`kit-body-${uid}`}>
             <path d="M20 8 L26 11 C29 13 35 13 38 11 L44 8 L58 17 L53 31 L46 27 L46 56 L18 56 L18 27 L11 31 L6 17 Z" />
           </clipPath>
-          <linearGradient id={`kit-shade-${uid}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.16" />
-            <stop offset="55%" stopColor="#000000" stopOpacity="0" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0.22" />
-          </linearGradient>
         </defs>
 
         <g clipPath={`url(#kit-body-${uid})`}>
@@ -91,9 +86,6 @@ export const ClubKit: React.FC<ClubKitProps> = ({
           {kit.pattern === "sash" && (
             <polygon points="16,8 26,8 48,56 38,56" fill={kit.secondary} fillOpacity="0.92" />
           )}
-
-          {/* Subtle fabric shading */}
-          <rect x="0" y="0" width="64" height="64" fill={`url(#kit-shade-${uid})`} />
         </g>
 
         {/* Jersey outline */}

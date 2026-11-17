@@ -102,25 +102,23 @@ export const StadiumHub: React.FC<StadiumHubProps> = ({
   return (
     <div className="space-y-6">
       {/* Main Stadium Card with Panoramic Photo */}
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl">
+      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
         <div className="relative h-52 sm:h-60 w-full overflow-hidden bg-slate-950">
           {userVisuals.stadiumImageUrl && (
             <img
               src={userVisuals.stadiumImageUrl}
               alt={userClub.stadium}
-              className="h-full w-full object-cover opacity-70"
+              className="h-full w-full object-cover opacity-55"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/55 to-slate-950/30" />
-
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-4 p-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-4 border-t border-slate-800 bg-slate-950/90 p-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-center gap-4">
               <ClubBadge club={userClub} size="lg" />
               <div>
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-950/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300 backdrop-blur">
+                <div className="inline-flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-950 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
                   <Building2 className="h-3.5 w-3.5" /> Casa do {userClub.name}
                 </div>
-                <h2 className="mt-1.5 text-2xl font-black text-white drop-shadow sm:text-3xl">
+                <h2 className="mt-1.5 text-2xl font-black text-white sm:text-3xl">
                   {userClub.stadium}
                 </h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2.5 text-xs text-slate-200">
@@ -137,7 +135,7 @@ export const StadiumHub: React.FC<StadiumHubProps> = ({
               </div>
             </div>
 
-            <div className="rounded-xl border border-emerald-500/40 bg-slate-950/85 px-4 py-2.5 text-right backdrop-blur shrink-0">
+            <div className="rounded-lg border border-emerald-500/40 bg-slate-900 px-4 py-2.5 text-right shrink-0">
               <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
                 Orçamento do Clube
               </div>
@@ -403,7 +401,7 @@ export const StadiumHub: React.FC<StadiumHubProps> = ({
       </div>
 
       {/* All 20 PL Stadiums Directory */}
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl">
+      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-3.5">
           <div>
             <h3 className="text-sm font-bold text-white">

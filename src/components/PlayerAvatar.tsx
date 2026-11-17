@@ -37,7 +37,7 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
         src={imageUrl}
         alt={name}
         onError={() => setFailed(true)}
-        className={`${sizeClass} shrink-0 rounded-full object-cover bg-slate-800 ring-1 ring-white/15`}
+        className={`${sizeClass} shrink-0 rounded-full object-cover bg-slate-800 border border-slate-700`}
         loading="lazy"
       />
     );
@@ -45,9 +45,9 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
 
   return (
     <div
-      className={`${sizeClass} shrink-0 rounded-full flex items-center justify-center font-bold text-white ring-1 ring-white/15 select-none`}
+      className={`${sizeClass} shrink-0 rounded-full flex items-center justify-center font-bold text-white border border-slate-700 select-none`}
       style={{
-        background: `linear-gradient(135deg, ${accentColor}99, #1e293b)`,
+        backgroundColor: accentColor,
       }}
     >
       {initials || "?"}

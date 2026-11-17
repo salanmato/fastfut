@@ -79,15 +79,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   return (
     <div
       className={`${
-        palette ? "club-theme-root" : "bg-slate-950"
+        palette ? "club-theme-root" : "bg-[#090d16]"
       } relative min-h-screen overflow-hidden text-slate-100 flex flex-col justify-between`}
       style={
         palette
           ? { ...palette.pageBackgroundStyle, ...palette.cssVars }
-          : {
-              backgroundImage:
-                "radial-gradient(ellipse 80% 55% at 15% 0%, rgba(16, 185, 129, 0.22) 0%, transparent 60%), radial-gradient(ellipse 70% 50% at 88% 10%, rgba(56, 189, 248, 0.16) 0%, transparent 60%)",
-            }
+          : { backgroundColor: "#090d16" }
       }
     >
       {/* Background Stadium Photo */}
@@ -95,10 +92,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         <img
           src={stadiumBgUrl}
           alt="Stadium background"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-12"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-10"
         />
       )}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/60 via-transparent to-slate-950/90" />
+      <div className="pointer-events-none absolute inset-0 bg-[#090d16]/85" />
 
       <input
         ref={fileInputRef}
@@ -114,7 +111,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           {/* Left Column: Title + Menu Actions */}
           <div className="space-y-6 lg:col-span-6">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-300 backdrop-blur">
+              <div className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-300">
                 <Trophy className="h-3.5 w-3.5" /> Premier League 2026/27 • Dados Reais
               </div>
               <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
@@ -141,7 +138,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
                       : undefined
                   }
-                  className="group flex w-full items-center justify-between gap-4 rounded-2xl bg-emerald-500 p-4 text-left text-slate-950 shadow-xl transition hover:brightness-110"
+                  className="group flex w-full items-center justify-between gap-4 rounded-xl bg-emerald-500 p-4 text-left text-slate-950 transition hover:brightness-110"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <ClubBadge club={savedClub} size="lg" />
@@ -215,17 +212,16 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           {/* Right Column: Career Card or Features Showcase */}
           <div className="lg:col-span-6">
             {save && savedClub ? (
-              <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-2xl">
+              <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
                 <div className="relative h-44 w-full overflow-hidden bg-slate-950">
                   {getClubVisuals(savedClub).stadiumImageUrl && (
                     <img
                       src={getClubVisuals(savedClub).stadiumImageUrl}
                       alt={savedClub.stadium}
-                      className="h-full w-full object-cover opacity-65"
+                      className="h-full w-full object-cover opacity-55"
                     />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
-                  <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between gap-3">
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 border-t border-slate-800 bg-slate-950/90 px-5 py-3">
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
                         Save em Andamento
@@ -261,7 +257,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl backdrop-blur">
+              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900 p-6">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
                     Destaques desta Edição
@@ -326,18 +322,18 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 bg-slate-950/60 py-3 text-center text-[11px] text-slate-400 backdrop-blur">
+      <footer className="relative z-10 border-t border-slate-800 bg-slate-950 py-3 text-center text-[11px] text-slate-400">
         Football Manager 26/27 — Premier League • Dados: EA FC 27, Premier League 26/27, Transfermarkt & FIFA WC 2026
       </footer>
 
       {/* Options & Database Modal */}
       {showSettings && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setShowSettings(false)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl space-y-4"
+            className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">

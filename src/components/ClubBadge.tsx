@@ -28,7 +28,7 @@ export const ClubBadge: React.FC<ClubBadgeProps> = ({ club, size = "md" }) => {
   if (visuals.badgeUrl && !failed) {
     return (
       <div
-        className={`${dims} relative inline-flex shrink-0 items-center justify-center rounded-xl bg-white/95 shadow-md ring-1 ring-white/25 select-none`}
+        className={`${dims} relative inline-flex shrink-0 items-center justify-center rounded-md border border-slate-700 bg-white select-none`}
         title={club.name}
       >
         <img
@@ -44,9 +44,10 @@ export const ClubBadge: React.FC<ClubBadgeProps> = ({ club, size = "md" }) => {
 
   return (
     <div
-      className={`${dims} relative inline-flex shrink-0 items-center justify-center rounded-xl font-black tracking-tight shadow-md ring-1 ring-white/15 select-none`}
+      className={`${dims} relative inline-flex shrink-0 items-center justify-center rounded-md font-black tracking-tight select-none`}
       style={{
-        background: `linear-gradient(135deg, ${club.primaryColor} 0%, ${club.primaryColor} 68%, ${club.secondaryColor} 100%)`,
+        backgroundColor: club.primaryColor,
+        border: `2px solid ${club.secondaryColor}`,
         color:
           club.primaryColor.toUpperCase() === "#FFCD00" ||
           club.primaryColor.toUpperCase() === "#F59E0B"
@@ -55,7 +56,7 @@ export const ClubBadge: React.FC<ClubBadgeProps> = ({ club, size = "md" }) => {
       }}
       title={club.name}
     >
-      <span className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]">{club.shortName}</span>
+      <span>{club.shortName}</span>
     </div>
   );
 };
