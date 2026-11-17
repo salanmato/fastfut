@@ -3,6 +3,7 @@ import type {
   Fixture,
   Formation,
   MatchEvent,
+  MatchInjury,
   MatchResult,
   MatchTeamStats,
   Player,
@@ -52,6 +53,8 @@ export interface LiveMatchSession {
   awaySubsUsed: number;
   yellowCardedIds: number[];
   redCardedIds: number[];
+  injuredIds: number[];
+  injuries: MatchInjury[];
   playerStamina: Record<number, number>;
   playerRatings: Record<number, number>;
   possessionAccumulatorHome: number;
@@ -68,7 +71,9 @@ export function autoPickLineup(
   formation: Formation
 ): { starters: number[]; bench: number[] } {
   const slots = getFormationSlots(formation);
-  const available = [...players];
+  const healthy = players.filter((p) => (p.injuryMatchesLeft ?? 0) === 0);
+  const injured = players.filter((p) => (p.injuryMatchesLeft ?? 0) > 0);
+  const available = healthy.length >= 11 ? [...healthy] : [...healthy, ...injured];
   const starters: number[] = [];
 
   const effectiveOvr = (p: Player) => p.overall * (0.65 + 0.35 * (p.stamina / 100));
@@ -423,6 +428,8 @@ export function initLiveMatchSession(
     awaySubsUsed: 0,
     yellowCardedIds: [],
     redCardedIds: [],
+    injuredIds: [],
+    injuries: [],
     playerStamina,
     playerRatings,
     possessionAccumulatorHome: 50,
@@ -668,6 +675,92 @@ export function stepLiveMatchMinute(
   checkFoul(true, homeActive, homeTactics);
   checkFoul(false, awayActive, awayTactics);
 
+  // Injuries check (stamina fatigue, pressing intensity, reduced by home turf quality)
+  const INJURY_TYPES = [
+    "Distensão na coxa",
+    "Entorse no tornozelo",
+    "Lesão na panturrilha",
+    "Estiramento muscular",
+    "Pancada no joelho",
+  ];
+  const checkInjury = (isHome: boolean, active: Player[], tactics: Tactics) => {
+    const clubId = isHome ? session.homeClubId : session.awayClubId;
+    const teamInjuriesCount = session.injuries.filter((i) => i.clubId === clubId).length;
+    if (teamInjuriesCount >= 2) return;
+
+    const candidates = active.filter(
+      (p) => p.roleCategory !== "GK" && !session.injuredIds.includes(p.id)
+    );
+    if (candidates.length === 0) return;
+
+    const avgStam =
+      candidates.reduce((sum, p) => sum + (session.playerStamina[p.id] ?? 100), 0) /
+      candidates.length;
+    const fatigueRisk = avgStam < 58 ? 0.0028 : avgStam < 72 ? 0.0014 : 0.0007;
+    const pressMult = tactics.pressing === "High" ? 1.35 : tactics.pressing === "Low" ? 0.8 : 1.0;
+    const turfMult = isHome ? homeTurfFactor : 1.0;
+    const injuryProb = 0.0022 * pressMult * turfMult + fatigueRisk;
+
+    if (Math.random() > injuryProb) return;
+
+    const victim = weightedPick(candidates, (p) => {
+      const stam = session.playerStamina[p.id] ?? 100;
+      const lowStamWeight = Math.max(0.5, (115 - stam) / 30);
+      return lowStamWeight;
+    });
+
+    const injuryType = INJURY_TYPES[Math.floor(Math.random() * INJURY_TYPES.length)];
+    const matchesOut = 1 + Math.floor(Math.random() * 4); // 1 to 4 matchweeks
+
+    session.injuredIds.push(victim.id);
+    session.injuries.push({
+      playerId: victim.id,
+      clubId,
+      injuryType,
+      matchesOut,
+    });
+    session.events.push({
+      id: `inj-${session.fixtureId}-${min}-${victim.id}`,
+      minute: min,
+      type: "injury",
+      clubId,
+      playerId: victim.id,
+      playerName: victim.name,
+      text: `LESÃO! ${victim.name} sente ${injuryType} e precisará ficar ${matchesOut} rodada(s) no DM.`,
+    });
+
+    const subsUsed = isHome ? session.homeSubsUsed : session.awaySubsUsed;
+    const benchIds = isHome ? session.homeBenchIds : session.awayBenchIds;
+
+    if (clubId !== userClubId) {
+      // AI immediately subs out if possible, otherwise removes injured player
+      const benchOutfield = benchIds
+        .map((id) => playerMap.get(id))
+        .filter((p): p is Player => Boolean(p))
+        .filter((p) => p.roleCategory !== "GK");
+      const sameRole = benchOutfield
+        .filter((p) => p.roleCategory === victim.roleCategory)
+        .sort((a, b) => b.overall - a.overall);
+      const subIn = sameRole[0] ?? benchOutfield.sort((a, b) => b.overall - a.overall)[0];
+      if (subsUsed < 5 && subIn) {
+        performLiveSubstitution(session, clubId, victim.id, subIn.id, victim.name, subIn.name);
+      } else if (isHome) {
+        session.homeActiveIds = session.homeActiveIds.filter((id) => id !== victim.id);
+      } else {
+        session.awayActiveIds = session.awayActiveIds.filter((id) => id !== victim.id);
+      }
+    } else if (subsUsed >= 5) {
+      // User exhausted all 5 substitutions, player must leave the field
+      if (isHome) {
+        session.homeActiveIds = session.homeActiveIds.filter((id) => id !== victim.id);
+      } else {
+        session.awayActiveIds = session.awayActiveIds.filter((id) => id !== victim.id);
+      }
+    }
+  };
+  checkInjury(true, homeActive, homeTactics);
+  checkInjury(false, awayActive, awayTactics);
+
   // Attacking chance generation
   const resolveAttack = (
     isHome: boolean,
@@ -841,6 +934,7 @@ export function finalizeMatchResult(session: LiveMatchSession): MatchResult {
     stadiumCapacity: session.stadiumCapacity,
     gateRevenueEur: session.gateRevenueEur,
     homeAdvantagePct: session.homeAdvantagePct,
+    injuries: [...session.injuries],
   };
 }
 

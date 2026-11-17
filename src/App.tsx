@@ -11,6 +11,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type {
+  MatchInjury,
   MatchResult,
   NewsItem,
   Player,
@@ -67,6 +68,7 @@ export const App: React.FC = () => {
         ...parsed,
         stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
         kitTheme: parsed.kitTheme ?? "home",
+        autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
       };
     } catch {
       return null;
@@ -142,6 +144,7 @@ export const App: React.FC = () => {
       tacticsByClub,
       stadiumByClub: ensureStadiumMap(clubs),
       kitTheme,
+      autoOpenFormationOnRedCard: true,
       news: [
         {
           id: "welcome-1",
@@ -241,13 +244,31 @@ export const App: React.FC = () => {
       }
     }
 
+    const newInjuryMap = new Map<number, MatchInjury>();
+    for (const res of results) {
+      for (const inj of res.injuries ?? []) {
+        newInjuryMap.set(inj.playerId, inj);
+      }
+    }
+
     const nextPlayers = save.players.map((p) => {
       const perf = playedPlayerStats.get(p.id);
+      const newInj = newInjuryMap.get(p.id);
+      const prevInjLeft = p.injuryMatchesLeft ?? 0;
+      const nextInjLeft = newInj ? newInj.matchesOut : Math.max(0, prevInjLeft - 1);
+      const nextInjType = newInj
+        ? newInj.injuryType
+        : nextInjLeft > 0
+        ? p.injuryType
+        : undefined;
+
       if (!perf) {
         // Rested players recover stamina to 100
         return {
           ...p,
           stamina: Math.min(100, p.stamina + 25),
+          injuryMatchesLeft: nextInjLeft,
+          injuryType: nextInjType,
         };
       }
       const prevApps = p.seasonAppearances;
@@ -266,21 +287,39 @@ export const App: React.FC = () => {
         seasonRedCards: p.seasonRedCards + perf.reds,
         seasonAvgRating: newAvg,
         stamina: postRecovery,
+        injuryMatchesLeft: nextInjLeft,
+        injuryType: nextInjType,
       };
     });
 
-    // Refresh AI lineups for next round to respect fatigue
+    // Refresh AI lineups for next round (skipping injured players) & move injured user starters out safely
     const nextTacticsByClub: Record<number, Tactics> = { ...save.tacticsByClub };
     for (const club of save.clubs) {
-      if (club.id === save.userClubId) continue;
       const clubPlayers = nextPlayers.filter((p) => p.clubId === club.id);
       const curr = nextTacticsByClub[club.id];
-      const picked = autoPickLineup(clubPlayers, curr.formation);
-      nextTacticsByClub[club.id] = {
-        ...curr,
-        starters: picked.starters,
-        bench: picked.bench,
-      };
+      if (club.id !== save.userClubId) {
+        const picked = autoPickLineup(clubPlayers, curr.formation);
+        nextTacticsByClub[club.id] = {
+          ...curr,
+          starters: picked.starters,
+          bench: picked.bench,
+        };
+      } else {
+        const injuredSet = new Set(
+          clubPlayers.filter((p) => (p.injuryMatchesLeft ?? 0) > 0).map((p) => p.id)
+        );
+        if (
+          curr.starters.some((id) => injuredSet.has(id)) ||
+          curr.bench.some((id) => injuredSet.has(id))
+        ) {
+          const picked = autoPickLineup(clubPlayers, curr.formation);
+          nextTacticsByClub[club.id] = {
+            ...curr,
+            starters: picked.starters,
+            bench: picked.bench,
+          };
+        }
+      }
     }
 
     // Credit gate revenue & update stadium metrics for every home club
@@ -355,6 +394,23 @@ export const App: React.FC = () => {
           2
         )} - ${userRes.awayStats.xg.toFixed(2)}${gateText}.`,
       });
+    }
+
+    // Medical department news for user's injured players
+    for (const inj of newInjuryMap.values()) {
+      if (inj.clubId === save.userClubId) {
+        const p = nextPlayers.find((pl) => pl.id === inj.playerId);
+        if (p) {
+          newItems.push({
+            id: `news-inj-${save.currentMatchweek}-${p.id}`,
+            matchweek: save.currentMatchweek,
+            category: "injury",
+            clubId: save.userClubId,
+            title: `Departamento Médico: ${p.name} fica fora por ${inj.matchesOut} rodada(s)`,
+            body: `Exames confirmaram ${inj.injuryType.toLowerCase()} durante a Rodada ${save.currentMatchweek}.`,
+          });
+        }
+      }
     }
 
     // Biggest margin match of the round
@@ -836,6 +892,13 @@ export const App: React.FC = () => {
             tacticsByClub={save.tacticsByClub}
             stadiumByClub={stadiumByClub}
             userKitVariant={kitTheme}
+            autoOpenFormationOnRedCard={save.autoOpenFormationOnRedCard ?? true}
+            onToggleAutoFormationOnRedCard={() =>
+              setSave({
+                ...save,
+                autoOpenFormationOnRedCard: !(save.autoOpenFormationOnRedCard ?? true),
+              })
+            }
             onFinishMatchweek={handleFinishMatchweek}
           />
         )}

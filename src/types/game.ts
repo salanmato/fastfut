@@ -127,6 +127,8 @@ export interface Player {
   seasonYellowCards: number;
   seasonRedCards: number;
   seasonAvgRating: number;
+  injuryMatchesLeft?: number;
+  injuryType?: string;
 }
 
 export type MatchEventType =
@@ -161,6 +163,13 @@ export interface MatchTeamStats {
   redCards: number;
 }
 
+export interface MatchInjury {
+  playerId: number;
+  clubId: number;
+  injuryType: string;
+  matchesOut: number;
+}
+
 export interface MatchResult {
   fixtureId: number;
   homeGoals: number;
@@ -174,6 +183,7 @@ export interface MatchResult {
   stadiumCapacity?: number;
   gateRevenueEur?: number;
   homeAdvantagePct?: number;
+  injuries?: MatchInjury[];
 }
 
 export interface Fixture {
@@ -245,5 +255,6 @@ export interface SaveState {
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub?: Record<number, StadiumConfig>;
   kitTheme?: "home" | "away";
+  autoOpenFormationOnRedCard?: boolean;
   news: NewsItem[];
 }

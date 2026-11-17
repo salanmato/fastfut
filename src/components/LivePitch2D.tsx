@@ -305,15 +305,17 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         tone: "chance",
       });
       highlightPauseUntilRef.current = now + 1100;
-    } else if (latest.type === "yellow_card" || latest.type === "red_card") {
+    } else if (latest.type === "yellow_card" || latest.type === "red_card" || latest.type === "injury") {
       setBanner({
         text:
           latest.type === "red_card"
             ? `EXPULSO! ${latest.playerName} (${latest.minute}')`
+            : latest.type === "injury"
+            ? `LESÃO! ${latest.playerName} (${latest.minute}')`
             : `AMARELO: ${latest.playerName} (${latest.minute}')`,
         tone: "card",
       });
-      highlightPauseUntilRef.current = now + 1000;
+      highlightPauseUntilRef.current = now + 1100;
     }
   }, [session.events.length, homeClub.id, playerPositions]);
 
@@ -637,6 +639,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const isSubSelected = subOutId === playerId;
           const isCarrier = carrierId === playerId;
           const hasYellow = session.yellowCardedIds.includes(playerId);
+          const isInjured = session.injuredIds.includes(playerId);
           const stamina = Math.round(session.playerStamina[playerId] ?? player.stamina);
           const rating = (session.playerRatings[playerId] ?? 6.5).toFixed(1);
           const surname = player.name.split(" ").slice(-1)[0];
@@ -676,6 +679,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   {hasYellow && (
                     <span className="absolute -left-0.5 -top-0.5 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
                   )}
+                  {isInjured && (
+                    <span className="absolute -left-1.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white ring-1 ring-white">
+                      +
+                    </span>
+                  )}
                   {showRatings && (
                     <span className="absolute -right-1.5 -top-1 rounded bg-slate-950/95 px-1 text-[8px] font-bold text-amber-300 ring-1 ring-white/15">
                       {rating}
@@ -702,6 +710,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
                   {hasYellow && (
                     <span className="absolute -left-1 -top-1 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
+                  )}
+                  {isInjured && (
+                    <span className="absolute -left-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white ring-1 ring-white">
+                      +
+                    </span>
                   )}
 
                   {showRatings && (

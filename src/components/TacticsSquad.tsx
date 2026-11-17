@@ -36,6 +36,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   onSelectPlayer,
 }) => {
   const [swapId, setSwapId] = useState<number | null>(null);
+  const [injuryWarning, setInjuryWarning] = useState<string | null>(null);
 
   const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const slots = getFormationSlots(tactics.formation);
@@ -76,6 +77,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   };
 
   const handleSwapClick = (clickedId: number) => {
+    setInjuryWarning(null);
     if (swapId === null) {
       setSwapId(clickedId);
       return;
@@ -92,6 +94,20 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
     const idxABench = nextBench.indexOf(swapId);
     const idxBStart = nextStarters.indexOf(clickedId);
     const idxBBench = nextBench.indexOf(clickedId);
+
+    const playerA = playerMap.get(swapId);
+    const playerB = playerMap.get(clickedId);
+    const aInjured = (playerA?.injuryMatchesLeft ?? 0) > 0;
+    const bInjured = (playerB?.injuryMatchesLeft ?? 0) > 0;
+
+    if ((idxAStart >= 0 && bInjured) || (idxBStart >= 0 && aInjured)) {
+      const injPlayer = bInjured ? playerB : playerA;
+      setInjuryWarning(
+        `${injPlayer?.name} está no Departamento Médico (${injPlayer?.injuryType} — ${injPlayer?.injuryMatchesLeft} rod.) e não pode ser escalado como titular.`
+      );
+      setSwapId(null);
+      return;
+    }
 
     // Put clickedId where swapId was, and swapId where clickedId was
     if (idxAStart >= 0) nextStarters[idxAStart] = clickedId;
@@ -112,12 +128,15 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
 
   const renderRow = (p: Player, slotLabel: string, indexLabel: string) => {
     const isSelectedForSwap = swapId === p.id;
+    const injLeft = p.injuryMatchesLeft ?? 0;
     return (
       <div
         key={p.id}
         className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${
           isSelectedForSwap
             ? "border-amber-400 bg-amber-400/10 ring-1 ring-amber-400/50"
+            : injLeft > 0
+            ? "border-rose-500/40 bg-rose-950/20"
             : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700"
         }`}
       >
@@ -143,11 +162,18 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
               accentColor={club.primaryColor}
             />
             <div className="min-w-0">
-              <div className="truncate text-xs font-bold text-white group-hover:text-emerald-300">
-                {p.name}
+              <div className="flex items-center gap-1.5 truncate text-xs font-bold text-white group-hover:text-emerald-300">
+                <span className="truncate">{p.name}</span>
+                {injLeft > 0 && (
+                  <span className="shrink-0 rounded bg-rose-600 px-1.5 py-0.2 text-[9px] font-black text-white">
+                    DM {injLeft}j
+                  </span>
+                )}
               </div>
               <div className="text-[10px] text-slate-400">
-                {p.primaryPosition} • {p.age}a • {p.seasonGoals}G {p.seasonAssists}A
+                {injLeft > 0
+                  ? `${p.injuryType ?? "Lesionado"} • ${injLeft} rod.`
+                  : `${p.primaryPosition} • ${p.age}a • ${p.seasonGoals}G ${p.seasonAssists}A`}
               </div>
             </div>
           </button>
@@ -192,6 +218,17 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
 
   return (
     <div className="space-y-5">
+      {injuryWarning && (
+        <div className="flex items-center justify-between rounded-xl border border-rose-500/50 bg-rose-500/15 px-4 py-2.5 text-xs text-rose-200">
+          <span>{injuryWarning}</span>
+          <button
+            onClick={() => setInjuryWarning(null)}
+            className="rounded-lg bg-slate-800 px-3 py-1 font-bold text-slate-200 hover:bg-slate-700"
+          >
+            OK
+          </button>
+        </div>
+      )}
       {swapPlayer && (
         <div className="flex items-center justify-between rounded-xl border border-amber-400/50 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
           <span>

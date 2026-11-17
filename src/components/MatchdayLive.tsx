@@ -9,10 +9,14 @@ import {
   Award,
   Flame,
   Shield,
+  AlertTriangle,
+  HeartPulse,
+  Compass,
 } from "lucide-react";
 import type {
   Club,
   Fixture,
+  Formation,
   MatchResult,
   Mentality,
   PassingStyle,
@@ -45,8 +49,12 @@ interface MatchdayLiveProps {
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub: Record<number, StadiumConfig>;
   userKitVariant?: "home" | "away";
+  autoOpenFormationOnRedCard?: boolean;
+  onToggleAutoFormationOnRedCard?: () => void;
   onFinishMatchweek: (results: MatchResult[]) => void;
 }
+
+const LIVE_FORMATIONS: Formation[] = ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2", "5-3-2"];
 
 export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   matchweek,
@@ -58,6 +66,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   tacticsByClub,
   stadiumByClub,
   userKitVariant = "home",
+  autoOpenFormationOnRedCard = true,
+  onToggleAutoFormationOnRedCard,
   onFinishMatchweek,
 }) => {
   const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
@@ -83,6 +93,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const [isPlaying, setIsPlaying] = useState(true);
   const [speedMs, setSpeedMs] = useState<number>(280);
   const [subOutId, setSubOutId] = useState<number | null>(null);
+  const [tacticalStopReason, setTacticalStopReason] = useState<{
+    type: "red_card" | "injury";
+    playerId: number;
+    playerName: string;
+    minute: number;
+    text: string;
+  } | null>(null);
 
   // Initialize all 10 sessions for this matchweek once
   if (sessionsRef.current.length === 0 && weekFixtures.length > 0) {
@@ -116,6 +133,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
     if (!isPlaying || allFinished) return;
 
     const timer = window.setInterval(() => {
+      const uSess = sessionsRef.current.find(
+        (s) => s.homeClubId === userClubId || s.awayClubId === userClubId
+      );
+      const prevUserEventsLen = uSess ? uSess.events.length : 0;
+
       for (const session of sessionsRef.current) {
         if (session.finished) continue;
         const hClub = clubMap.get(session.homeClubId);
@@ -133,11 +155,56 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
           stadiumByClub[session.homeClubId]
         );
       }
+
+      if (uSess && !uSess.finished && uSess.events.length > prevUserEventsLen) {
+        const freshEvents = uSess.events.slice(prevUserEventsLen);
+        const triggerEvent = freshEvents.find(
+          (ev) =>
+            ev.clubId === userClubId &&
+            (ev.type === "red_card" || ev.type === "injury")
+        );
+        if (triggerEvent && autoOpenFormationOnRedCard) {
+          setIsPlaying(false);
+          setTacticalStopReason({
+            type: triggerEvent.type as "red_card" | "injury",
+            playerId: triggerEvent.playerId,
+            playerName: triggerEvent.playerName,
+            minute: triggerEvent.minute,
+            text: triggerEvent.text,
+          });
+          const isUserHomeNow = uSess.homeClubId === userClubId;
+          const subsUsedNow = isUserHomeNow ? uSess.homeSubsUsed : uSess.awaySubsUsed;
+          if (triggerEvent.type === "injury" && subsUsedNow < 5) {
+            setSubOutId(triggerEvent.playerId);
+          }
+        }
+      }
+
       setTick((t) => t + 1);
     }, speedMs);
 
     return () => window.clearInterval(timer);
-  }, [isPlaying, speedMs, allFinished, clubMap, playerMap, liveTacticsByClub, userClubId, stadiumByClub]);
+  }, [
+    isPlaying,
+    speedMs,
+    allFinished,
+    clubMap,
+    playerMap,
+    liveTacticsByClub,
+    userClubId,
+    stadiumByClub,
+    autoOpenFormationOnRedCard,
+  ]);
+
+  const handleChangeFormationLive = (formation: Formation) => {
+    setLiveTacticsByClub((prev) => ({
+      ...prev,
+      [userClubId]: {
+        ...prev[userClubId],
+        formation,
+      },
+    }));
+  };
 
   const handleSimulateToEnd = () => {
     setIsPlaying(false);
@@ -236,6 +303,20 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {!allFinished ? (
             <>
+              {onToggleAutoFormationOnRedCard && (
+                <button
+                  onClick={onToggleAutoFormationOnRedCard}
+                  title="Quando ativo, pausa o jogo e abre a formação automaticamente ao sofrer expulsão ou lesão"
+                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-bold transition ${
+                    autoOpenFormationOnRedCard
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-200"
+                      : "border-slate-700 bg-slate-800 text-slate-400"
+                  }`}
+                >
+                  <Compass className="h-3.5 w-3.5" />
+                  Auto-Formação: {autoOpenFormationOnRedCard ? "ON" : "OFF"}
+                </button>
+              )}
               <button
                 onClick={() => setIsPlaying((p) => !p)}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700"
@@ -482,7 +563,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   const badgeStyle =
                     ev.type === "goal"
                       ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                      : ev.type === "red_card"
+                      : ev.type === "red_card" || ev.type === "injury"
                       ? "border-rose-500/50 bg-rose-500/15 text-rose-200"
                       : ev.type === "yellow_card"
                       ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
@@ -555,6 +636,30 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-emerald-300">
                 Trocas: {userSubsUsed}/5
               </span>
+            </div>
+
+            {/* Quick Formation selector */}
+            <div>
+              <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase text-slate-500">
+                <span>Formação em Campo</span>
+                <span className="text-slate-400">{userActiveIds.length} atletas</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1">
+                {LIVE_FORMATIONS.map((f) => (
+                  <button
+                    key={f}
+                    disabled={userSession.finished}
+                    onClick={() => handleChangeFormationLive(f)}
+                    className={`rounded-lg py-1 text-[11px] font-bold transition ${
+                      userTactics.formation === f
+                        ? "bg-emerald-500 text-slate-950"
+                        : "border border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700 disabled:opacity-50"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Quick tactical knobs */}
@@ -659,6 +764,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
                       const rating = (userSession.playerRatings[id] ?? 6.5).toFixed(1);
                       const isSelected = subOutId === id;
+                      const isInjured = userSession.injuredIds.includes(id);
                       return (
                         <button
                           key={id}
@@ -667,6 +773,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                           className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
                             isSelected
                               ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
+                              : isInjured
+                              ? "border-rose-500/60 bg-rose-500/15"
                               : "border-slate-800 bg-slate-950/70 hover:border-amber-500/40 disabled:opacity-60"
                           }`}
                         >
@@ -675,6 +783,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                               {p.primaryPosition}
                             </span>
                             {p.name}
+                            {isInjured && (
+                              <span className="ml-1.5 rounded bg-rose-600 px-1 py-0.2 text-[9px] font-black text-white">
+                                +LESÃO
+                              </span>
+                            )}
                           </span>
                           <span className="flex items-center gap-2 shrink-0">
                             <span className="text-[10px] text-slate-400">{rating}</span>
@@ -751,6 +864,240 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Tactical Stop Modal on Red Card / Injury */}
+      {tacticalStopReason && !userSession.finished && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl border border-rose-500/50 bg-slate-900 p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/40">
+                  {tacticalStopReason.type === "red_card" ? (
+                    <AlertTriangle className="h-5 w-5" />
+                  ) : (
+                    <HeartPulse className="h-5 w-5" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wider text-rose-400">
+                    {tacticalStopReason.type === "red_card"
+                      ? `Expulsão aos ${tacticalStopReason.minute}'`
+                      : `Lesão aos ${tacticalStopReason.minute}'`}
+                  </div>
+                  <h3 className="text-lg font-black text-white">
+                    Reorganizar Formação ({userActiveIds.length} em campo)
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-300">{tacticalStopReason.text}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Formation + Tactical Controls */}
+            <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3.5">
+              <div>
+                <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Nova Formação Tática
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {LIVE_FORMATIONS.map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => handleChangeFormationLive(f)}
+                      className={`rounded-lg py-2 text-xs font-black transition ${
+                        userTactics.formation === f
+                          ? "bg-emerald-500 text-slate-950"
+                          : "border border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700"
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500">Mentalidade</label>
+                  <select
+                    value={userTactics.mentality}
+                    onChange={(e) =>
+                      setLiveTacticsByClub((prev) => ({
+                        ...prev,
+                        [userClubId]: {
+                          ...prev[userClubId],
+                          mentality: e.target.value as Mentality,
+                        },
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white"
+                  >
+                    <option value="Defensive">Defensiva</option>
+                    <option value="Balanced">Equilibrada</option>
+                    <option value="Attacking">Ofensiva</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500">Pressão</label>
+                  <select
+                    value={userTactics.pressing}
+                    onChange={(e) =>
+                      setLiveTacticsByClub((prev) => ({
+                        ...prev,
+                        [userClubId]: {
+                          ...prev[userClubId],
+                          pressing: e.target.value as Pressing,
+                        },
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white"
+                  >
+                    <option value="Low">Baixa</option>
+                    <option value="Medium">Média</option>
+                    <option value="High">Alta</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500">Passe</label>
+                  <select
+                    value={userTactics.passingStyle}
+                    onChange={(e) =>
+                      setLiveTacticsByClub((prev) => ({
+                        ...prev,
+                        [userClubId]: {
+                          ...prev[userClubId],
+                          passingStyle: e.target.value as PassingStyle,
+                        },
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white"
+                  >
+                    <option value="Short">Curto</option>
+                    <option value="Mixed">Misto</option>
+                    <option value="Direct">Direto</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Substitutions inside Modal */}
+            {userSubsUsed < 5 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="mb-1.5 text-[10px] font-bold uppercase text-slate-400">
+                    Em Campo ({userActiveIds.length}) — Trocas {userSubsUsed}/5
+                  </div>
+                  <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+                    {userActiveIds.map((id) => {
+                      const p = playerMap.get(id);
+                      if (!p) return null;
+                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
+                      const isSel = subOutId === id;
+                      const isInj = userSession.injuredIds.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setSubOutId((prev) => (prev === id ? null : id))}
+                          className={`flex w-full items-center justify-between rounded-lg border px-2 py-1 text-left text-xs ${
+                            isSel
+                              ? "border-amber-400 bg-amber-400/15"
+                              : isInj
+                              ? "border-rose-500/60 bg-rose-500/15"
+                              : "border-slate-800 bg-slate-900/70 hover:border-amber-500/40"
+                          }`}
+                        >
+                          <span className="truncate font-semibold text-white">
+                            <span className="mr-1 text-[10px] text-slate-400">
+                              {p.primaryPosition}
+                            </span>
+                            {p.name}
+                            {isInj && (
+                              <span className="ml-1 rounded bg-rose-600 px-1 text-[9px] font-black text-white">
+                                +LESÃO
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{stam}%</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="mb-1.5 text-[10px] font-bold uppercase text-emerald-400">
+                    {subOutId !== null
+                      ? `Entrar no lugar de ${playerMap.get(subOutId)?.name}`
+                      : "Banco de Reservas"}
+                  </div>
+                  <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+                    {userBenchIds.map((id) => {
+                      const p = playerMap.get(id);
+                      if (!p) return null;
+                      const ready = subOutId !== null;
+                      return (
+                        <button
+                          key={id}
+                          disabled={!ready}
+                          onClick={() => handleLiveSub(id)}
+                          className={`flex w-full items-center justify-between rounded-lg border px-2 py-1 text-left text-xs ${
+                            ready
+                              ? "border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25"
+                              : "border-slate-800 bg-slate-900/40 opacity-60"
+                          }`}
+                        >
+                          <span className="truncate font-semibold text-white">
+                            <span className="mr-1 text-[10px] text-emerald-300">
+                              {p.primaryPosition}
+                            </span>
+                            {p.name}
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-300 shrink-0">
+                            OVR {p.overall}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              {onToggleAutoFormationOnRedCard ? (
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={autoOpenFormationOnRedCard}
+                    onChange={onToggleAutoFormationOnRedCard}
+                    className="accent-emerald-500"
+                  />
+                  Pausar e abrir formação automaticamente em expulsões/lesões
+                </label>
+              ) : (
+                <span />
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setTacticalStopReason(null)}
+                  className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-bold text-slate-200 hover:bg-slate-700"
+                >
+                  Manter Pausado
+                </button>
+                <button
+                  onClick={() => {
+                    setTacticalStopReason(null);
+                    setIsPlaying(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-5 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" /> Confirmar Formação e Retomar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

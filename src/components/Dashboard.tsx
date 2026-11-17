@@ -9,6 +9,7 @@ import {
   MapPin,
   ShieldAlert,
   ArrowRight,
+  HeartPulse,
 } from "lucide-react";
 import type {
   Club,
@@ -122,6 +123,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const topClubScorer = [...userSquad].sort(
     (a, b) => b.seasonGoals - a.seasonGoals || b.overall - a.overall
   )[0];
+  const injuredSquad = userSquad.filter((p) => (p.injuryMatchesLeft ?? 0) > 0);
 
   return (
     <div className="space-y-6">
@@ -495,6 +497,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 Artilheiro do clube na temporada:{" "}
                 <span className="font-bold">{topClubScorer.name}</span> ({topClubScorer.seasonGoals}{" "}
                 gols, {topClubScorer.seasonAssists} assistências)
+              </div>
+            )}
+            {injuredSquad.length > 0 && (
+              <div className="mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs">
+                <div className="mb-1.5 flex items-center gap-1.5 font-bold text-rose-300">
+                  <HeartPulse className="h-3.5 w-3.5" /> Departamento Médico ({injuredSquad.length})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {injuredSquad.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => onSelectPlayer(p)}
+                      className="rounded-lg border border-rose-500/30 bg-slate-950/70 px-2.5 py-1 text-[11px] text-rose-200 hover:border-rose-400"
+                    >
+                      <strong className="text-white">{p.name}</strong> ({p.injuryType} •{" "}
+                      {p.injuryMatchesLeft} rod.)
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

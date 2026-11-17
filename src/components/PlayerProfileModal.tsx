@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Sparkles, Shield, Footprints, Banknote, Calendar } from "lucide-react";
+import { X, Sparkles, Shield, Footprints, Banknote, Calendar, HeartPulse } from "lucide-react";
 import type { Player } from "../types/game";
 import {
   formatMoney,
@@ -135,6 +135,16 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
 
         {/* Body */}
         <div className="space-y-6 p-5">
+          {(player.injuryMatchesLeft ?? 0) > 0 && (
+            <div className="flex items-center gap-3 rounded-xl border border-rose-500/50 bg-rose-500/15 px-4 py-3 text-xs text-rose-200">
+              <HeartPulse className="h-5 w-5 shrink-0 text-rose-400" />
+              <div>
+                <strong className="text-white">Departamento Médico:</strong>{" "}
+                {player.injuryType ?? "Lesão muscular"} • Retorno estimado em{" "}
+                <strong className="text-white">{player.injuryMatchesLeft}</strong> rodada(s).
+              </div>
+            </div>
+          )}
           {/* Quick Bio & Finance */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
