@@ -1,6 +1,16 @@
 import React from "react";
-import { X, Sparkles, Shield, Footprints, Banknote, Calendar, HeartPulse } from "lucide-react";
+import {
+  X,
+  Sparkles,
+  Shield,
+  Footprints,
+  Banknote,
+  Calendar,
+  HeartPulse,
+  Star,
+} from "lucide-react";
 import type { Player } from "../types/game";
+import type { TransferWindowStatus } from "../utils/calendar";
 import {
   formatMoney,
   formatWage,
@@ -16,6 +26,9 @@ interface PlayerProfileModalProps {
   userClubId: number;
   userBudgetEur: number;
   userSquadSize: number;
+  windowStatus?: TransferWindowStatus;
+  isShortlisted?: boolean;
+  onToggleShortlist?: (playerId: number) => void;
   onClose: () => void;
   onBuyPlayer?: (player: Player) => void;
   onSellPlayer?: (player: Player) => void;
@@ -26,6 +39,9 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   userClubId,
   userBudgetEur,
   userSquadSize,
+  windowStatus,
+  isShortlisted = false,
+  onToggleShortlist,
   onClose,
   onBuyPlayer,
   onSellPlayer,
@@ -36,6 +52,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   const canBuy = !isOwned && Boolean(onBuyPlayer);
   const canSell = isOwned && Boolean(onSellPlayer);
   const canAfford = userBudgetEur >= player.marketValueEur;
+  const windowClosed = Boolean(windowStatus && !windowStatus.isOpen);
 
   const statGroups: Array<{ title: string; items: Array<[string, number]> }> = [
     {
@@ -275,51 +292,81 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
 
           {/* Transfer Actions */}
           {(canBuy || canSell) && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
-              {canBuy && (
-                <>
-                  <div>
-                    <div className="text-sm font-semibold text-white">
-                      Contratar {player.name} por {formatMoney(player.marketValueEur)}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      Seu orçamento disponível: {formatMoney(userBudgetEur)}
-                    </div>
-                  </div>
-                  <button
-                    disabled={!canAfford}
-                    onClick={() => {
-                      onBuyPlayer?.(player);
-                      onClose();
-                    }}
-                    className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-                  >
-                    {canAfford ? "Fechar Contratação" : "Orçamento Insuficiente"}
-                  </button>
-                </>
+            <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
+              {windowClosed && windowStatus && (
+                <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200">
+                  🔒 Mercado Fechado ({windowStatus.detailText})
+                </div>
               )}
-              {canSell && (
-                <>
-                  <div>
-                    <div className="text-sm font-semibold text-white">
-                      Vender {player.name} por {formatMoney(Math.round(player.marketValueEur * 0.92))}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {canBuy && (
+                  <>
+                    <div>
+                      <div className="text-sm font-semibold text-white">
+                        Contratar {player.name} por {formatMoney(player.marketValueEur)}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Seu orçamento disponível: {formatMoney(userBudgetEur)}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-400">
-                      Elenco atual: {userSquadSize} jogadores (mínimo exigido: 16)
+                    <div className="flex flex-wrap items-center gap-2">
+                      {onToggleShortlist && (
+                        <button
+                          onClick={() => onToggleShortlist(player.id)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-bold transition ${
+                            isShortlisted
+                              ? "border-amber-400/60 bg-amber-400/15 text-amber-300"
+                              : "border-slate-700 bg-slate-900 text-slate-200 hover:border-amber-400/50 hover:text-amber-300"
+                          }`}
+                        >
+                          <Star className={`h-3.5 w-3.5 ${isShortlisted ? "fill-current" : ""}`} />
+                          {isShortlisted ? "Nos Alvos ★" : "Adicionar aos Alvos"}
+                        </button>
+                      )}
+                      <button
+                        disabled={windowClosed || !canAfford}
+                        onClick={() => {
+                          onBuyPlayer?.(player);
+                          onClose();
+                        }}
+                        className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                      >
+                        {windowClosed
+                          ? "🔒 Janela Fechada"
+                          : canAfford
+                          ? "Fechar Contratação"
+                          : "Orçamento Insuficiente"}
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    disabled={userSquadSize <= 16}
-                    onClick={() => {
-                      onSellPlayer?.(player);
-                      onClose();
-                    }}
-                    className="rounded-xl bg-rose-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-                  >
-                    {userSquadSize <= 16 ? "Elenco no Mínimo (16)" : "Aceitar Proposta e Vender"}
-                  </button>
-                </>
-              )}
+                  </>
+                )}
+                {canSell && (
+                  <>
+                    <div>
+                      <div className="text-sm font-semibold text-white">
+                        Vender {player.name} por {formatMoney(Math.round(player.marketValueEur * 0.92))}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Elenco atual: {userSquadSize} jogadores (mínimo exigido: 16)
+                      </div>
+                    </div>
+                    <button
+                      disabled={windowClosed || userSquadSize <= 16}
+                      onClick={() => {
+                        onSellPlayer?.(player);
+                        onClose();
+                      }}
+                      className="rounded-xl bg-rose-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                    >
+                      {windowClosed
+                        ? "🔒 Janela Fechada"
+                        : userSquadSize <= 16
+                        ? "Elenco no Mínimo (16)"
+                        : "Aceitar Proposta e Vender"}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>

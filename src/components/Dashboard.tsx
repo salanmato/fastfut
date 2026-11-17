@@ -10,6 +10,9 @@ import {
   ShieldAlert,
   ArrowRight,
   HeartPulse,
+  Lock,
+  Unlock,
+  Flame,
 } from "lucide-react";
 import type {
   Club,
@@ -21,6 +24,8 @@ import type {
   StandingRow,
   Tactics,
 } from "../types/game";
+import type { TransferWindowStatus } from "../utils/calendar";
+import { formatDateLongPtBr } from "../utils/calendar";
 import { computeMatchStadiumMetrics, computeTeamPower } from "../engine/matchEngine";
 import { formatMoney, formatWage, getOverallColor } from "../utils/format";
 import { getClubVisuals } from "../utils/clubVisuals";
@@ -33,6 +38,8 @@ interface DashboardProps {
   managerName: string;
   currentMatchweek: number;
   seasonFinished: boolean;
+  currentDate: string;
+  windowStatus: TransferWindowStatus;
   clubs: Club[];
   players: Player[];
   fixtures: Fixture[];
@@ -43,7 +50,7 @@ interface DashboardProps {
   userKitVariant?: "home" | "away";
   news: NewsItem[];
   onStartMatchday: () => void;
-  onNavigate: (tab: "tactics" | "league" | "market" | "stadium") => void;
+  onNavigate: (tab: "tactics" | "league" | "market" | "stadium" | "calendar") => void;
   onSelectPlayer: (player: Player) => void;
 }
 
@@ -52,6 +59,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   managerName,
   currentMatchweek,
   seasonFinished,
+  currentDate,
+  windowStatus,
   clubs,
   players,
   fixtures,
@@ -127,6 +136,61 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Calendar & Transfer Window Status Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 px-5 py-3.5 shadow-lg">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30">
+            <Calendar className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="text-xs font-black text-white">
+              {formatDateLongPtBr(currentDate)}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+              <span
+                className={`inline-flex items-center gap-1 font-bold ${
+                  windowStatus.isDeadlineDay
+                    ? "text-amber-300"
+                    : windowStatus.isOpen
+                    ? "text-emerald-400"
+                    : "text-rose-300"
+                }`}
+              >
+                {windowStatus.isDeadlineDay ? (
+                  <Flame className="h-3 w-3" />
+                ) : windowStatus.isOpen ? (
+                  <Unlock className="h-3 w-3" />
+                ) : (
+                  <Lock className="h-3 w-3" />
+                )}
+                {windowStatus.headline}
+              </span>
+              <span>•</span>
+              <span>{windowStatus.detailText}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onNavigate("calendar")}
+            className="rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs font-bold text-slate-200 transition hover:border-sky-500/50 hover:text-white"
+          >
+            Abrir Calendário
+          </button>
+          <button
+            onClick={() => onNavigate("market")}
+            className={`rounded-xl px-3.5 py-2 text-xs font-black transition ${
+              windowStatus.isOpen
+                ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                : "border border-slate-700 bg-slate-800 text-slate-300 hover:text-white"
+            }`}
+          >
+            {windowStatus.isOpen ? "Ir ao Mercado" : "Observar Alvos"}
+          </button>
+        </div>
+      </div>
+
       {/* Top Banner: Next Match or Season Complete */}
       {seasonFinished ? (
         <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/60 via-slate-900 to-emerald-950/50 p-6 shadow-xl">

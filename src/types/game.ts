@@ -256,5 +256,8 @@ export interface SaveState {
   stadiumByClub?: Record<number, StadiumConfig>;
   kitTheme?: "home" | "away";
   autoOpenFormationOnRedCard?: boolean;
+  currentDate?: string;
+  shortlistIds?: number[];
+  allowTransfersOutsideWindow?: boolean;
   news: NewsItem[];
 }

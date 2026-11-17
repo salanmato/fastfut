@@ -10,6 +10,10 @@ import {
   Download,
   Loader2,
   Home,
+  Calendar as CalendarIcon,
+  Lock,
+  Unlock,
+  Flame,
 } from "lucide-react";
 import type {
   MatchInjury,
@@ -29,6 +33,17 @@ import {
 import { computeStandings } from "./engine/standings";
 import { formatMoney } from "./utils/format";
 import { getKitThemePalette } from "./utils/clubVisuals";
+import {
+  addDaysIso,
+  formatDatePtBr,
+  getDefaultDateForMatchweek,
+  getNextMatchFixture,
+  getTransferWindowStatus,
+  POST_SEASON_WINDOW_START,
+  SUMMER_WINDOW_END,
+  WINTER_WINDOW_END,
+  WINTER_WINDOW_START,
+} from "./utils/calendar";
 import { ClubBadge } from "./components/ClubBadge";
 import { ClubKit } from "./components/ClubKit";
 import { MainMenu } from "./components/MainMenu";
@@ -39,11 +54,19 @@ import { MatchdayLive } from "./components/MatchdayLive";
 import { LeagueHub } from "./components/LeagueHub";
 import { TransferMarket } from "./components/TransferMarket";
 import { StadiumHub } from "./components/StadiumHub";
+import { CalendarHub } from "./components/CalendarHub";
 import { PlayerProfileModal } from "./components/PlayerProfileModal";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
-type Tab = "dashboard" | "tactics" | "stadium" | "league" | "market" | "matchday";
+type Tab =
+  | "dashboard"
+  | "tactics"
+  | "stadium"
+  | "calendar"
+  | "league"
+  | "market"
+  | "matchday";
 type Screen = "menu" | "select_club" | "game";
 
 function ensureStadiumMap(
@@ -59,6 +82,102 @@ function ensureStadiumMap(
   return map;
 }
 
+function hydrateSave(parsed: SaveState): SaveState {
+  const defaultDate = getDefaultDateForMatchweek(
+    parsed.fixtures,
+    parsed.currentMatchweek,
+    parsed.seasonFinished,
+    parsed.userClubId
+  );
+  return {
+    ...parsed,
+    stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
+    kitTheme: parsed.kitTheme ?? "home",
+    autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
+    currentDate: parsed.currentDate ?? defaultDate,
+    shortlistIds: parsed.shortlistIds ?? [],
+    allowTransfersOutsideWindow: parsed.allowTransfersOutsideWindow ?? false,
+  };
+}
+
+function buildWindowMilestoneNews(
+  prevDate: string,
+  nextDate: string,
+  matchweek: number,
+  prevSeasonFinished: boolean,
+  nextSeasonFinished: boolean
+): NewsItem[] {
+  const items: NewsItem[] = [];
+
+  if (!nextSeasonFinished) {
+    if (prevDate < SUMMER_WINDOW_END && nextDate === SUMMER_WINDOW_END) {
+      items.push({
+        id: `win-summer-dl-${Date.now()}`,
+        matchweek,
+        category: "transfer",
+        title: "🚨 DEADLINE DAY! Último dia da Janela de Verão",
+        body: "O mercado fecha hoje (01/09/2026) antes da Rodada 3. Aproveite as últimas horas para reforçar o elenco!",
+      });
+    } else if (
+      prevDate <= SUMMER_WINDOW_END &&
+      nextDate > SUMMER_WINDOW_END &&
+      nextDate < WINTER_WINDOW_START
+    ) {
+      items.push({
+        id: `win-summer-close-${Date.now()}`,
+        matchweek,
+        category: "transfer",
+        title: "🔒 Janela de Verão Encerrada",
+        body: "O mercado de transferências fechou e só reabrirá em 01/01/2027 para a Janela de Inverno.",
+      });
+    }
+
+    if (
+      prevDate < WINTER_WINDOW_START &&
+      nextDate >= WINTER_WINDOW_START &&
+      nextDate <= WINTER_WINDOW_END
+    ) {
+      items.push({
+        id: `win-winter-open-${Date.now()}`,
+        matchweek,
+        category: "transfer",
+        title: "🔓 Janela de Inverno Aberta!",
+        body: "Chegamos a janeiro! O mercado de transferências está oficialmente aberto até 02/02/2027.",
+      });
+    }
+
+    if (prevDate < WINTER_WINDOW_END && nextDate === WINTER_WINDOW_END) {
+      items.push({
+        id: `win-winter-dl-${Date.now()}`,
+        matchweek,
+        category: "transfer",
+        title: "🚨 DEADLINE DAY de Inverno! Último dia de mercado",
+        body: "Últimas horas para contratar ou vender antes do fechamento hoje (02/02/2027).",
+      });
+    } else if (prevDate <= WINTER_WINDOW_END && nextDate > WINTER_WINDOW_END) {
+      items.push({
+        id: `win-winter-close-${Date.now()}`,
+        matchweek,
+        category: "transfer",
+        title: "🔒 Janela de Inverno Encerrada",
+        body: `O mercado fechou até ${formatDatePtBr(
+          POST_SEASON_WINDOW_START
+        )} (pós-temporada). Use a Lista de Alvos para observar reforços.`,
+      });
+    }
+  } else if (!prevSeasonFinished && nextSeasonFinished) {
+    items.push({
+      id: `win-post-open-${Date.now()}`,
+      matchweek,
+      category: "transfer",
+      title: "🔓 Janela de Pós-Temporada Aberta",
+      body: "Com o término da Premier League 2026/27, o mercado foi reaberto para reformulação do elenco.",
+    });
+  }
+
+  return items;
+}
+
 export const App: React.FC = () => {
   const [rawDb, setRawDb] = useState<RawDatabase | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,12 +186,7 @@ export const App: React.FC = () => {
       const stored = localStorage.getItem(SAVE_KEY);
       if (!stored) return null;
       const parsed = JSON.parse(stored) as SaveState;
-      return {
-        ...parsed,
-        stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
-        kitTheme: parsed.kitTheme ?? "home",
-        autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
-      };
+      return hydrateSave(parsed);
     } catch {
       return null;
     }
@@ -135,6 +249,7 @@ export const App: React.FC = () => {
     }
 
     const chosenClub = clubs.find((c) => c.id === clubId)!;
+    const initialDate = getDefaultDateForMatchweek(fixtures, 1, false, clubId);
     const newSave: SaveState = {
       version: 1,
       managerName,
@@ -149,6 +264,9 @@ export const App: React.FC = () => {
       stadiumByClub: ensureStadiumMap(clubs),
       kitTheme,
       autoOpenFormationOnRedCard: true,
+      currentDate: initialDate,
+      shortlistIds: [],
+      allowTransfersOutsideWindow: false,
       news: [
         {
           id: "welcome-1",
@@ -163,9 +281,9 @@ export const App: React.FC = () => {
         {
           id: "welcome-2",
           matchweek: 1,
-          category: "league",
-          title: "Guia da Temporada 2026/27",
-          body: "Arsenal defende o título conquistado em 2025/26. Coventry City, Hull City, Ipswich Town, Leeds United e Sunderland buscam surpreender na elite.",
+          category: "transfer",
+          title: "Janela de Verão Aberta até 01/09/2026",
+          body: "O mercado está aberto durante a pré-temporada e as duas primeiras rodadas. Depois, só reabrirá em janeiro de 2027.",
         },
       ],
     };
@@ -206,12 +324,7 @@ export const App: React.FC = () => {
         ) {
           throw new Error("Arquivo de save inválido.");
         }
-        const hydrated: SaveState = {
-          ...parsed,
-          stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
-          kitTheme: parsed.kitTheme ?? "home",
-          autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
-        };
+        const hydrated = hydrateSave(parsed);
         setSave(hydrated);
         setActiveTab("dashboard");
         setScreen("game");
@@ -483,22 +596,49 @@ export const App: React.FC = () => {
       });
     }
 
+    const prevDate =
+      save.currentDate ??
+      getDefaultDateForMatchweek(
+        save.fixtures,
+        save.currentMatchweek,
+        save.seasonFinished,
+        save.userClubId
+      );
+    const nextMwValue = seasonFinished ? 38 : nextMatchweek;
+    const nextDate = getDefaultDateForMatchweek(
+      nextFixtures,
+      nextMwValue,
+      seasonFinished,
+      save.userClubId
+    );
+    const milestoneNews = buildWindowMilestoneNews(
+      prevDate,
+      nextDate,
+      nextMwValue,
+      save.seasonFinished,
+      seasonFinished
+    );
+
     setSave({
       ...save,
       clubs: nextClubs,
-      currentMatchweek: seasonFinished ? 38 : nextMatchweek,
+      currentMatchweek: nextMwValue,
       seasonFinished,
+      currentDate: nextDate,
       fixtures: nextFixtures,
       players: nextPlayers,
       tacticsByClub: nextTacticsByClub,
       stadiumByClub: nextStadiumByClub,
-      news: [...newItems, ...save.news].slice(0, 40),
+      news: [...milestoneNews, ...newItems, ...save.news].slice(0, 40),
     });
 
     setActiveTab("dashboard");
+    const milestoneToast = milestoneNews[0]?.title;
     setToast(
       seasonFinished
         ? "Temporada 2026/27 encerrada! Confira a classificação final."
+        : milestoneToast
+        ? milestoneToast
         : userHomeRevenue > 0
         ? `Rodada ${save.currentMatchweek} concluída! Bilheteria em casa: +${formatMoney(
             userHomeRevenue
@@ -596,8 +736,97 @@ export const App: React.FC = () => {
     setToast(`Gramado Híbrido do ${club.stadium} evoluído para Nível ${nextLevel}!`);
   };
 
+  const currentDate = save
+    ? save.currentDate ??
+      getDefaultDateForMatchweek(
+        save.fixtures,
+        save.currentMatchweek,
+        save.seasonFinished,
+        save.userClubId
+      )
+    : "2026-08-15";
+
+  const windowStatus = getTransferWindowStatus(
+    currentDate,
+    save?.seasonFinished ?? false,
+    save?.allowTransfersOutsideWindow ?? false
+  );
+
+  const handleToggleShortlist = (playerId: number) => {
+    if (!save) return;
+    const curr = save.shortlistIds ?? [];
+    const exists = curr.includes(playerId);
+    const next = exists ? curr.filter((id) => id !== playerId) : [...curr, playerId];
+    setSave({ ...save, shortlistIds: next });
+    const targetPlayer = save.players.find((p) => p.id === playerId);
+    setToast(
+      exists
+        ? `${targetPlayer?.name ?? "Atleta"} removido da Lista de Alvos.`
+        : `${targetPlayer?.name ?? "Atleta"} adicionado à Lista de Alvos!`
+    );
+  };
+
+  const handleAdvanceDays = (days: number) => {
+    if (!save || save.seasonFinished) return;
+    const nextFx = getNextMatchFixture(save.fixtures, save.currentMatchweek, save.userClubId);
+    let targetDate = addDaysIso(currentDate, days);
+    if (nextFx && targetDate > nextFx.date) {
+      targetDate = nextFx.date;
+    }
+    if (targetDate <= currentDate) return;
+
+    const milestoneNews = buildWindowMilestoneNews(
+      currentDate,
+      targetDate,
+      save.currentMatchweek,
+      save.seasonFinished,
+      save.seasonFinished
+    );
+
+    setSave({
+      ...save,
+      currentDate: targetDate,
+      news: [...milestoneNews, ...save.news].slice(0, 40),
+    });
+    setToast(
+      milestoneNews[0]?.title ?? `Calendário avançado para ${formatDatePtBr(targetDate)}`
+    );
+  };
+
+  const handleAdvanceToMatchday = () => {
+    if (!save || save.seasonFinished) return;
+    const nextFx = getNextMatchFixture(save.fixtures, save.currentMatchweek, save.userClubId);
+    if (!nextFx) return;
+    if (currentDate >= nextFx.date) {
+      setActiveTab("matchday");
+      return;
+    }
+
+    const milestoneNews = buildWindowMilestoneNews(
+      currentDate,
+      nextFx.date,
+      save.currentMatchweek,
+      save.seasonFinished,
+      save.seasonFinished
+    );
+
+    setSave({
+      ...save,
+      currentDate: nextFx.date,
+      news: [...milestoneNews, ...save.news].slice(0, 40),
+    });
+    setToast(
+      milestoneNews[0]?.title ??
+        `Data avançada para o Dia de Jogo (${formatDatePtBr(nextFx.date)})!`
+    );
+  };
+
   const handleBuyPlayer = (target: Player) => {
     if (!save) return;
+    if (!windowStatus.isOpen) {
+      setToast("Mercado fechado! Aguarde a próxima janela ou adicione o atleta aos Alvos.");
+      return;
+    }
     const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
     if (userClub.transferBudgetEur < target.marketValueEur) return;
 
@@ -668,6 +897,10 @@ export const App: React.FC = () => {
 
   const handleSellPlayer = (target: Player) => {
     if (!save) return;
+    if (!windowStatus.isOpen) {
+      setToast("Mercado fechado! Vendas só podem ser concluídas com a janela aberta.");
+      return;
+    }
     const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
     const userSquad = save.players.filter((p) => p.clubId === userClub.id);
     if (userSquad.length <= 16) return;
@@ -775,6 +1008,16 @@ export const App: React.FC = () => {
               autoOpenFormationOnRedCard: !(save.autoOpenFormationOnRedCard ?? true),
             })
           }
+          onToggleAllowTransfersOutsideWindow={() => {
+            if (!save) return;
+            const nextVal = !(save.allowTransfersOutsideWindow ?? false);
+            setSave({ ...save, allowTransfersOutsideWindow: nextVal });
+            setToast(
+              nextVal
+                ? "Modo Livre: transferências permitidas fora da janela oficial."
+                : "Regras oficiais ativadas: mercado restrito às janelas."
+            );
+          }}
         />
         {toast && (
           <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-bold text-emerald-300 shadow-2xl backdrop-blur">
@@ -820,11 +1063,35 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-3">
             <ClubBadge club={userClub} size="md" />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-black text-white">{userClub.name}</span>
                 <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-100">
                   {save.seasonFinished ? "Fim da Temporada" : `Rodada ${save.currentMatchweek}/38`}
                 </span>
+                <button
+                  onClick={() => activeTab !== "matchday" && setActiveTab("calendar")}
+                  disabled={activeTab === "matchday"}
+                  title="Abrir Calendário & Janelas de Transferência"
+                  className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold transition ${
+                    windowStatus.isDeadlineDay
+                      ? "bg-amber-400 text-slate-950 hover:bg-amber-300"
+                      : windowStatus.isOpen
+                      ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40 hover:bg-emerald-500/30"
+                      : "bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40 hover:bg-rose-500/30"
+                  } disabled:opacity-60`}
+                >
+                  <CalendarIcon className="h-2.5 w-2.5" />
+                  <span>{formatDatePtBr(currentDate)}</span>
+                  <span>•</span>
+                  {windowStatus.isDeadlineDay ? (
+                    <Flame className="h-2.5 w-2.5" />
+                  ) : windowStatus.isOpen ? (
+                    <Unlock className="h-2.5 w-2.5" />
+                  ) : (
+                    <Lock className="h-2.5 w-2.5" />
+                  )}
+                  <span>{windowStatus.badgeText}</span>
+                </button>
               </div>
               <div className="text-[11px] text-slate-300/90">
                 Técnico: <span className="text-white font-semibold">{save.managerName}</span> • Caixa:{" "}
@@ -840,6 +1107,7 @@ export const App: React.FC = () => {
             {[
               { id: "dashboard" as const, label: "Visão Geral", icon: LayoutDashboard },
               { id: "tactics" as const, label: "Tática & Elenco", icon: Users },
+              { id: "calendar" as const, label: "Calendário", icon: CalendarIcon },
               { id: "stadium" as const, label: "Estádio", icon: Building2 },
               { id: "league" as const, label: "Premier League", icon: Trophy },
               { id: "market" as const, label: "Mercado", icon: ShoppingBag },
@@ -932,6 +1200,8 @@ export const App: React.FC = () => {
             managerName={save.managerName}
             currentMatchweek={save.currentMatchweek}
             seasonFinished={save.seasonFinished}
+            currentDate={currentDate}
+            windowStatus={windowStatus}
             clubs={save.clubs}
             players={save.players}
             fixtures={save.fixtures}
@@ -944,6 +1214,22 @@ export const App: React.FC = () => {
             onStartMatchday={() => setActiveTab("matchday")}
             onNavigate={(tab) => setActiveTab(tab)}
             onSelectPlayer={setInspectedPlayer}
+          />
+        )}
+
+        {activeTab === "calendar" && (
+          <CalendarHub
+            userClub={userClub}
+            clubs={save.clubs}
+            fixtures={save.fixtures}
+            currentMatchweek={save.currentMatchweek}
+            seasonFinished={save.seasonFinished}
+            currentDate={currentDate}
+            windowStatus={windowStatus}
+            onAdvanceDays={handleAdvanceDays}
+            onAdvanceToMatchday={handleAdvanceToMatchday}
+            onOpenMarket={() => setActiveTab("market")}
+            onStartMatchday={() => setActiveTab("matchday")}
           />
         )}
 
@@ -1012,9 +1298,14 @@ export const App: React.FC = () => {
           <TransferMarket
             userClub={userClub}
             players={save.players}
+            windowStatus={windowStatus}
+            currentDate={currentDate}
+            shortlistIds={save.shortlistIds ?? []}
             onBuyPlayer={handleBuyPlayer}
             onSellPlayer={handleSellPlayer}
             onSelectPlayer={setInspectedPlayer}
+            onToggleShortlist={handleToggleShortlist}
+            onOpenCalendar={() => setActiveTab("calendar")}
           />
         )}
       </main>
@@ -1025,6 +1316,11 @@ export const App: React.FC = () => {
         userClubId={userClub.id}
         userBudgetEur={userClub.transferBudgetEur}
         userSquadSize={userSquad.length}
+        windowStatus={windowStatus}
+        isShortlisted={
+          inspectedPlayer ? (save.shortlistIds ?? []).includes(inspectedPlayer.id) : false
+        }
+        onToggleShortlist={handleToggleShortlist}
         onClose={() => setInspectedPlayer(null)}
         onBuyPlayer={handleBuyPlayer}
         onSellPlayer={handleSellPlayer}

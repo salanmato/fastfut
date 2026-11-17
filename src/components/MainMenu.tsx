@@ -15,6 +15,7 @@ import {
   Building2,
   ShoppingBag,
   HeartPulse,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import type { RawDatabase, SaveState, StandingRow } from "../types/game";
 import { formatMoney } from "../utils/format";
@@ -33,6 +34,7 @@ interface MainMenuProps {
   onDeleteSave: () => void;
   onToggleKitTheme: () => void;
   onToggleAutoFormation: () => void;
+  onToggleAllowTransfersOutsideWindow: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -46,6 +48,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onDeleteSave,
   onToggleKitTheme,
   onToggleAutoFormation,
+  onToggleAllowTransfersOutsideWindow,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -416,6 +419,30 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700"
                   >
                     {kitTheme === "home" ? "Uniforme 1" : "Uniforme 2"}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="flex items-center gap-2.5">
+                    <CalendarIcon className="h-4 w-4 text-emerald-400" />
+                    <div>
+                      <div className="text-xs font-bold text-white">
+                        Permitir transferências fora da janela
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Ignora abertura e fechamento oficial do mercado (Modo Livre)
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onToggleAllowTransfersOutsideWindow}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-black ${
+                      save.allowTransfersOutsideWindow ?? false
+                        ? "bg-amber-400 text-slate-950"
+                        : "bg-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {save.allowTransfersOutsideWindow ?? false ? "ON" : "OFF"}
                   </button>
                 </div>
 

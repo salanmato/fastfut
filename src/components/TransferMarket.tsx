@@ -1,6 +1,19 @@
 import React, { useMemo, useState } from "react";
-import { Search, ShoppingBag, Banknote, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import {
+  Search,
+  ShoppingBag,
+  Banknote,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Star,
+  Lock,
+  Unlock,
+  Flame,
+  Calendar as CalendarIcon,
+} from "lucide-react";
 import type { Club, Player, RoleCategory } from "../types/game";
+import type { TransferWindowStatus } from "../utils/calendar";
+import { formatDatePtBr } from "../utils/calendar";
 import {
   formatMoney,
   formatWage,
@@ -12,19 +25,29 @@ import { PlayerAvatar } from "./PlayerAvatar";
 interface TransferMarketProps {
   userClub: Club;
   players: Player[];
+  windowStatus: TransferWindowStatus;
+  currentDate: string;
+  shortlistIds: number[];
   onBuyPlayer: (player: Player) => void;
   onSellPlayer: (player: Player) => void;
   onSelectPlayer: (player: Player) => void;
+  onToggleShortlist: (playerId: number) => void;
+  onOpenCalendar: () => void;
 }
 
 export const TransferMarket: React.FC<TransferMarketProps> = ({
   userClub,
   players,
+  windowStatus,
+  currentDate,
+  shortlistIds,
   onBuyPlayer,
   onSellPlayer,
   onSelectPlayer,
+  onToggleShortlist,
+  onOpenCalendar,
 }) => {
-  const [mode, setMode] = useState<"buy" | "sell">("buy");
+  const [mode, setMode] = useState<"buy" | "shortlist" | "sell">("buy");
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | RoleCategory>("ALL");
   const [leagueFilter, setLeagueFilter] = useState<string>("ALL");
@@ -33,12 +56,22 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
   const [maxPriceM, setMaxPriceM] = useState<number>(250);
   const [visibleCount, setVisibleCount] = useState<number>(40);
 
+  const shortlistSet = useMemo(() => new Set(shortlistIds), [shortlistIds]);
+
   const userSquad = useMemo(
     () =>
       players
         .filter((p) => p.clubId === userClub.id)
         .sort((a, b) => b.overall - a.overall),
     [players, userClub.id]
+  );
+
+  const shortlistedTargets = useMemo(
+    () =>
+      players
+        .filter((p) => p.clubId !== userClub.id && shortlistSet.has(p.id))
+        .sort((a, b) => b.overall - a.overall),
+    [players, userClub.id, shortlistSet]
   );
 
   const leagues = useMemo(() => {
@@ -72,8 +105,146 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
       .sort((a, b) => b.overall - a.overall || b.marketValueEur - a.marketValueEur);
   }, [players, userClub.id, minOvr, maxAge, maxPriceM, roleFilter, leagueFilter, query]);
 
+  const renderTargetRow = (p: Player) => {
+    const canAfford = userClub.transferBudgetEur >= p.marketValueEur;
+    const canBuyNow = windowStatus.isOpen && canAfford;
+    const isShortlisted = shortlistSet.has(p.id);
+
+    return (
+      <div
+        key={p.id}
+        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-slate-800/30"
+      >
+        <button
+          onClick={() => onSelectPlayer(p)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left group"
+        >
+          <PlayerAvatar name={p.name} imageUrl={p.imageUrl} size="sm" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-bold text-white group-hover:text-emerald-300">
+                {p.name}
+              </span>
+              <span
+                className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${getRoleBadgeClass(
+                  p.roleCategory
+                )}`}
+              >
+                {p.primaryPosition}
+              </span>
+            </div>
+            <div className="truncate text-xs text-slate-400">
+              {p.clubName} ({p.league}) • {p.nationality} • {p.age} anos
+            </div>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-2.5 sm:gap-4">
+          <div className="text-center">
+            <div className="text-[10px] text-slate-500">OVR / POT</div>
+            <span
+              className={`inline-block rounded border px-2 py-0.5 text-xs font-black ${getOverallColor(
+                p.overall
+              )}`}
+            >
+              {p.overall} / {p.potential}
+            </span>
+          </div>
+
+          <div className="w-24 text-right">
+            <div className="text-xs font-black text-emerald-400">
+              {formatMoney(p.marketValueEur)}
+            </div>
+            <div className="text-[10px] text-slate-500">{formatWage(p.wageEur)}</div>
+          </div>
+
+          <button
+            onClick={() => onToggleShortlist(p.id)}
+            title={isShortlisted ? "Remover dos Alvos" : "Adicionar aos Alvos"}
+            className={`rounded-xl border p-2 transition ${
+              isShortlisted
+                ? "border-amber-400/60 bg-amber-400/15 text-amber-300"
+                : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-amber-300"
+            }`}
+          >
+            <Star className={`h-4 w-4 ${isShortlisted ? "fill-current" : ""}`} />
+          </button>
+
+          <button
+            disabled={!canBuyNow}
+            onClick={() => onBuyPlayer(p)}
+            className="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+          >
+            {!windowStatus.isOpen
+              ? "🔒 Janela Fechada"
+              : canAfford
+              ? "Contratar"
+              : "Caro"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-5">
+      {/* Transfer Window Status Banner */}
+      <div
+        className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 shadow-lg ${
+          windowStatus.isDeadlineDay
+            ? "border-amber-400/60 bg-amber-500/15 animate-pulse"
+            : windowStatus.isOpen
+            ? "border-emerald-500/40 bg-emerald-500/10"
+            : "border-rose-500/40 bg-rose-500/10"
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+              windowStatus.isDeadlineDay
+                ? "bg-amber-400 text-slate-950"
+                : windowStatus.isOpen
+                ? "bg-emerald-500/20 text-emerald-300"
+                : "bg-rose-500/20 text-rose-300"
+            }`}
+          >
+            {windowStatus.isDeadlineDay ? (
+              <Flame className="h-5 w-5" />
+            ) : windowStatus.isOpen ? (
+              <Unlock className="h-5 w-5" />
+            ) : (
+              <Lock className="h-5 w-5" />
+            )}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-black text-white">
+                {windowStatus.isDeadlineDay
+                  ? "🚨 DEADLINE DAY! Último dia de mercado aberto!"
+                  : windowStatus.isOpen
+                  ? `🔓 ${windowStatus.headline}`
+                  : `🔒 ${windowStatus.headline}`}
+              </span>
+              <span className="rounded bg-black/30 px-2 py-0.5 text-[10px] font-bold text-slate-200">
+                {formatDatePtBr(currentDate)}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-slate-300">
+              {windowStatus.detailText}
+              {!windowStatus.isOpen &&
+                " • Você ainda pode observar jogadores e salvá-los na aba Alvos."}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={onOpenCalendar}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-slate-950/75 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-slate-900"
+        >
+          <CalendarIcon className="h-3.5 w-3.5 text-sky-400" /> Ver Calendário
+        </button>
+      </div>
+
       {/* Header Summary */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
         <div>
@@ -85,7 +256,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-right">
             <div className="flex items-center justify-end gap-1 text-[10px] font-bold uppercase text-emerald-300">
               <Banknote className="h-3.5 w-3.5" /> Orçamento Disponível
@@ -105,6 +276,16 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               }`}
             >
               <ArrowDownLeft className="h-3.5 w-3.5" /> Contratar
+            </button>
+            <button
+              onClick={() => setMode("shortlist")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition ${
+                mode === "shortlist"
+                  ? "bg-amber-400 text-slate-950"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Star className="h-3.5 w-3.5" /> Alvos ({shortlistedTargets.length})
             </button>
             <button
               onClick={() => setMode("sell")}
@@ -210,69 +391,10 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
           <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
             <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 text-xs text-slate-400">
               <span>{marketTargets.length} jogadores encontrados</span>
+              <span>Clique na estrela ★ para salvar na Lista de Alvos</span>
             </div>
             <div className="divide-y divide-slate-800/60">
-              {marketTargets.slice(0, visibleCount).map((p) => {
-                const canAfford = userClub.transferBudgetEur >= p.marketValueEur;
-                return (
-                  <div
-                    key={p.id}
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-slate-800/30"
-                  >
-                    <button
-                      onClick={() => onSelectPlayer(p)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left group"
-                    >
-                      <PlayerAvatar name={p.name} imageUrl={p.imageUrl} size="sm" />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-bold text-white group-hover:text-emerald-300">
-                            {p.name}
-                          </span>
-                          <span
-                            className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${getRoleBadgeClass(
-                              p.roleCategory
-                            )}`}
-                          >
-                            {p.primaryPosition}
-                          </span>
-                        </div>
-                        <div className="truncate text-xs text-slate-400">
-                          {p.clubName} ({p.league}) • {p.nationality} • {p.age} anos
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="flex items-center gap-3 sm:gap-5">
-                      <div className="text-center">
-                        <div className="text-[10px] text-slate-500">OVR / POT</div>
-                        <span
-                          className={`inline-block rounded border px-2 py-0.5 text-xs font-black ${getOverallColor(
-                            p.overall
-                          )}`}
-                        >
-                          {p.overall} / {p.potential}
-                        </span>
-                      </div>
-
-                      <div className="w-24 text-right">
-                        <div className="text-xs font-black text-emerald-400">
-                          {formatMoney(p.marketValueEur)}
-                        </div>
-                        <div className="text-[10px] text-slate-500">{formatWage(p.wageEur)}</div>
-                      </div>
-
-                      <button
-                        disabled={!canAfford}
-                        onClick={() => onBuyPlayer(p)}
-                        className="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-                      >
-                        {canAfford ? "Contratar" : "Caro"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {marketTargets.slice(0, visibleCount).map(renderTargetRow)}
             </div>
             {marketTargets.length > visibleCount && (
               <div className="border-t border-slate-800 p-3 text-center">
@@ -286,6 +408,28 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
             )}
           </div>
         </>
+      ) : mode === "shortlist" ? (
+        /* Shortlist Mode */
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-xs text-slate-400">
+            <span>
+              Lista de Alvos & Observação:{" "}
+              <strong className="text-amber-300">{shortlistedTargets.length}</strong> atleta(s)
+            </span>
+            <span>Monitore jogadores para a próxima janela</span>
+          </div>
+          {shortlistedTargets.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              Nenhum jogador marcado como alvo ainda. Clique no ícone{" "}
+              <Star className="inline h-3.5 w-3.5 text-amber-400" /> ao lado de um jogador na aba
+              Contratar ou no perfil dele para adicioná-lo aqui.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800/60">
+              {shortlistedTargets.map(renderTargetRow)}
+            </div>
+          )}
+        </div>
       ) : (
         /* Sell Mode */
         <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
@@ -298,7 +442,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
           <div className="divide-y divide-slate-800/60">
             {userSquad.map((p) => {
               const sellPrice = Math.round(p.marketValueEur * 0.92);
-              const canSell = userSquad.length > 16;
+              const canSell = windowStatus.isOpen && userSquad.length > 16;
               return (
                 <div
                   key={p.id}
@@ -352,7 +496,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                       onClick={() => onSellPlayer(p)}
                       className="rounded-xl bg-rose-500/90 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                     >
-                      Vender
+                      {!windowStatus.isOpen ? "🔒 Janela Fechada" : "Vender"}
                     </button>
                   </div>
                 </div>
