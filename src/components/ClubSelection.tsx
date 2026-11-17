@@ -2,14 +2,14 @@ import React, { useMemo, useState } from "react";
 import { Search, Trophy, MapPin, Banknote, Users, Sparkles } from "lucide-react";
 import type { Club, Player } from "../types/game";
 import { formatMoney, getOverallColor } from "../utils/format";
-import { getClubVisuals } from "../utils/clubVisuals";
+import { getClubVisuals, getKitThemePalette } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
 import { ClubKit } from "./ClubKit";
 
 interface ClubSelectionProps {
   clubs: Club[];
   players: Player[];
-  onSelectClub: (clubId: number, managerName: string) => void;
+  onSelectClub: (clubId: number, managerName: string, kitTheme: "home" | "away") => void;
 }
 
 export const ClubSelection: React.FC<ClubSelectionProps> = ({
@@ -20,6 +20,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
   const [managerName, setManagerName] = useState("Alan Matos");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number>(clubs[0]?.id ?? 1);
+  const [previewKit, setPreviewKit] = useState<"home" | "away">("home");
 
   const sortedClubs = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -29,6 +30,8 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
   }, [clubs, search]);
 
   const selectedClub = clubs.find((c) => c.id === selectedId) ?? clubs[0];
+  const palette = selectedClub ? getKitThemePalette(selectedClub, previewKit) : null;
+
   const selectedSquad = useMemo(
     () =>
       players
@@ -38,9 +41,15 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div
+      className="club-theme-root min-h-screen text-slate-100"
+      style={{ ...(palette?.pageBackgroundStyle ?? {}), ...(palette?.cssVars ?? {}) }}
+    >
       {/* Top Hero */}
-      <div className="border-b border-slate-800/80 bg-gradient-to-b from-emerald-950/40 via-slate-950 to-slate-950">
+      <div
+        className="border-b border-slate-800/80 backdrop-blur"
+        style={palette?.headerStyle}
+      >
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -69,8 +78,15 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                 />
               </div>
               <button
-                onClick={() => onSelectClub(selectedClub.id, managerName.trim() || "Manager")}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                onClick={() =>
+                  onSelectClub(selectedClub.id, managerName.trim() || "Manager", previewKit)
+                }
+                style={
+                  palette
+                    ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
+                    : undefined
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-black shadow-lg transition hover:brightness-110"
               >
                 <Sparkles className="h-4 w-4" /> Assumir {selectedClub?.shortName}
               </button>
@@ -170,19 +186,39 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
               </div>
 
               <div className="space-y-5 p-5">
-                {/* Home & Away Kits Showcase */}
+                {/* Home & Away Kits Theme Selector */}
                 <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Uniformes Oficiais 26/27
+                      Tema do Uniforme 26/27
                     </div>
                     <div className="text-xs text-slate-300 mt-0.5">
-                      Titular (Casa) e Reserva (Visitante)
+                      Clique na camisa para testar o tema
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <ClubKit club={selectedClub} variant="home" size="md" label="Titular" />
-                    <ClubKit club={selectedClub} variant="away" size="md" label="Reserva" />
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewKit("home")}
+                      className={`rounded-xl px-2.5 py-1.5 transition ${
+                        previewKit === "home"
+                          ? "bg-white/10 ring-2 ring-white/60"
+                          : "opacity-65 hover:opacity-100"
+                      }`}
+                    >
+                      <ClubKit club={selectedClub} variant="home" size="md" label="Titular" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewKit("away")}
+                      className={`rounded-xl px-2.5 py-1.5 transition ${
+                        previewKit === "away"
+                          ? "bg-white/10 ring-2 ring-white/60"
+                          : "opacity-65 hover:opacity-100"
+                      }`}
+                    >
+                      <ClubKit club={selectedClub} variant="away" size="md" label="Reserva" />
+                    </button>
                   </div>
                 </div>
 
@@ -250,8 +286,15 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
               </div>
 
               <button
-                onClick={() => onSelectClub(selectedClub.id, managerName.trim() || "Manager")}
-                className="w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                onClick={() =>
+                  onSelectClub(selectedClub.id, managerName.trim() || "Manager", previewKit)
+                }
+                style={
+                  palette
+                    ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
+                    : undefined
+                }
+                className="w-full rounded-xl py-3.5 text-sm font-black shadow-lg transition hover:brightness-110"
               >
                 Iniciar Carreira no {selectedClub.name}
               </button>

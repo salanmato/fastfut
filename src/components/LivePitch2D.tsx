@@ -14,6 +14,7 @@ interface LivePitch2DProps {
   awayTactics: Tactics;
   playerMap: Map<number, Player>;
   userClubId: number;
+  userKitVariant?: "home" | "away";
   isPlaying: boolean;
   subOutId: number | null;
   onSelectSubOut: (playerId: number) => void;
@@ -103,6 +104,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   awayTactics,
   playerMap,
   userClubId,
+  userKitVariant = "home",
   isPlaying,
   subOutId,
   onSelectSubOut,
@@ -386,13 +388,24 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
   const homeVisuals = getClubVisuals(homeClub);
   const awayVisuals = getClubVisuals(awayClub);
-  const awayUsesAlternate = colorsTooClose(
-    homeVisuals.homeKit.primary,
-    awayVisuals.homeKit.primary
-  );
-  const awayVariant: "home" | "away" = awayUsesAlternate ? "away" : "home";
-  const awayKitColors = awayUsesAlternate ? awayVisuals.awayKit : awayVisuals.homeKit;
-  const homeKitColors = homeVisuals.homeKit;
+  const isUserHome = homeClub.id === userClubId;
+
+  let homeVariant: "home" | "away" = isUserHome ? userKitVariant : "home";
+  let awayVariant: "home" | "away" = !isUserHome ? userKitVariant : "home";
+
+  const selectedHomeKit = homeVariant === "home" ? homeVisuals.homeKit : homeVisuals.awayKit;
+  const selectedAwayKit = awayVariant === "home" ? awayVisuals.homeKit : awayVisuals.awayKit;
+
+  if (colorsTooClose(selectedHomeKit.primary, selectedAwayKit.primary)) {
+    if (isUserHome) {
+      awayVariant = awayVariant === "home" ? "away" : "home";
+    } else {
+      homeVariant = homeVariant === "home" ? "away" : "home";
+    }
+  }
+
+  const homeKitColors = homeVariant === "home" ? homeVisuals.homeKit : homeVisuals.awayKit;
+  const awayKitColors = awayVariant === "home" ? awayVisuals.homeKit : awayVisuals.awayKit;
 
   const homeTextColor = isLightColor(homeKitColors.primary) ? "#0f172a" : "#ffffff";
   const awayTextColor = isLightColor(awayKitColors.primary) ? "#0f172a" : "#ffffff";
@@ -618,7 +631,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
           const club = info.isHome ? homeClub : awayClub;
           const kitColors = info.isHome ? homeKitColors : awayKitColors;
-          const variant: "home" | "away" = info.isHome ? "home" : awayVariant;
+          const variant: "home" | "away" = info.isHome ? homeVariant : awayVariant;
           const textColor = info.isHome ? homeTextColor : awayTextColor;
           const isUserPlayer = club.id === userClubId;
           const isSubSelected = subOutId === playerId;

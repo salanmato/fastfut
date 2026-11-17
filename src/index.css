@@ -6,6 +6,30 @@
   }
 }
 
+/* Dynamic Club Kit Theme Surfaces */
+.club-theme-root {
+  transition: background-color 350ms ease, background-image 350ms ease;
+}
+
+.club-theme-root .bg-slate-900,
+.club-theme-root .bg-slate-900\/70,
+.club-theme-root .bg-slate-900\/80,
+.club-theme-root .bg-slate-900\/90 {
+  background-color: color-mix(in srgb, var(--club-surface, #0f172a) 84%, rgba(2, 6, 23, 0.9)) !important;
+  backdrop-filter: blur(8px);
+}
+
+.club-theme-root .bg-slate-950\/60,
+.club-theme-root .bg-slate-950\/50 {
+  background-color: color-mix(in srgb, var(--club-bg-base, #020617) 72%, rgba(2, 6, 23, 0.85)) !important;
+}
+
+.club-theme-root .border-slate-800,
+.club-theme-root .border-slate-800\/80,
+.club-theme-root .border-slate-800\/90 {
+  border-color: color-mix(in srgb, var(--club-primary, #334155) 26%, rgba(30, 41, 59, 0.9)) !important;
+}
+
 /* Custom sleek scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -244,5 +244,6 @@ export interface SaveState {
   fixtures: Fixture[];
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub?: Record<number, StadiumConfig>;
+  kitTheme?: "home" | "away";
   news: NewsItem[];
 }

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Club } from "../types/game";
 
 export type KitPattern = "solid" | "sleeves" | "stripes" | "pinstripes" | "sash";
@@ -188,3 +189,125 @@ export function getClubVisuals(
     },
   };
 }
+
+export interface KitThemePalette {
+  variant: "home" | "away";
+  kit: KitSpec;
+  bgBase: string;
+  bgSurface: string;
+  bgHeader: string;
+  accentPrimary: string;
+  accentSecondary: string;
+  accentTrim: string;
+  accentText: string;
+  borderTint: string;
+  pageBackgroundStyle: CSSProperties;
+  headerStyle: CSSProperties;
+  cssVars: CSSProperties;
+}
+
+function parseHexRgb(hex: string): [number, number, number] {
+  const c = hex.replace("#", "").trim();
+  if (c.length !== 6) return [15, 23, 42];
+  return [
+    parseInt(c.slice(0, 2), 16),
+    parseInt(c.slice(2, 4), 16),
+    parseInt(c.slice(4, 6), 16),
+  ];
+}
+
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = parseHexRgb(hex).map((v) => v / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function mixHex(hexA: string, hexB: string, weightA: number): string {
+  const [r1, g1, b1] = parseHexRgb(hexA);
+  const [r2, g2, b2] = parseHexRgb(hexB);
+  const w = Math.max(0, Math.min(1, weightA));
+  const r = Math.round(r1 * w + r2 * (1 - w));
+  const g = Math.round(g1 * w + g2 * (1 - w));
+  const b = Math.round(b1 * w + b2 * (1 - w));
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function hexRgba(hex: string, alpha: number): string {
+  const [r, g, b] = parseHexRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function getKitThemePalette(
+  club: Pick<Club, "name" | "primaryColor" | "secondaryColor" | "badgeUrl" | "stadiumImageUrl">,
+  variant: "home" | "away" = "home"
+): KitThemePalette {
+  const visuals = getClubVisuals(club);
+  const kit = variant === "home" ? visuals.homeKit : visuals.awayKit;
+
+  const primLum = relativeLuminance(kit.primary);
+  const secLum = relativeLuminance(kit.secondary);
+
+  // Choose base tint color so white/very-light shirts (e.g. Spurs, Fulham, Leeds) still have rich dark club atmosphere
+  const atmosphereSource =
+    primLum > 0.62
+      ? secLum < 0.55
+        ? kit.secondary
+        : kit.trim
+      : kit.primary;
+
+  const secondaryGlowSource =
+    primLum > 0.62 ? kit.primary : kit.secondary;
+
+  const bgBase = mixHex(atmosphereSource, "#020617", 0.24);
+  const bgSurface = mixHex(atmosphereSource, "#090d18", 0.16);
+  const bgHeader = mixHex(atmosphereSource, "#030712", 0.34);
+
+  // Ensure active accent pops cleanly against dark UI
+  let accentPrimary = kit.primary;
+  if (primLum < 0.055) {
+    accentPrimary = secLum > 0.12 ? kit.secondary : kit.trim;
+  }
+  const accentText = relativeLuminance(accentPrimary) > 0.48 ? "#0f172a" : "#ffffff";
+  const borderTint = hexRgba(accentPrimary, 0.28);
+
+  const pageBackgroundStyle: CSSProperties = {
+    backgroundColor: bgBase,
+    backgroundImage: [
+      `radial-gradient(ellipse 80% 50% at 12% 0%, ${hexRgba(kit.primary, primLum > 0.65 ? 0.22 : 0.34)} 0%, transparent 62%)`,
+      `radial-gradient(ellipse 65% 45% at 88% 8%, ${hexRgba(secondaryGlowSource, 0.24)} 0%, transparent 60%)`,
+      `radial-gradient(ellipse 70% 55% at 50% 100%, ${hexRgba(kit.trim, 0.16)} 0%, transparent 65%)`,
+      `linear-gradient(180deg, ${mixHex(atmosphereSource, "#020617", 0.28)} 0%, ${bgBase} 55%, #020617 100%)`,
+    ].join(", "),
+    backgroundAttachment: "fixed",
+  };
+
+  const headerStyle: CSSProperties = {
+    backgroundColor: hexRgba(bgHeader, 0.88),
+    borderBottomColor: hexRgba(accentPrimary, 0.28),
+  };
+
+  const cssVars = {
+    "--club-primary": accentPrimary,
+    "--club-secondary": kit.secondary,
+    "--club-trim": kit.trim,
+    "--club-bg-base": bgBase,
+    "--club-surface": bgSurface,
+    "--club-border": borderTint,
+  } as CSSProperties;
+
+  return {
+    variant,
+    kit,
+    bgBase,
+    bgSurface,
+    bgHeader,
+    accentPrimary,
+    accentSecondary: kit.secondary,
+    accentTrim: kit.trim,
+    accentText,
+    borderTint,
+    pageBackgroundStyle,
+    headerStyle,
+    cssVars,
+  };
+}
+

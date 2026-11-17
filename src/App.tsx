@@ -26,7 +26,9 @@ import {
 } from "./engine/matchEngine";
 import { computeStandings } from "./engine/standings";
 import { formatMoney } from "./utils/format";
+import { getKitThemePalette } from "./utils/clubVisuals";
 import { ClubBadge } from "./components/ClubBadge";
+import { ClubKit } from "./components/ClubKit";
 import { ClubSelection } from "./components/ClubSelection";
 import { Dashboard } from "./components/Dashboard";
 import { TacticsSquad } from "./components/TacticsSquad";
@@ -64,6 +66,7 @@ export const App: React.FC = () => {
       return {
         ...parsed,
         stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
+        kitTheme: parsed.kitTheme ?? "home",
       };
     } catch {
       return null;
@@ -108,7 +111,11 @@ export const App: React.FC = () => {
     [save]
   );
 
-  const handleSelectClub = (clubId: number, managerName: string) => {
+  const handleSelectClub = (
+    clubId: number,
+    managerName: string,
+    kitTheme: "home" | "away" = "home"
+  ) => {
     if (!rawDb) return;
     const clubs = rawDb.clubs.map((c) => ({ ...c }));
     const players = rawDb.players.map((p) => ({ ...p }));
@@ -134,6 +141,7 @@ export const App: React.FC = () => {
       fixtures,
       tacticsByClub,
       stadiumByClub: ensureStadiumMap(clubs),
+      kitTheme,
       news: [
         {
           id: "welcome-1",
@@ -645,24 +653,42 @@ export const App: React.FC = () => {
   const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
   const userSquad = save.players.filter((p) => p.clubId === userClub.id);
   const userTactics = save.tacticsByClub[userClub.id];
+  const kitTheme: "home" | "away" = save.kitTheme ?? "home";
+  const palette = getKitThemePalette(userClub, kitTheme);
+
+  const handleToggleKitTheme = () => {
+    const nextTheme: "home" | "away" = kitTheme === "home" ? "away" : "home";
+    setSave({ ...save, kitTheme: nextTheme });
+    setToast(
+      nextTheme === "home"
+        ? `Tema alterado: Uniforme 1 (Titular) do ${userClub.shortName}`
+        : `Tema alterado: Uniforme 2 (Reserva) do ${userClub.shortName}`
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div
+      className="club-theme-root min-h-screen text-slate-100"
+      style={{ ...palette.pageBackgroundStyle, ...palette.cssVars }}
+    >
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/90 bg-slate-950/90 backdrop-blur">
+      <header
+        className="sticky top-0 z-30 border-b backdrop-blur-md transition-colors duration-300"
+        style={palette.headerStyle}
+      >
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <ClubBadge club={userClub} size="md" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black text-white">{userClub.name}</span>
-                <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-100">
                   {save.seasonFinished ? "Fim da Temporada" : `Rodada ${save.currentMatchweek}/38`}
                 </span>
               </div>
-              <div className="text-[11px] text-slate-400">
-                Técnico: <span className="text-slate-200">{save.managerName}</span> • Caixa:{" "}
-                <span className="font-bold text-emerald-400">
+              <div className="text-[11px] text-slate-300/90">
+                Técnico: <span className="text-white font-semibold">{save.managerName}</span> • Caixa:{" "}
+                <span className="font-bold text-emerald-300">
                   {formatMoney(userClub.transferBudgetEur)}
                 </span>
               </div>
@@ -685,10 +711,15 @@ export const App: React.FC = () => {
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
                   disabled={activeTab === "matchday"}
+                  style={
+                    isActive
+                      ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
+                      : undefined
+                  }
                   className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
                     isActive
-                      ? "bg-emerald-500 text-slate-950"
-                      : "text-slate-300 hover:bg-slate-800/80 hover:text-white disabled:opacity-40"
+                      ? "shadow-md"
+                      : "text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40"
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" /> {item.label}
@@ -706,12 +737,22 @@ export const App: React.FC = () => {
             )}
           </nav>
 
-          {/* Utility Buttons */}
+          {/* Utility Buttons + Uniform Theme Switcher */}
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleToggleKitTheme}
+              title="Alternar tema entre Uniforme 1 (Titular) e Uniforme 2 (Reserva)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/25 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-white/10"
+            >
+              <ClubKit club={userClub} variant={kitTheme} size="xs" />
+              <span className="hidden md:inline">
+                {kitTheme === "home" ? "Uniforme 1" : "Uniforme 2"}
+              </span>
+            </button>
             <button
               onClick={handleExportSave}
               title="Exportar Save JSON"
-              className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 hover:text-white"
+              className="rounded-lg border border-white/15 bg-black/25 p-2 text-slate-300 hover:text-white"
             >
               <Download className="h-4 w-4" />
             </button>
@@ -719,7 +760,7 @@ export const App: React.FC = () => {
               onClick={handleResetSave}
               disabled={activeTab === "matchday"}
               title="Novo Save / Trocar Clube"
-              className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 hover:text-rose-400 disabled:opacity-40"
+              className="rounded-lg border border-white/15 bg-black/25 p-2 text-slate-300 hover:text-rose-400 disabled:opacity-40"
             >
               <RotateCcw className="h-4 w-4" />
             </button>
@@ -749,6 +790,7 @@ export const App: React.FC = () => {
             standings={standings}
             tacticsByClub={save.tacticsByClub}
             stadiumByClub={stadiumByClub}
+            userKitVariant={kitTheme}
             news={save.news}
             onStartMatchday={() => setActiveTab("matchday")}
             onNavigate={(tab) => setActiveTab(tab)}
@@ -793,6 +835,7 @@ export const App: React.FC = () => {
             referees={save.referees}
             tacticsByClub={save.tacticsByClub}
             stadiumByClub={stadiumByClub}
+            userKitVariant={kitTheme}
             onFinishMatchweek={handleFinishMatchweek}
           />
         )}

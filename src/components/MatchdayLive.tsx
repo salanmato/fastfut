@@ -44,6 +44,7 @@ interface MatchdayLiveProps {
   referees: Referee[];
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub: Record<number, StadiumConfig>;
+  userKitVariant?: "home" | "away";
   onFinishMatchweek: (results: MatchResult[]) => void;
 }
 
@@ -56,6 +57,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   referees,
   tacticsByClub,
   stadiumByClub,
+  userKitVariant = "home",
   onFinishMatchweek,
 }) => {
   const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
@@ -328,7 +330,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       {homeClub.shortName}
                     </span>
                     <div className="hidden md:block">
-                      <ClubKit club={homeClub} variant="home" size="sm" />
+                      <ClubKit
+                        club={homeClub}
+                        variant={homeClub.id === userClubId ? userKitVariant : "home"}
+                        size="sm"
+                      />
                     </div>
                     <ClubBadge club={homeClub} size="lg" />
                   </div>
@@ -351,7 +357,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   <div className="flex items-center gap-2.5">
                     <ClubBadge club={awayClub} size="lg" />
                     <div className="hidden md:block">
-                      <ClubKit club={awayClub} variant="away" size="sm" />
+                      <ClubKit
+                        club={awayClub}
+                        variant={awayClub.id === userClubId ? userKitVariant : "away"}
+                        size="sm"
+                      />
                     </div>
                     <span className="hidden sm:inline text-lg font-black text-white">
                       {awayClub.name}
@@ -391,6 +401,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             awayTactics={liveTacticsByClub[awayClub.id]}
             playerMap={playerMap}
             userClubId={userClubId}
+            userKitVariant={userKitVariant}
             isPlaying={isPlaying}
             subOutId={subOutId}
             onSelectSubOut={(pid) => setSubOutId((prev) => (prev === pid ? null : pid))}

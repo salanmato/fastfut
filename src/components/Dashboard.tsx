@@ -39,6 +39,7 @@ interface DashboardProps {
   standings: StandingRow[];
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub: Record<number, StadiumConfig>;
+  userKitVariant?: "home" | "away";
   news: NewsItem[];
   onStartMatchday: () => void;
   onNavigate: (tab: "tactics" | "league" | "market" | "stadium") => void;
@@ -57,6 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   standings,
   tacticsByClub,
   stadiumByClub,
+  userKitVariant = "home",
   news,
   onStartMatchday,
   onNavigate,
@@ -214,7 +216,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <div className="flex flex-1 flex-col items-center text-center sm:flex-row sm:text-left sm:gap-3">
                   <ClubBadge club={homeClub} size="lg" />
                   <div className="hidden sm:block">
-                    <ClubKit club={homeClub} variant="home" size="sm" />
+                    <ClubKit
+                      club={homeClub}
+                      variant={homeClub.id === userClub.id ? userKitVariant : "home"}
+                      size="sm"
+                    />
                   </div>
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -250,7 +256,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
                   <div className="hidden sm:block">
-                    <ClubKit club={awayClub} variant="away" size="sm" />
+                    <ClubKit
+                      club={awayClub}
+                      variant={awayClub.id === userClub.id ? userKitVariant : "away"}
+                      size="sm"
+                    />
                   </div>
                   <ClubBadge club={awayClub} size="lg" />
                 </div>
