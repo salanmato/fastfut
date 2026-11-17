@@ -283,12 +283,31 @@ export interface RawDatabase {
   fixtures: Fixture[];
 }
 
+export interface PastSeasonRecord {
+  season: string;
+  division: string;
+  position: number;
+  points: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  championClubName: string;
+  faCupChampionName?: string;
+  clubMvpName?: string;
+  clubTopScorerName?: string;
+}
+
 export interface SaveState {
   version: number;
   managerName: string;
   userClubId: number;
   currentMatchweek: number;
   seasonFinished: boolean;
+  season?: string;
+  seasonNumber?: number;
+  seasonHistory?: PastSeasonRecord[];
   clubs: Club[];
   referees: Referee[];
   players: Player[];

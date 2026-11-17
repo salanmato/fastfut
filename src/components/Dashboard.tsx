@@ -39,6 +39,7 @@ interface DashboardProps {
   managerName: string;
   currentMatchweek: number;
   seasonFinished: boolean;
+  currentSeason?: string;
   currentDate: string;
   windowStatus: TransferWindowStatus;
   faCup?: FACupState;
@@ -70,6 +71,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   managerName,
   currentMatchweek,
   seasonFinished,
+  currentSeason = "2026/27",
   currentDate,
   windowStatus,
   faCup,
@@ -226,7 +228,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
               <div>
                 <div className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                  Temporada 2026/27 Encerrada
+                  Temporada {currentSeason} Encerrada
                 </div>
                 <h2 className="text-2xl font-black text-white">
                   {champion?.club.id === userClub.id

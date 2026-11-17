@@ -17,6 +17,7 @@ import type {
   Fixture,
   Player,
   StadiumConfig,
+  PastSeasonRecord,
   StandingRow,
   Tactics,
 } from "../types/game";
@@ -33,6 +34,10 @@ interface SeasonReviewDashboardProps {
   faCup?: FACupState;
   stadiumConfig?: StadiumConfig;
   userTactics?: Tactics;
+  currentSeason?: string;
+  seasonNumber?: number;
+  seasonHistory?: PastSeasonRecord[];
+  onAdvanceToNextSeason?: () => void;
   onSelectPlayer: (p: Player) => void;
   onNavigateToLeague: () => void;
   onNavigateToMarket: () => void;
@@ -47,12 +52,23 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
   standings,
   faCup,
   stadiumConfig,
+  currentSeason = "2026/27",
+  seasonNumber = 1,
+  seasonHistory,
+  onAdvanceToNextSeason,
   onSelectPlayer,
   onNavigateToLeague,
   onNavigateToMarket,
   onNavigateToCalendar,
 }) => {
   const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
+
+  const activeSeason = currentSeason;
+  const startYr = useMemo(() => {
+    const match = activeSeason.match(/^(\d{4})/);
+    return match ? parseInt(match[1], 10) : 2026;
+  }, [activeSeason]);
+  const nextSeasonName = `${startYr + 1}/${String(startYr + 2).slice(-2)}`;
 
   // User Squad & Stats
   const userSquad = useMemo(
@@ -290,7 +306,7 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 text-xs font-black uppercase tracking-wider">
-                  Temporada 2026/27 Concluída
+                  Temporada {activeSeason} Concluída
                 </span>
                 <span className="text-xs text-slate-400">
                   {userClub.division ?? "Premier League"} • 38 Rodadas Disputadas
@@ -705,6 +721,89 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Advance to Next Season Banner */}
+      {onAdvanceToNextSeason && (
+        <div className="rounded-2xl border-2 border-emerald-500/60 bg-gradient-to-r from-emerald-950/70 via-slate-900 to-sky-950/70 p-6 flex flex-col md:flex-row items-center justify-between gap-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" /> Virada de Temporada
+              </span>
+              <span className="text-xs text-slate-400">
+                Temporada {seasonNumber ? seasonNumber + 1 : 2}
+              </span>
+            </div>
+            <h3 className="mt-2 text-2xl font-black text-white">
+              Pronto para a Temporada {nextSeasonName}?
+            </h3>
+            <p className="mt-1 text-xs text-slate-300 max-w-xl">
+              Ao avançar, o jogo efetiva as promoções e rebaixamentos da liga, credita as premiações e verbas de TV no seu caixa, desenvolve e envelhece os atletas, e sorteia as novas 38 rodadas com a reabertura do mercado de transferências.
+            </p>
+          </div>
+          <button
+            onClick={onAdvanceToNextSeason}
+            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-6 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 active:scale-95 shadow-md shadow-emerald-500/20"
+          >
+            <Sparkles className="h-4 w-4" /> Iniciar Temporada {nextSeasonName} →
+          </button>
+        </div>
+      )}
+
+      {/* Trophy Cabinet & Season History */}
+      {seasonHistory && seasonHistory.length > 0 && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <h2 className="font-h2 text-xl text-white mb-3 flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-amber-400" />
+            Galeria de Conquistas & Histórico de Temporadas ({seasonHistory.length})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {seasonHistory.map((hist, idx) => (
+              <div
+                key={`${hist.season}-${idx}`}
+                className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                    Temporada {hist.season}
+                  </span>
+                  <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                    {hist.division}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-black text-white">
+                    {hist.position === 1 ? "🏆 Campeão" : `${hist.position}º Lugar`}
+                  </span>
+                  <span className="text-xs font-bold text-emerald-400">
+                    {hist.points} pts ({hist.won}V-{hist.drawn}E-{hist.lost}D)
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/80 space-y-0.5">
+                  <div>
+                    Campeão da Liga: <span className="font-bold text-slate-200">{hist.championClubName}</span>
+                  </div>
+                  {hist.faCupChampionName && (
+                    <div>
+                      Copa da Inglaterra: <span className="font-bold text-amber-300">{hist.faCupChampionName}</span>
+                    </div>
+                  )}
+                  {hist.clubMvpName && (
+                    <div>
+                      Craque do Clube: <span className="font-bold text-slate-200">{hist.clubMvpName}</span>
+                    </div>
+                  )}
+                  {hist.clubTopScorerName && (
+                    <div>
+                      Artilheiro do Clube: <span className="font-bold text-slate-200">{hist.clubTopScorerName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Footer Navigation Strip */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">

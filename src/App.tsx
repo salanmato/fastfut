@@ -32,6 +32,10 @@ import {
 } from "./engine/matchEngine";
 import { computeStandings } from "./engine/standings";
 import {
+  advanceToNextSeason,
+  type SeasonTransitionReport,
+} from "./engine/seasonProgression";
+import {
   createInitialFACupState,
   extractMatchweekDates,
   generateDivisionFixtures,
@@ -213,6 +217,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [inspectedPlayer, setInspectedPlayer] = useState<Player | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [transitionReport, setTransitionReport] = useState<SeasonTransitionReport | null>(null);
 
   useEffect(() => {
     fetch("/data/fm2627.json")
@@ -757,6 +762,17 @@ export const App: React.FC = () => {
     );
   };
 
+  const handleAdvanceToNextSeason = () => {
+    if (!save) return;
+    const { nextSave, report } = advanceToNextSeason(save);
+    setSave(nextSave);
+    setTransitionReport(report);
+    setActiveTab("dashboard");
+    setToast(
+      `🚀 Bem-vindo à Temporada ${report.newSeason}! Novo orçamento e calendário de 38 rodadas disponíveis.`
+    );
+  };
+
   const handleUpdateStadiumConfig = (nextConfig: StadiumConfig) => {
     if (!save) return;
     setSave({
@@ -1210,7 +1226,7 @@ export const App: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base text-white">{userClub.name}</h1>
                 <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-100">
-                  {save.seasonFinished ? "Fim da Temporada" : `Rodada ${save.currentMatchweek}/38`}
+                  {save.season ?? "2026/27"} • {save.seasonFinished ? "Fim da Temporada" : `Rodada ${save.currentMatchweek}/38`}
                 </span>
                 <button
                   onClick={() => activeTab !== "matchday" && setActiveTab("calendar")}
@@ -1362,6 +1378,7 @@ export const App: React.FC = () => {
             managerName={save.managerName}
             currentMatchweek={save.currentMatchweek}
             seasonFinished={save.seasonFinished}
+            currentSeason={save.season ?? "2026/27"}
             currentDate={currentDate}
             windowStatus={windowStatus}
             faCup={save.faCup}
@@ -1387,6 +1404,7 @@ export const App: React.FC = () => {
             fixtures={save.fixtures}
             currentMatchweek={save.currentMatchweek}
             seasonFinished={save.seasonFinished}
+            currentSeason={save.season ?? "2026/27"}
             currentDate={currentDate}
             windowStatus={windowStatus}
             onAdvanceDays={handleAdvanceDays}
@@ -1494,6 +1512,10 @@ export const App: React.FC = () => {
             faCup={save.faCup}
             stadiumConfig={stadiumByClub[userClub.id]}
             userTactics={userTactics}
+            currentSeason={save.season ?? "2026/27"}
+            seasonNumber={save.seasonNumber ?? 1}
+            seasonHistory={save.seasonHistory}
+            onAdvanceToNextSeason={handleAdvanceToNextSeason}
             onSelectPlayer={setInspectedPlayer}
             onNavigateToLeague={() => setActiveTab("league")}
             onNavigateToMarket={() => setActiveTab("market")}
@@ -1522,6 +1544,112 @@ export const App: React.FC = () => {
         onBuyPlayer={handleBuyPlayer}
         onSellPlayer={handleSellPlayer}
       />
+
+      {/* Season Transition Report Modal */}
+      {transitionReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border-2 border-emerald-500/60 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-black uppercase text-emerald-300 border border-emerald-500/40">
+                  Nova Temporada Iniciada!
+                </span>
+                <h2 className="mt-1 font-h1 text-2xl text-white">
+                  Bem-vindo à Temporada {transitionReport.newSeason}!
+                </h2>
+              </div>
+              <button
+                onClick={() => setTransitionReport(null)}
+                className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300 hover:text-white"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              {/* Campaign status */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Status da Campanha Anterior ({transitionReport.previousSeason})
+                </div>
+                <div className="mt-1 text-base font-black text-white">
+                  {transitionReport.userClubName} terminou em {transitionReport.userRank}º Lugar ({transitionReport.userPoints} pts)
+                </div>
+                {transitionReport.userPromoted && (
+                  <div className="mt-1 font-bold text-emerald-400">
+                    🎉 ACESSO CONQUISTADO! O clube subiu para a {transitionReport.userDivision}!
+                  </div>
+                )}
+                {transitionReport.userRelegated && (
+                  <div className="mt-1 font-bold text-rose-400">
+                    ⚠️ REBAIXAMENTO: O clube disputará a {transitionReport.userDivision}.
+                  </div>
+                )}
+              </div>
+
+              {/* Promotions & Relegations */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <div className="text-[10px] font-bold uppercase text-emerald-400">Clubes Promovidos</div>
+                  <div className="mt-1 text-xs text-white">
+                    {transitionReport.promotedClubs.length > 0
+                      ? transitionReport.promotedClubs.join(", ")
+                      : "Sem alterações nesta divisão"}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
+                  <div className="text-[10px] font-bold uppercase text-rose-400">Clubes Rebaixados</div>
+                  <div className="mt-1 text-xs text-white">
+                    {transitionReport.relegatedClubs.length > 0
+                      ? transitionReport.relegatedClubs.join(", ")
+                      : "Sem alterações nesta divisão"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Boost */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Injeção Financeira</div>
+                <div className="mt-1 flex items-baseline justify-between text-base font-black text-emerald-400">
+                  <span>Premiação da Liga + Contrato de TV</span>
+                  <span>+{formatMoney(transitionReport.totalBudgetAddedEur)}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Valores creditados integralmente no orçamento de transferências para a Janela de Verão.
+                </p>
+              </div>
+
+              {/* Player Development */}
+              {transitionReport.improvedPlayers.length > 0 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <div className="text-[10px] font-bold uppercase text-sky-400">
+                    Desenvolvimento de Jovens Atletas (Evolução de Overall)
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    {transitionReport.improvedPlayers.slice(0, 10).map((p, i) => (
+                      <div key={i} className="flex justify-between border-b border-slate-800/60 pb-1">
+                        <span className="text-white">{p.name}</span>
+                        <span className="font-bold text-emerald-400">
+                          {p.oldOvr} → {p.newOvr} (+{p.newOvr - p.oldOvr})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setTransitionReport(null)}
+                className="w-full rounded-xl bg-emerald-500 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-emerald-400 sm:w-auto sm:px-6"
+              >
+                Ir para a Pré-Temporada {transitionReport.newSeason} →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

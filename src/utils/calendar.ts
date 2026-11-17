@@ -6,6 +6,62 @@ export const WINTER_WINDOW_START = "2027-01-01";
 export const WINTER_WINDOW_END = "2027-02-02";
 export const POST_SEASON_WINDOW_START = "2027-06-01";
 
+export function getSeasonStartYear(dateOrSeason?: string): number {
+  if (!dateOrSeason) return 2026;
+  if (dateOrSeason.includes("/")) {
+    const y = parseInt(dateOrSeason.split("/")[0], 10);
+    return isNaN(y) ? 2026 : y;
+  }
+  const match = dateOrSeason.match(/^(\d{4})-(\d{2})/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    return month >= 7 ? year : year - 1;
+  }
+  return 2026;
+}
+
+export function getSeasonWindowDates(startYear: number) {
+  return {
+    summerStart: `${startYear}-08-01`,
+    summerEnd: `${startYear}-09-01`,
+    winterStart: `${startYear + 1}-01-01`,
+    winterEnd: `${startYear + 1}-02-02`,
+    postSeasonStart: `${startYear + 1}-06-01`,
+    autumnGapStart: `${startYear}-09-02`,
+    springGapStart: `${startYear + 1}-02-03`,
+  };
+}
+
+export function getSeasonMonths(startYear: number): SeasonMonth[] {
+  const months: SeasonMonth[] = [];
+  const list = [
+    { m: 8, label: "Agosto", short: "Ago", y: startYear },
+    { m: 9, label: "Setembro", short: "Set", y: startYear },
+    { m: 10, label: "Outubro", short: "Out", y: startYear },
+    { m: 11, label: "Novembro", short: "Nov", y: startYear },
+    { m: 12, label: "Dezembro", short: "Dez", y: startYear },
+    { m: 1, label: "Janeiro", short: "Jan", y: startYear + 1 },
+    { m: 2, label: "Fevereiro", short: "Fev", y: startYear + 1 },
+    { m: 3, label: "Março", short: "Mar", y: startYear + 1 },
+    { m: 4, label: "Abril", short: "Abr", y: startYear + 1 },
+    { m: 5, label: "Maio", short: "Mai", y: startYear + 1 },
+    { m: 6, label: "Junho", short: "Jun", y: startYear + 1 },
+  ];
+  for (const item of list) {
+    const key = `${item.y}-${String(item.m).padStart(2, "0")}`;
+    const yr2 = String(item.y).slice(-2);
+    months.push({
+      year: item.y,
+      month: item.m,
+      key,
+      label: `${item.label} ${item.y}`,
+      shortLabel: `${item.short} ${yr2}`,
+    });
+  }
+  return months;
+}
+
 export type TransferWindowPhaseId =
   | "summer_open"
   | "autumn_closed"
@@ -139,14 +195,19 @@ export function formatDateShortPtBr(isoDate: string): string {
 }
 
 export function isDateInTransferWindow(isoDate: string, seasonFinished = false): boolean {
-  if (seasonFinished || isoDate >= POST_SEASON_WINDOW_START) return true;
-  if (isoDate >= SUMMER_WINDOW_START && isoDate <= SUMMER_WINDOW_END) return true;
-  if (isoDate >= WINTER_WINDOW_START && isoDate <= WINTER_WINDOW_END) return true;
+  const startYear = getSeasonStartYear(isoDate);
+  const { summerStart, summerEnd, winterStart, winterEnd, postSeasonStart } =
+    getSeasonWindowDates(startYear);
+  if (seasonFinished || isoDate >= postSeasonStart) return true;
+  if (isoDate >= summerStart && isoDate <= summerEnd) return true;
+  if (isoDate >= winterStart && isoDate <= winterEnd) return true;
   return false;
 }
 
 export function isDeadlineDayDate(isoDate: string): boolean {
-  return isoDate === SUMMER_WINDOW_END || isoDate === WINTER_WINDOW_END;
+  const startYear = getSeasonStartYear(isoDate);
+  const { summerEnd, winterEnd } = getSeasonWindowDates(startYear);
+  return isoDate === summerEnd || isoDate === winterEnd;
 }
 
 export function getNextMatchFixture(
@@ -168,11 +229,16 @@ export function getDefaultDateForMatchweek(
   seasonFinished: boolean,
   userClubId?: number
 ): string {
-  if (seasonFinished) return POST_SEASON_WINDOW_START;
-  if (matchweek <= 1) return "2026-08-15";
-  if (matchweek === 3) return SUMMER_WINDOW_END;
-  if (matchweek === 19) return WINTER_WINDOW_START;
-  if (matchweek === 24) return WINTER_WINDOW_END;
+  const firstFxDate = fixtures[0]?.date ?? "2026-08-15";
+  const startYear = getSeasonStartYear(firstFxDate);
+  const { summerEnd, winterStart, winterEnd, postSeasonStart } =
+    getSeasonWindowDates(startYear);
+
+  if (seasonFinished) return postSeasonStart;
+  if (matchweek <= 1) return firstFxDate;
+  if (matchweek === 3) return summerEnd;
+  if (matchweek === 19) return winterStart;
+  if (matchweek === 24) return winterEnd;
 
   const prevDates = fixtures
     .filter((f) => f.matchweek === matchweek - 1)
@@ -198,7 +264,7 @@ export function getDefaultDateForMatchweek(
   if (currUserFx) {
     return addDaysIso(currUserFx.date, -2);
   }
-  return "2026-08-15";
+  return firstFxDate;
 }
 
 function clampPct(val: number): number {
@@ -210,9 +276,19 @@ export function getTransferWindowStatus(
   seasonFinished: boolean,
   allowOutsideWindow = false
 ): TransferWindowStatus {
+  const startYear = getSeasonStartYear(currentDate);
+  const {
+    summerStart,
+    summerEnd,
+    winterStart,
+    winterEnd,
+    postSeasonStart,
+    autumnGapStart,
+    springGapStart,
+  } = getSeasonWindowDates(startYear);
   const isDeadlineDay = !seasonFinished && isDeadlineDayDate(currentDate);
 
-  if (seasonFinished || currentDate >= POST_SEASON_WINDOW_START) {
+  if (seasonFinished || currentDate >= postSeasonStart) {
     return {
       isOpen: true,
       isNaturallyOpen: true,
@@ -223,14 +299,14 @@ export function getTransferWindowStatus(
       headline: "Janela de Pós-Temporada Aberta",
       detailText: "Temporada encerrada — livre para reformular o elenco",
       daysRemaining: 0,
-      nextChangeDate: POST_SEASON_WINDOW_START,
+      nextChangeDate: postSeasonStart,
       progressPct: 100,
     };
   }
 
-  if (currentDate >= SUMMER_WINDOW_START && currentDate <= SUMMER_WINDOW_END) {
-    const daysRemaining = Math.max(0, diffDaysIso(currentDate, SUMMER_WINDOW_END));
-    const totalDays = Math.max(1, diffDaysIso(SUMMER_WINDOW_START, SUMMER_WINDOW_END));
+  if (currentDate >= summerStart && currentDate <= summerEnd) {
+    const daysRemaining = Math.max(0, diffDaysIso(currentDate, summerEnd));
+    const totalDays = Math.max(1, diffDaysIso(summerStart, summerEnd));
     const elapsed = totalDays - daysRemaining;
     const isLastDay = daysRemaining === 0;
     return {
@@ -246,19 +322,19 @@ export function getTransferWindowStatus(
         ? "DEADLINE DAY! Último dia da Janela de Verão"
         : "Janela de Verão Aberta",
       detailText: isLastDay
-        ? `Fecha hoje (${formatDateShortPtBr(SUMMER_WINDOW_END)}) antes da Rodada 3`
-        : `Fecha em ${formatDateShortPtBr(SUMMER_WINDOW_END)} (faltam ${daysRemaining} dia${
+        ? `Fecha hoje (${formatDateShortPtBr(summerEnd)}) antes da Rodada 3`
+        : `Fecha em ${formatDateShortPtBr(summerEnd)} (faltam ${daysRemaining} dia${
             daysRemaining === 1 ? "" : "s"
           })`,
       daysRemaining,
-      nextChangeDate: SUMMER_WINDOW_END,
+      nextChangeDate: summerEnd,
       progressPct: clampPct((elapsed / totalDays) * 100),
     };
   }
 
-  if (currentDate > SUMMER_WINDOW_END && currentDate < WINTER_WINDOW_START) {
-    const daysRemaining = Math.max(1, diffDaysIso(currentDate, WINTER_WINDOW_START));
-    const totalGap = Math.max(1, diffDaysIso("2026-09-02", WINTER_WINDOW_START));
+  if (currentDate > summerEnd && currentDate < winterStart) {
+    const daysRemaining = Math.max(1, diffDaysIso(currentDate, winterStart));
+    const totalGap = Math.max(1, diffDaysIso(autumnGapStart, winterStart));
     const elapsed = totalGap - daysRemaining;
     return {
       isOpen: allowOutsideWindow,
@@ -273,17 +349,17 @@ export function getTransferWindowStatus(
         ? "Janela de Verão encerrada (Modo Livre ativo)"
         : "Mercado de Transferências Fechado",
       detailText: `Reabre em ${formatDateShortPtBr(
-        WINTER_WINDOW_START
+        winterStart
       )} (faltam ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"} • Rodada 19)`,
       daysRemaining,
-      nextChangeDate: WINTER_WINDOW_START,
+      nextChangeDate: winterStart,
       progressPct: clampPct((elapsed / totalGap) * 100),
     };
   }
 
-  if (currentDate >= WINTER_WINDOW_START && currentDate <= WINTER_WINDOW_END) {
-    const daysRemaining = Math.max(0, diffDaysIso(currentDate, WINTER_WINDOW_END));
-    const totalDays = Math.max(1, diffDaysIso(WINTER_WINDOW_START, WINTER_WINDOW_END));
+  if (currentDate >= winterStart && currentDate <= winterEnd) {
+    const daysRemaining = Math.max(0, diffDaysIso(currentDate, winterEnd));
+    const totalDays = Math.max(1, diffDaysIso(winterStart, winterEnd));
     const elapsed = totalDays - daysRemaining;
     const isLastDay = daysRemaining === 0;
     return {
@@ -299,19 +375,19 @@ export function getTransferWindowStatus(
         ? "DEADLINE DAY! Último dia da Janela de Inverno"
         : "Janela de Inverno Aberta",
       detailText: isLastDay
-        ? `Fecha hoje (${formatDateShortPtBr(WINTER_WINDOW_END)}) antes da Rodada 24`
-        : `Fecha em ${formatDateShortPtBr(WINTER_WINDOW_END)} (faltam ${daysRemaining} dia${
+        ? `Fecha hoje (${formatDateShortPtBr(winterEnd)}) antes da Rodada 24`
+        : `Fecha em ${formatDateShortPtBr(winterEnd)} (faltam ${daysRemaining} dia${
             daysRemaining === 1 ? "" : "s"
           })`,
       daysRemaining,
-      nextChangeDate: WINTER_WINDOW_END,
+      nextChangeDate: winterEnd,
       progressPct: clampPct((elapsed / totalDays) * 100),
     };
   }
 
-  // Spring closed (2027-02-03 .. 2027-05-31)
-  const daysRemaining = Math.max(1, diffDaysIso(currentDate, POST_SEASON_WINDOW_START));
-  const totalGap = Math.max(1, diffDaysIso("2027-02-03", POST_SEASON_WINDOW_START));
+  // Spring closed
+  const daysRemaining = Math.max(1, diffDaysIso(currentDate, postSeasonStart));
+  const totalGap = Math.max(1, diffDaysIso(springGapStart, postSeasonStart));
   const elapsed = totalGap - daysRemaining;
   return {
     isOpen: allowOutsideWindow,
@@ -326,10 +402,10 @@ export function getTransferWindowStatus(
       ? "Janela de Inverno encerrada (Modo Livre ativo)"
       : "Mercado Fechado até o Fim da Temporada",
     detailText: `Reabre em ${formatDateShortPtBr(
-      POST_SEASON_WINDOW_START
+      postSeasonStart
     )} (faltam ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"} • Pós-Temporada)`,
     daysRemaining,
-    nextChangeDate: POST_SEASON_WINDOW_START,
+    nextChangeDate: postSeasonStart,
     progressPct: clampPct((elapsed / totalGap) * 100),
   };
 }

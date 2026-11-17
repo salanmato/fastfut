@@ -13,7 +13,6 @@ import {
 import type { Club, Fixture } from "../types/game";
 import {
   POST_SEASON_WINDOW_START,
-  SEASON_MONTHS,
   SUMMER_WINDOW_END,
   SUMMER_WINDOW_START,
   WINTER_WINDOW_END,
@@ -23,6 +22,8 @@ import {
   formatDatePtBr,
   formatDateShortPtBr,
   getNextMatchFixture,
+  getSeasonMonths,
+  getSeasonStartYear,
   isDateInTransferWindow,
   type TransferWindowStatus,
 } from "../utils/calendar";
@@ -34,6 +35,7 @@ interface CalendarHubProps {
   fixtures: Fixture[];
   currentMatchweek: number;
   seasonFinished: boolean;
+  currentSeason?: string;
   currentDate: string;
   windowStatus: TransferWindowStatus;
   onAdvanceDays: (days: number) => void;
@@ -57,19 +59,22 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
   onOpenMarket,
   onStartMatchday,
 }) => {
+  const seasonStartYear = useMemo(() => getSeasonStartYear(currentDate), [currentDate]);
+  const seasonMonths = useMemo(() => getSeasonMonths(seasonStartYear), [seasonStartYear]);
+
   const initialMonthKey = useMemo(() => {
     const ym = currentDate.slice(0, 7);
-    return SEASON_MONTHS.some((m) => m.key === ym) ? ym : "2026-08";
-  }, [currentDate]);
+    return seasonMonths.some((m) => m.key === ym) ? ym : seasonMonths[0]?.key ?? "2026-08";
+  }, [currentDate, seasonMonths]);
 
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>(initialMonthKey);
 
   useEffect(() => {
     const ym = currentDate.slice(0, 7);
-    if (SEASON_MONTHS.some((m) => m.key === ym)) {
+    if (seasonMonths.some((m) => m.key === ym)) {
       setSelectedMonthKey(ym);
     }
-  }, [currentDate]);
+  }, [currentDate, seasonMonths]);
 
   const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
 
@@ -89,7 +94,7 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
   }, [fixtures, userClub.id]);
 
   const selectedMonth =
-    SEASON_MONTHS.find((m) => m.key === selectedMonthKey) ?? SEASON_MONTHS[0];
+    seasonMonths.find((m) => m.key === selectedMonthKey) ?? seasonMonths[0];
 
   const calendarCells = useMemo(() => {
     const { year, month } = selectedMonth;
@@ -345,7 +350,7 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
           </div>
 
           <div className="flex flex-wrap gap-1">
-            {SEASON_MONTHS.map((m) => (
+            {seasonMonths.map((m) => (
               <button
                 key={m.key}
                 onClick={() => setSelectedMonthKey(m.key)}
