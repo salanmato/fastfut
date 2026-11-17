@@ -53,7 +53,14 @@ interface DashboardProps {
   news: NewsItem[];
   onStartMatchday: () => void;
   onNavigate: (
-    tab: "tactics" | "league" | "market" | "stadium" | "calendar" | "facup"
+    tab:
+      | "tactics"
+      | "league"
+      | "market"
+      | "stadium"
+      | "calendar"
+      | "facup"
+      | "season_review"
   ) => void;
   onSelectPlayer: (player: Player) => void;
 }
@@ -235,12 +242,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => onNavigate("league")}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-300"
-            >
-              Ver Classificação Final <ArrowRight className="h-4 w-4" />
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => onNavigate("season_review")}
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-300"
+              >
+                <Trophy className="h-4 w-4 fill-current" /> Dashboard da Temporada <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => onNavigate("league")}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+              >
+                Ver Classificação
+              </button>
+            </div>
           </div>
         </div>
       ) : (

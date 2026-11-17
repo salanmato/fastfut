@@ -70,6 +70,7 @@ import { StadiumHub } from "./components/StadiumHub";
 import { CalendarHub } from "./components/CalendarHub";
 import { FACupHub } from "./components/FACupHub";
 import { PlayerProfileModal } from "./components/PlayerProfileModal";
+import { SeasonReviewDashboard } from "./components/SeasonReviewDashboard";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
@@ -81,7 +82,8 @@ type Tab =
   | "league"
   | "facup"
   | "market"
-  | "matchday";
+  | "matchday"
+  | "season_review";
 type Screen = "menu" | "select_club" | "game";
 
 function ensureStadiumMap(
@@ -708,13 +710,13 @@ export const App: React.FC = () => {
       news: [...cupNews, ...milestoneNews, ...newItems, ...save.news].slice(0, 40),
     });
 
-    setActiveTab("dashboard");
+    setActiveTab(seasonFinished ? "season_review" : "dashboard");
     const milestoneToast = dueCupRound
       ? `🏆 FA Cup liberada: ${dueCupRound.name}!`
       : milestoneNews[0]?.title;
     setToast(
       seasonFinished
-        ? "Temporada 2026/27 encerrada! Confira a classificação final."
+        ? "🏆 Temporada 2026/27 encerrada! Confira o Dashboard de Desempenho."
         : milestoneToast
         ? milestoneToast
         : userHomeRevenue > 0
@@ -1302,6 +1304,24 @@ export const App: React.FC = () => {
                 <Play className="h-3.5 w-3.5 fill-current" /> Dia de Jogo
               </button>
             )}
+
+            {save.seasonFinished && (
+              <button
+                onClick={() => setActiveTab("season_review")}
+                style={
+                  activeTab === "season_review"
+                    ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
+                    : undefined
+                }
+                className={`ml-1 inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black transition ${
+                  activeTab === "season_review"
+                    ? ""
+                    : "border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+                }`}
+              >
+                <Trophy className="h-3.5 w-3.5 fill-current" /> Review da Temporada
+              </button>
+            )}
           </nav>
 
           {/* Utility Buttons + Uniform Theme Switcher */}
@@ -1478,6 +1498,23 @@ export const App: React.FC = () => {
             onSelectPlayer={setInspectedPlayer}
             onToggleShortlist={handleToggleShortlist}
             onOpenCalendar={() => setActiveTab("calendar")}
+          />
+        )}
+
+        {activeTab === "season_review" && (
+          <SeasonReviewDashboard
+            userClub={userClub}
+            clubs={save.clubs}
+            players={save.players}
+            fixtures={save.fixtures}
+            standings={standings}
+            faCup={save.faCup}
+            stadiumConfig={stadiumByClub[userClub.id]}
+            userTactics={userTactics}
+            onSelectPlayer={setInspectedPlayer}
+            onNavigateToLeague={() => setActiveTab("league")}
+            onNavigateToMarket={() => setActiveTab("market")}
+            onNavigateToCalendar={() => setActiveTab("calendar")}
           />
         )}
       </main>
