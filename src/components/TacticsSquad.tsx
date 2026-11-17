@@ -136,6 +136,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   const renderRow = (p: Player, slotLabel: string, indexLabel: string) => {
     const isSelectedForSwap = swapId === p.id;
     const injLeft = p.injuryMatchesLeft ?? 0;
+    const staminaPct = Math.round(p.stamina);
     const affinity = evaluateShirtNumberAffinity(p);
     const affinityTitle = `${affinity.label} (${affinity.bonusPctText}) • Já usou: #${affinity.historyNumbers.join(", #")} • Função (${p.primaryPosition}): #${affinity.roleNumbers.join(", #")}`;
     return (
@@ -234,24 +235,26 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
-          <div className="hidden sm:block w-12">
-            <div className="text-right text-[10px] text-slate-400">{Math.round(p.stamina)}%</div>
-            <div className="h-1 w-full overflow-hidden rounded-full bg-slate-800">
+        <div className="flex shrink-0 items-center gap-2">
+          <div
+            title={`Overall ${p.overall} / Energia ${staminaPct}%`}
+            className={`rounded-md border px-2 py-0.5 ${getOverallColor(p.overall)}`}
+          >
+            <div className="flex items-center gap-1.5 whitespace-nowrap text-xs font-black">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${getStaminaColor(p.stamina)}`}
+              />
+              <span>
+                {p.overall} / {staminaPct}%
+              </span>
+            </div>
+            <div className="mt-0.5 h-1 w-full overflow-hidden rounded-sm bg-slate-900/70">
               <div
                 className={`h-full ${getStaminaColor(p.stamina)}`}
-                style={{ width: `${Math.round(p.stamina)}%` }}
+                style={{ width: `${staminaPct}%` }}
               />
             </div>
           </div>
-
-          <span
-            className={`rounded-md border px-1.5 py-0.5 text-xs font-black ${getOverallColor(
-              p.overall
-            )}`}
-          >
-            {p.overall}
-          </span>
 
           <button
             onClick={() => handleSwapClick(p.id)}

@@ -56,6 +56,25 @@ interface MatchdayLiveProps {
 
 const LIVE_FORMATIONS: Formation[] = ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2", "5-3-2"];
 
+function renderOvrStamina(
+  overall: number,
+  stamina: number,
+  className = "text-slate-300",
+  suffix?: string
+) {
+  return (
+    <span
+      title={`Overall ${overall} / Energia ${stamina}%`}
+      className={`flex items-center gap-1 text-[11px] font-bold shrink-0 ${className}`}
+    >
+      <span className={`inline-block h-2 w-2 rounded-full ${getStaminaColor(stamina)}`} />
+      <span>
+        {overall} / {stamina}%{suffix ? ` ${suffix}` : ""}
+      </span>
+    </span>
+  );
+}
+
 export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   matchweek,
   userClubId,
@@ -790,15 +809,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                             )}
                           </span>
                           <span className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] text-slate-400">{rating}</span>
-                            <span className="flex items-center gap-1 text-[10px] text-slate-300">
-                              <span
-                                className={`inline-block h-2 w-2 rounded-full ${getStaminaColor(
-                                  stam
-                                )}`}
-                              />
-                              {stam}%
+                            <span className="text-[10px] text-slate-400" title="Nota na partida">
+                              {rating}
                             </span>
+                            {renderOvrStamina(p.overall, stam, "text-slate-200")}
                             <ArrowLeftRight
                               className={`h-3 w-3 ${
                                 isSelected ? "text-amber-300" : "text-slate-500"
@@ -825,6 +839,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     {userBenchIds.map((id) => {
                       const p = playerMap.get(id);
                       if (!p) return null;
+                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
                       const ready = subOutId !== null && userSubsUsed < 5;
                       return (
                         <button
@@ -847,13 +862,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                             </span>
                             {p.name}
                           </span>
-                          <span
-                            className={`text-[11px] font-bold shrink-0 ${
-                              ready ? "text-emerald-300" : "text-slate-400"
-                            }`}
-                          >
-                            OVR {p.overall} {ready ? "• Entrar" : ""}
-                          </span>
+                          {renderOvrStamina(
+                            p.overall,
+                            stam,
+                            ready ? "text-emerald-300" : "text-slate-300",
+                            ready ? "• Entrar" : undefined
+                          )}
                         </button>
                       );
                     })}
@@ -1016,7 +1030,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                               </span>
                             )}
                           </span>
-                          <span className="text-[10px] text-slate-400 shrink-0">{stam}%</span>
+                          {renderOvrStamina(p.overall, stam, "text-slate-300")}
                         </button>
                       );
                     })}
@@ -1033,6 +1047,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     {userBenchIds.map((id) => {
                       const p = playerMap.get(id);
                       if (!p) return null;
+                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
                       const ready = subOutId !== null;
                       return (
                         <button
@@ -1051,9 +1066,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                             </span>
                             {p.name}
                           </span>
-                          <span className="text-[10px] font-bold text-emerald-300 shrink-0">
-                            OVR {p.overall}
-                          </span>
+                          {renderOvrStamina(
+                            p.overall,
+                            stam,
+                            ready ? "text-emerald-300" : "text-slate-300"
+                          )}
                         </button>
                       );
                     })}
