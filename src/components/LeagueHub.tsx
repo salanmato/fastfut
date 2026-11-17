@@ -66,7 +66,7 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
 
       {/* Standings Table */}
       {subTab === "table" && (
-        <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>

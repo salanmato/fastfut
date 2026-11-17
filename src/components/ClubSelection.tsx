@@ -165,7 +165,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
         {/* Selected Club Inspector */}
         {selectedClub && (
           <div className="lg:col-span-5">
-            <div className="sticky top-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+            <div className="sticky top-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
               {/* Stadium Photo Hero Banner */}
               <div className="relative h-36 w-full overflow-hidden bg-slate-950">
                 {getClubVisuals(selectedClub).stadiumImageUrl && (

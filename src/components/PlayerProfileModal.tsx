@@ -107,7 +107,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-slate-800 bg-slate-900"
+        className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

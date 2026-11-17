@@ -137,7 +137,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-6">
       {/* Calendar & Transfer Window Status Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 px-5 py-3.5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30">
             <Calendar className="h-4 w-4" />
@@ -193,10 +193,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Top Banner: Next Match or Season Complete */}
       {seasonFinished ? (
-        <div className="rounded-lg border border-slate-800 border-l-4 border-l-amber-400 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-slate-800 border-l-4 border-l-amber-400 bg-slate-900 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 <Trophy className="h-8 w-8" />
               </div>
               <div>
@@ -231,7 +231,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         awayClub &&
         homePower &&
         awayPower && (
-          <div className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
             {getClubVisuals(homeClub).stadiumImageUrl && (
               <img
                 src={getClubVisuals(homeClub).stadiumImageUrl}

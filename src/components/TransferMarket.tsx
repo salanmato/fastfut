@@ -190,7 +190,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
     <div className="space-y-5">
       {/* Transfer Window Status Banner */}
       <div
-        className={`flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4 ${
+        className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 ${
           windowStatus.isDeadlineDay
             ? "border-amber-400/60 bg-amber-500/15 animate-pulse"
             : windowStatus.isOpen

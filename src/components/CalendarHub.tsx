@@ -178,7 +178,7 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
   return (
     <div className="space-y-6">
       {/* Header: Current Date & Progression */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-5">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">

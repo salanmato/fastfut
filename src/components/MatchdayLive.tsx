@@ -285,7 +285,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   return (
     <div className="space-y-5">
       {/* Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 px-5 py-3.5">
         <div>
           <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
             Premier League • Rodada {matchweek} Ao Vivo
@@ -374,7 +374,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         {/* Left/Center: User Match Broadcast */}
         <div className="space-y-5 lg:col-span-8">
           {/* Scoreboard with Stadium Photo Atmosphere */}
-          <div className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-6">
+          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-6">
             {getClubVisuals(homeClub).stadiumImageUrl && (
               <img
                 src={getClubVisuals(homeClub).stadiumImageUrl}
@@ -628,7 +628,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
 
         {/* Right Column: Substitutions & Live Coaching */}
         <div className="lg:col-span-4">
-          <div className="sticky top-20 rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-4">
+          <div className="sticky top-20 rounded-2xl border border-slate-800 bg-slate-900 p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-300">
                 <Flame className="h-3.5 w-3.5 text-amber-400" /> Substituições & Tática
@@ -868,7 +868,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       {/* Tactical Stop Modal on Red Card / Injury */}
       {tacticalStopReason && !userSession.finished && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-2xl rounded-lg border border-rose-500/60 bg-slate-900 p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-2xl border border-rose-500/60 bg-slate-900 p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/40">

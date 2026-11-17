@@ -102,7 +102,7 @@ export const StadiumHub: React.FC<StadiumHubProps> = ({
   return (
     <div className="space-y-6">
       {/* Main Stadium Card with Panoramic Photo */}
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
         <div className="relative h-52 sm:h-60 w-full overflow-hidden bg-slate-950">
           {userVisuals.stadiumImageUrl && (
             <img
@@ -401,7 +401,7 @@ export const StadiumHub: React.FC<StadiumHubProps> = ({
       </div>
 
       {/* All 20 PL Stadiums Directory */}
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-3.5">
           <div>
             <h3 className="text-sm font-bold text-white">

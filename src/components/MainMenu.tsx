@@ -138,7 +138,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
                       : undefined
                   }
-                  className="group flex w-full items-center justify-between gap-4 rounded-xl bg-emerald-500 p-4 text-left text-slate-950 transition hover:brightness-110"
+                  className="group flex w-full items-center justify-between gap-4 rounded-2xl bg-emerald-500 p-4 text-left text-slate-950 transition hover:brightness-110"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <ClubBadge club={savedClub} size="lg" />
@@ -212,7 +212,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           {/* Right Column: Career Card or Features Showcase */}
           <div className="lg:col-span-6">
             {save && savedClub ? (
-              <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+              <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
                 <div className="relative h-44 w-full overflow-hidden bg-slate-950">
                   {getClubVisuals(savedClub).stadiumImageUrl && (
                     <img
@@ -257,7 +257,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900 p-6">
+              <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
                     Destaques desta Edição
@@ -333,7 +333,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           onClick={() => setShowSettings(false)}
         >
           <div
-            className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4"
+            className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">

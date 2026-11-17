@@ -415,7 +415,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const carrierPlayer = carrierId ? playerMap.get(carrierId) : undefined;
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
       {/* Pitch Header Controls */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex flex-wrap items-center gap-3">
@@ -486,7 +486,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       {/* Horizontal 2D Pitch */}
       <div
-        className="relative aspect-[16/9] w-full overflow-hidden rounded-md border-2 border-emerald-800 select-none"
+        className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border-2 border-emerald-800 select-none"
         style={{
           backgroundImage:
             "repeating-linear-gradient(90deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",

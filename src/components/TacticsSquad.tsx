@@ -355,7 +355,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
           </div>
 
           {/* 2D Football Pitch */}
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-lg border-2 border-emerald-700 bg-[#065f46] select-none">
+          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl border-2 border-emerald-700 bg-[#065f46] select-none">
             {/* Pitch markings */}
             <div className="pointer-events-none absolute inset-4 rounded-lg border border-white/15">
               {/* Halfway line */}
