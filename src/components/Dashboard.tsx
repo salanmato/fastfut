@@ -139,6 +139,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const topClubScorer = [...userSquad].sort(
     (a, b) => b.seasonGoals - a.seasonGoals || b.overall - a.overall
   )[0];
+  const topClubAssister = [...userSquad].sort(
+    (a, b) => b.seasonAssists - a.seasonAssists || b.overall - a.overall
+  )[0];
   const injuredSquad = userSquad.filter((p) => (p.injuryMatchesLeft ?? 0) > 0);
 
   return (
@@ -571,11 +574,35 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               ))}
             </div>
-            {topClubScorer && topClubScorer.seasonGoals > 0 && (
-              <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-2 text-xs text-emerald-200">
-                Artilheiro do clube na temporada:{" "}
-                <span className="font-bold">{topClubScorer.name}</span> ({topClubScorer.seasonGoals}{" "}
-                gols, {topClubScorer.seasonAssists} assistências)
+            {((topClubScorer && topClubScorer.seasonGoals > 0) ||
+              (topClubAssister && topClubAssister.seasonAssists > 0)) && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {topClubScorer && topClubScorer.seasonGoals > 0 && (
+                  <button
+                    onClick={() => onSelectPlayer(topClubScorer)}
+                    className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-left text-xs text-emerald-200 transition hover:bg-emerald-500/15"
+                  >
+                    <span className="truncate">
+                      ⚽ Artilheiro: <strong className="text-white">{topClubScorer.name}</strong>
+                    </span>
+                    <span className="shrink-0 font-black text-emerald-300">
+                      {topClubScorer.seasonGoals} {topClubScorer.seasonGoals === 1 ? "gol" : "gols"}
+                    </span>
+                  </button>
+                )}
+                {topClubAssister && topClubAssister.seasonAssists > 0 && (
+                  <button
+                    onClick={() => onSelectPlayer(topClubAssister)}
+                    className="flex items-center justify-between rounded-xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2 text-left text-xs text-sky-200 transition hover:bg-sky-500/15"
+                  >
+                    <span className="truncate">
+                      👟 Assistências: <strong className="text-white">{topClubAssister.name}</strong>
+                    </span>
+                    <span className="shrink-0 font-black text-sky-300">
+                      {topClubAssister.seasonAssists} {topClubAssister.seasonAssists === 1 ? "assist." : "assist."}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
             {injuredSquad.length > 0 && (

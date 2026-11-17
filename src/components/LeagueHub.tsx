@@ -359,56 +359,123 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
       {subTab === "stats" && (
         <div className="grid gap-6 md:grid-cols-2">
           {[
-            { title: `Artilharia (${userDivision})`, list: topScorers, metric: "Gols" },
-            { title: "Líderes em Assistências", list: topAssisters, metric: "Assist." },
-          ].map((panel) => (
-            <div
-              key={panel.title}
-              className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"
-            >
-              <h3 className="mb-3 text-sm font-bold text-white">{panel.title}</h3>
-              {panel.list.length === 0 ? (
-                <p className="py-8 text-center text-xs text-slate-500">
-                  Jogue a primeira rodada para contabilizar as estatísticas da temporada.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {panel.list.map((p, idx) => {
-                    const club = p.clubId ? clubMap.get(p.clubId) : undefined;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => onSelectPlayer(p)}
-                        className="flex w-full items-center justify-between rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-2 text-left transition hover:border-slate-700"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-5 text-xs font-bold text-slate-500">{idx + 1}</span>
-                          <PlayerAvatar
-                            name={p.name}
-                            imageUrl={p.imageUrl}
-                            size="xs"
-                            accentColor={club?.primaryColor}
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate text-xs font-bold text-white">{p.name}</div>
-                            <div className="text-[10px] text-slate-400">
-                              {club?.name ?? p.clubName} • {p.seasonAppearances} jogos
+            {
+              title: `Artilharia (${userDivision})`,
+              list: topScorers,
+              metric: "Gols",
+              icon: "⚽",
+            },
+            {
+              title: "Líderes em Assistências",
+              list: topAssisters,
+              metric: "Assist.",
+              icon: "👟",
+            },
+          ].map((panel) => {
+            const ourCount = panel.list.filter((p) => p.clubId === userClubId).length;
+            return (
+              <div
+                key={panel.title}
+                className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"
+              >
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <span>{panel.icon}</span>
+                    <span>{panel.title}</span>
+                  </h3>
+                  {ourCount > 0 && (
+                    <span className="rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                      {ourCount} do seu clube
+                    </span>
+                  )}
+                </div>
+                {panel.list.length === 0 ? (
+                  <p className="py-8 text-center text-xs text-slate-500">
+                    Jogue a primeira rodada para contabilizar as estatísticas da temporada.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {panel.list.map((p, idx) => {
+                      const club = p.clubId ? clubMap.get(p.clubId) : undefined;
+                      const isOurPlayer = p.clubId === userClubId;
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => onSelectPlayer(p)}
+                          className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition ${
+                            isOurPlayer
+                              ? "border-emerald-500/60 bg-emerald-500/15 ring-1 ring-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/25"
+                              : "border-slate-800/80 bg-slate-950/50 hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`w-6 text-xs font-black ${
+                                isOurPlayer
+                                  ? "text-emerald-400"
+                                  : idx === 0
+                                  ? "text-amber-400"
+                                  : idx === 1
+                                  ? "text-slate-300"
+                                  : idx === 2
+                                  ? "text-amber-600"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              {idx + 1}º
+                            </span>
+                            <div className={isOurPlayer ? "ring-2 ring-emerald-400 rounded-full" : ""}>
+                              <PlayerAvatar
+                                name={p.name}
+                                imageUrl={p.imageUrl}
+                                size="xs"
+                                accentColor={club?.primaryColor}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="truncate text-xs font-bold text-white">
+                                  {p.name}
+                                </span>
+                                {isOurPlayer && (
+                                  <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.2 text-[9px] font-black text-slate-950 uppercase tracking-wide">
+                                    Seu Jogador
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                className={`text-[10px] ${
+                                  isOurPlayer ? "text-emerald-300 font-semibold" : "text-slate-400"
+                                }`}
+                              >
+                                {club?.name ?? p.clubName} • {p.seasonAppearances} jogos
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-base font-black text-emerald-400">
-                            {panel.metric === "Gols" ? p.seasonGoals : p.seasonAssists}
+                          <div className="text-right shrink-0">
+                            <div
+                              className={`text-base font-black ${
+                                isOurPlayer ? "text-emerald-300 scale-105" : "text-emerald-400"
+                              }`}
+                            >
+                              {panel.metric === "Gols" ? p.seasonGoals : p.seasonAssists}
+                            </div>
+                            <div
+                              className={`text-[9px] uppercase ${
+                                isOurPlayer ? "font-bold text-emerald-400" : "text-slate-500"
+                              }`}
+                            >
+                              {panel.metric}
+                            </div>
                           </div>
-                          <div className="text-[9px] uppercase text-slate-500">{panel.metric}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
