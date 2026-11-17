@@ -229,7 +229,11 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
               <div className="text-[10px] text-slate-400">
                 {injLeft > 0
                   ? `${p.injuryType ?? "Lesionado"} • ${injLeft} rod.`
-                  : `${p.primaryPosition} • ${p.age}a • ${p.seasonGoals}G ${p.seasonAssists}A`}
+                  : `${p.primaryPosition} • ${p.seasonGoals}G ${p.seasonAssists}A • ${
+                      p.seasonAppearances > 0
+                        ? `⭐ ${p.seasonAvgRating.toFixed(1)} (${p.seasonAppearances}j)`
+                        : `${p.age}a`
+                    }`}
               </div>
             </div>
           </button>

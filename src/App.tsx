@@ -14,6 +14,7 @@ import {
   Unlock,
   Flame,
   Award,
+  BarChart3,
 } from "lucide-react";
 import type {
   MatchInjury,
@@ -74,12 +75,14 @@ import { CalendarHub } from "./components/CalendarHub";
 import { FACupHub } from "./components/FACupHub";
 import { PlayerProfileModal } from "./components/PlayerProfileModal";
 import { SeasonReviewDashboard } from "./components/SeasonReviewDashboard";
+import { SquadPerformanceAnalysis } from "./components/SquadPerformanceAnalysis";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
 type Tab =
   | "dashboard"
   | "tactics"
+  | "squad_analysis"
   | "stadium"
   | "calendar"
   | "league"
@@ -1267,6 +1270,7 @@ export const App: React.FC = () => {
             {[
               { id: "dashboard" as const, label: "Visão Geral", icon: LayoutDashboard },
               { id: "tactics" as const, label: "Tática & Elenco", icon: Users },
+              { id: "squad_analysis" as const, label: "Desempenho", icon: BarChart3 },
               { id: "calendar" as const, label: "Calendário", icon: CalendarIcon },
               { id: "stadium" as const, label: "Estádio", icon: Building2 },
               {
@@ -1428,6 +1432,19 @@ export const App: React.FC = () => {
             onSelectPlayer={setInspectedPlayer}
             onChangeShirtNumber={handleChangeShirtNumber}
             onAutoAssignShirtNumbers={handleAutoAssignShirtNumbers}
+          />
+        )}
+
+        {activeTab === "squad_analysis" && (
+          <SquadPerformanceAnalysis
+            userClub={userClub}
+            players={save.players}
+            fixtures={save.fixtures}
+            tactics={userTactics}
+            currentMatchweek={save.currentMatchweek}
+            currentSeason={save.season ?? "2026/27"}
+            onSelectPlayer={setInspectedPlayer}
+            onNavigateToTactics={() => setActiveTab("tactics")}
           />
         )}
 

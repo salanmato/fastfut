@@ -13,6 +13,7 @@ import {
   Lock,
   Unlock,
   Flame,
+  BarChart3,
 } from "lucide-react";
 import type {
   Club,
@@ -62,6 +63,7 @@ interface DashboardProps {
       | "calendar"
       | "facup"
       | "season_review"
+      | "squad_analysis"
   ) => void;
   onSelectPlayer: (player: Player) => void;
 }
@@ -550,16 +552,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Key Players */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-lg text-white">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg text-white font-bold">
                 <TrendingUp className="h-4 w-4 text-sky-400" /> Destaques do Elenco
               </h2>
-              <button
-                onClick={() => onNavigate("tactics")}
-                className="text-xs font-semibold text-emerald-400 hover:underline"
-              >
-                Gerenciar elenco →
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onNavigate("squad_analysis")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-sky-400 hover:text-sky-300 transition hover:underline"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" /> Análise de Desempenho →
+                </button>
+                <button
+                  onClick={() => onNavigate("tactics")}
+                  className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition hover:underline"
+                >
+                  Gerenciar elenco →
+                </button>
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {userSquad.slice(0, 4).map((p) => (
@@ -576,8 +586,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-white">{p.name}</div>
-                      <div className="text-xs text-slate-400">
-                        {p.primaryPosition} • {p.seasonGoals}G {p.seasonAssists}A
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                        <span className="font-semibold text-slate-300">{p.primaryPosition}</span>
+                        <span>•</span>
+                        <span>{p.seasonGoals}G {p.seasonAssists}A</span>
+                        <span>•</span>
+                        <span
+                          className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[10px] font-black ${
+                            p.seasonAppearances > 0
+                              ? p.seasonAvgRating >= 7.5
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                : p.seasonAvgRating >= 7.0
+                                ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
+                                : p.seasonAvgRating >= 6.5
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                              : "bg-slate-800 text-slate-400"
+                          }`}
+                        >
+                          ⭐ {p.seasonAppearances > 0 ? p.seasonAvgRating.toFixed(1) : "-"}
+                        </span>
                       </div>
                     </div>
                   </div>
