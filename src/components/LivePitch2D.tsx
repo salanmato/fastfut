@@ -98,31 +98,34 @@ function colorsTooClose(hexA: string, hexB: string): boolean {
   return dist < 110;
 }
 
-function getBaseHorizontalCoord(
+function getBaseVerticalCoord(
   slotX: number,
   slotY: number,
   isHome: boolean,
-  tactics: Tactics
+  tactics: Tactics,
+  forceNeutral = false
 ): Coord {
   // slotY: 89 (GK) -> 15 (ATT)
-  const depthNorm = (92 - slotY) / 80; // ~0.04 for GK, ~0.96 for ST
+  const depthNorm = clamp((92 - slotY) / 80, 0, 1); // ~0 for GK, ~0.25 for DEF, ~0.55 for MID, ~0.95 for ST
   const isGk = slotY > 82;
 
   let shift = 0;
-  if (!isGk) {
-    if (tactics.mentality === "Attacking") shift += 5.5;
-    else if (tactics.mentality === "Defensive") shift -= 5.0;
-    if (tactics.pressing === "High") shift += 3.5;
-    else if (tactics.pressing === "Low") shift -= 3.5;
+  if (!isGk && !forceNeutral) {
+    if (tactics.mentality === "Attacking") shift += 3.5;
+    else if (tactics.mentality === "Defensive") shift -= 3.5;
+    if (tactics.pressing === "High") shift += 2.0;
+    else if (tactics.pressing === "Low") shift -= 2.0;
   }
 
   if (isHome) {
-    const x = isGk ? 6.0 : clamp(16 + depthNorm * 56 + shift, 13, 82);
-    const y = clamp(slotX, 10, 90);
+    // Home defends bottom (y=92), attacks up towards top goal (y=2)
+    const x = clamp(slotX, 10, 90);
+    const y = isGk ? 92.5 : clamp(92 - depthNorm * 38 - shift, 52, 92);
     return { x, y };
   } else {
-    const x = isGk ? 94.0 : clamp(84 - depthNorm * 56 - shift, 18, 87);
-    const y = clamp(100 - slotX, 10, 90);
+    // Away defends top (y=8), attacks down towards bottom goal (y=98)
+    const x = clamp(100 - slotX, 10, 90);
+    const y = isGk ? 7.5 : clamp(8 + depthNorm * 38 + shift, 8, 48);
     return { x, y };
   }
 }
@@ -151,108 +154,111 @@ function computeRoleAttackTarget(
   attackProgress: number,
   playPhase: PlayPhase
 ): Coord {
-  const baseY = clamp(slot.x, 10, 90);
+  // In local attack perspective:
+  // localBallX: 10..90 (left to right)
+  // localBallY: 0 (opponent goal) to 100 (own goal). Higher attackProgress means closer to 0!
+  const baseX = clamp(slot.x, 10, 90);
   const mentalityShift =
-    tactics.mentality === "Attacking" ? 6.5 : tactics.mentality === "Defensive" ? -5.0 : 0;
+    tactics.mentality === "Attacking" ? 5.0 : tactics.mentality === "Defensive" ? -4.5 : 0;
   const pressShift =
-    tactics.pressing === "High" ? 3.5 : tactics.pressing === "Low" ? -3.0 : 0;
-  const counterBoost = playPhase === "counter" ? 6.5 : 0;
+    tactics.pressing === "High" ? 2.5 : tactics.pressing === "Low" ? -2.5 : 0;
+  const counterBoost = playPhase === "counter" ? 5.5 : 0;
 
   if (slot.roleCategory === "GK") {
     return {
-      x: clamp(5.5 + attackProgress * 5.2 + (tactics.pressing === "High" ? 1 : 0), 4.8, 12),
-      y: clamp(50 + (localBallY - 50) * 0.16, 41, 59),
+      x: clamp(50 + (localBallX - 50) * 0.16, 42, 58),
+      y: clamp(94.5 - attackProgress * 8.5 - (tactics.pressing === "High" ? 1.5 : 0), 84, 95.5),
     };
   }
 
   const label = slot.label;
-  const sideSign = baseY < 50 ? -1 : 1;
-  const ballOnMyFlank = Math.abs(localBallY - baseY) < 28;
+  const sideSign = baseX < 50 ? -1 : 1;
+  const ballOnMyFlank = Math.abs(localBallX - baseX) < 28;
 
   if (label === "CB") {
-    const attX = clamp(
-      18 + attackProgress * 30 + mentalityShift * 0.65 + pressShift * 0.6,
-      14,
-      54
+    const attY = clamp(
+      82 - attackProgress * 28 - mentalityShift * 0.65 - pressShift * 0.6,
+      48,
+      86
     );
-    const spreadY = localBallX < 42 ? sideSign * 4.5 : 0;
-    const flankY = clamp(baseY * 0.85 + localBallY * 0.15 + spreadY, 20, 80);
-    return { x: attX, y: flankY };
+    const spreadX = localBallY > 58 ? sideSign * 4.5 : 0;
+    const flankX = clamp(baseX * 0.85 + localBallX * 0.15 + spreadX, 20, 80);
+    return { x: flankX, y: attY };
   }
 
   if (isFullbackSlot(label)) {
     const isWingback = label === "LWB" || label === "RWB";
-    const flankAdvance = ballOnMyFlank || attackProgress > 0.48 ? 10 : 1;
-    const attX = clamp(
-      24 +
-        attackProgress * 49 +
-        flankAdvance +
-        (isWingback ? 6 : 0) +
-        mentalityShift +
+    const flankAdvance = ballOnMyFlank || attackProgress > 0.48 ? 12 : 2;
+    const attY = clamp(
+      78 -
+        attackProgress * 46 -
+        flankAdvance -
+        (isWingback ? 5 : 0) -
+        mentalityShift -
         counterBoost * 0.4,
       16,
-      86
+      84
     );
-    const wideBias = localBallX < 70 || ballOnMyFlank ? sideSign * 6 : -sideSign * 4;
-    const flankY = clamp(baseY + wideBias, 7, 93);
-    return { x: attX, y: flankY };
+    const wideBias = localBallY > 30 || ballOnMyFlank ? sideSign * 5 : -sideSign * 3;
+    const flankX = clamp(baseX + wideBias, 7, 93);
+    return { x: flankX, y: attY };
   }
 
   if (label === "CDM") {
-    const anchorX = Math.max(localBallX - 11, 28 + attackProgress * 34);
-    const attX = clamp(anchorX + mentalityShift * 0.5, 24, 73);
-    const flankY = clamp(baseY * 0.66 + localBallY * 0.34, 22, 78);
-    return { x: attX, y: flankY };
+    const anchorY = Math.min(localBallY + 11, 72 - attackProgress * 32);
+    const attY = clamp(anchorY - mentalityShift * 0.5, 28, 76);
+    const flankX = clamp(baseX * 0.66 + localBallX * 0.34, 22, 78);
+    return { x: flankX, y: attY };
   }
 
   if (label === "CM" || label === "CAM") {
     const isCam = label === "CAM" || player?.primaryPosition === "CAM";
-    const boxCrash = attackProgress > 0.6 || playPhase === "counter" ? (isCam ? 13 : 9) : 0;
-    const attX = clamp(
-      (isCam ? 46 : 38) +
-        attackProgress * 35 +
-        boxCrash +
-        mentalityShift +
+    const boxCrash = attackProgress > 0.6 || playPhase === "counter" ? (isCam ? 12 : 8) : 0;
+    const attY = clamp(
+      (isCam ? 54 : 62) -
+        attackProgress * 34 -
+        boxCrash -
+        mentalityShift -
         counterBoost * 0.6,
-      30,
-      89
+      13,
+      72
     );
-    const flankY = clamp(baseY * 0.68 + localBallY * 0.32, 18, 82);
-    return { x: attX, y: flankY };
+    const flankX = clamp(baseX * 0.68 + localBallX * 0.32, 18, 82);
+    return { x: flankX, y: attY };
   }
 
   if (isWingerSlot(label)) {
-    const attX = clamp(
-      46 +
-        attackProgress * 41 +
-        mentalityShift * 0.8 +
-        counterBoost +
-        (playPhase === "final_third" ? 5 : 0),
-      35,
-      92
+    const attY = clamp(
+      52 -
+        attackProgress * 38 -
+        mentalityShift * 0.8 -
+        counterBoost -
+        (playPhase === "final_third" ? 4 : 0),
+      9,
+      65
     );
-    // Ball-side winger stretches wide; weak-side winger cuts inside toward the far post
+    // Ball-side winger stretches wide; weak-side winger cuts inside towards the far post
     const cutInFactor = !ballOnMyFlank && attackProgress > 0.52 ? 0.45 : 0.08;
-    const stretchY = ballOnMyFlank ? sideSign * 4 : 0;
-    const flankY = clamp(baseY * (1 - cutInFactor) + 50 * cutInFactor + stretchY, 8, 92);
-    return { x: attX, y: flankY };
+    const stretchX = ballOnMyFlank ? sideSign * 4 : 0;
+    const flankX = clamp(baseX * (1 - cutInFactor) + 50 * cutInFactor + stretchX, 8, 92);
+    return { x: flankX, y: attY };
   }
 
   // Striker (ST / CF): stretch backline in depth and dart across the box
-  const linkDrop = tactics.passingStyle === "Short" && localBallX < 44 ? -11 : 0;
-  const attX = clamp(
-    55 +
-      attackProgress * 34 +
-      mentalityShift * 0.6 +
+  const linkDrop = tactics.passingStyle === "Short" && localBallY > 56 ? 9 : 0;
+  const attY = clamp(
+    45 -
+      attackProgress * 34 -
+      mentalityShift * 0.6 -
       counterBoost +
-      linkDrop +
-      (playPhase === "final_third" ? 5 : 0),
-    42,
-    93
+      linkDrop -
+      (playPhase === "final_third" ? 4 : 0),
+    8,
+    58
   );
-  const channelShift = (localBallY - 50) * 0.28;
-  const flankY = clamp(baseY * 0.72 + (50 + channelShift) * 0.28, 28, 72);
-  return { x: attX, y: flankY };
+  const channelShift = (localBallX - 50) * 0.28;
+  const flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
+  return { x: flankX, y: attY };
 }
 
 function computeRoleDefendTarget(
@@ -264,29 +270,29 @@ function computeRoleDefendTarget(
 ): Coord {
   if (slot.roleCategory === "GK") {
     return {
-      x: clamp(4.8 + Math.max(0, (localBallX - 35) * 0.06), 4.5, 9),
-      y: clamp(50 + (localBallY - 50) * 0.18, 41, 59),
+      x: clamp(50 + (localBallX - 50) * 0.18, 42, 58),
+      y: clamp(95.5 - Math.max(0, (65 - localBallY) * 0.06), 91, 95.5),
     };
   }
 
-  const baseY = clamp(slot.x, 10, 90);
+  const baseX = clamp(slot.x, 10, 90);
   const pressBias =
-    tactics.pressing === "High" ? 9 : tactics.pressing === "Low" ? -8 : 1;
+    tactics.pressing === "High" ? -7 : tactics.pressing === "Low" ? 7 : -1;
   const mentBias =
-    tactics.mentality === "Attacking" ? 6 : tactics.mentality === "Defensive" ? -7 : 0;
-  const counterRetreat = isCounter ? -7 : 0;
+    tactics.mentality === "Attacking" ? -5 : tactics.mentality === "Defensive" ? 6 : 0;
+  const counterRetreat = isCounter ? 6 : 0;
 
-  // Higher depthNorm means further forward when defending
+  // Higher depthNorm means further up towards the opponent when defending
   const depthNorm = clamp((92 - slot.y) / 80, 0.15, 0.96);
-  // Keep block compact between own goal and the ball
-  const ballAnchor = clamp(localBallX * 0.72 + pressBias + mentBias + counterRetreat, 12, 68);
-  const blockSpan = tactics.pressing === "Low" ? 24 : tactics.pressing === "High" ? 34 : 29;
+  // Keep block compact between own goal (100) and the ball
+  const ballAnchor = clamp(localBallY * 0.72 + 28 + pressBias + mentBias + counterRetreat, 32, 88);
+  const blockSpan = tactics.pressing === "Low" ? 22 : tactics.pressing === "High" ? 32 : 27;
 
-  const attX = clamp(ballAnchor - 10 + depthNorm * blockSpan, 11, 78);
+  const attY = clamp(ballAnchor - (1 - depthNorm) * blockSpan, 24, 89);
   // Zonal lateral shift toward ball side
-  const compressY = slot.label === "CB" ? 0.28 : 0.36;
-  const flankY = clamp(baseY * (1 - compressY) + localBallY * compressY, 10, 90);
-  return { x: attX, y: flankY };
+  const compressX = slot.label === "CB" ? 0.28 : 0.36;
+  const flankX = clamp(baseX * (1 - compressX) + localBallX * compressX, 10, 90);
+  return { x: flankX, y: attY };
 }
 
 function computeTeamTargets(
@@ -303,9 +309,11 @@ function computeTeamTargets(
   carrierId: number | null
 ): Map<number, Coord> {
   const targets = new Map<number, Coord>();
+  // For Home: attacking is toward top (y = 0), so localBallY is ballPos.y
+  // For Away: attacking is toward bottom (y = 100), so localBallY is 100 - ballPos.y
   const localBallX = isHome ? ballPos.x : 100 - ballPos.x;
   const localBallY = isHome ? ballPos.y : 100 - ballPos.y;
-  const attackProgress = clamp((localBallX - 14) / 76, 0, 1);
+  const attackProgress = clamp((90 - localBallY) / 76, 0, 1);
 
   activeIds.forEach((id, fallbackIdx) => {
     const slotIdx = slotIndexMap.get(id) ?? fallbackIdx;
@@ -336,7 +344,7 @@ function computeTeamTargets(
         const localVx = isHome ? run.vx : -run.vx;
         const localVy = isHome ? run.vy : -run.vy;
         localCoord = {
-          x: clamp(localCoord.x + localVx, 12, 93),
+          x: clamp(localCoord.x + localVx, 8, 92),
           y: clamp(localCoord.y + localVy, 7, 93),
         };
       }
@@ -345,8 +353,8 @@ function computeTeamTargets(
     const screenX = isHome ? localCoord.x : 100 - localCoord.x;
     const screenY = isHome ? localCoord.y : 100 - localCoord.y;
     targets.set(id, {
-      x: clamp(screenX, 4.5, 95.5),
-      y: clamp(screenY, 6, 94),
+      x: clamp(screenX, 6, 94),
+      y: clamp(screenY, 5.5, 94.5),
     });
   });
 
@@ -363,24 +371,24 @@ function computeTeamTargets(
       })
       .sort((a, b) => a.dist - b.dist);
 
-    const goalX = isHome ? 4 : 96;
-    const toGoalDist = Math.max(1, Math.hypot(goalX - ballPos.x, 50 - ballPos.y));
-    const goalUnitX = (goalX - ballPos.x) / toGoalDist;
-    const goalUnitY = (50 - ballPos.y) / toGoalDist;
+    const goalY = isHome ? 96 : 4;
+    const toGoalDist = Math.max(1, Math.hypot(50 - ballPos.x, goalY - ballPos.y));
+    const goalUnitX = (50 - ballPos.x) / toGoalDist;
+    const goalUnitY = (goalY - ballPos.y) / toGoalDist;
 
     candidates.slice(0, pressersCount).forEach((entry, rank) => {
       if (rank === 0) {
         // Primary hunter closes directly down on goal-side of carrier
         targets.set(entry.id, {
-          x: clamp(ballPos.x + goalUnitX * 2.8, 7, 93),
+          x: clamp(ballPos.x + goalUnitX * 2.5, 7, 93),
           y: clamp(ballPos.y + goalUnitY * 2.8, 7, 93),
         });
       } else {
         // Secondary hunters squeeze passing lanes near the ball
         const pull = rank === 1 ? 0.48 : 0.3;
         targets.set(entry.id, {
-          x: clamp(entry.target.x * (1 - pull) + (ballPos.x + goalUnitX * 8) * pull, 7, 93),
-          y: clamp(entry.target.y * (1 - pull) + (ballPos.y + goalUnitY * 6) * pull, 7, 93),
+          x: clamp(entry.target.x * (1 - pull) + (ballPos.x + goalUnitX * 6) * pull, 7, 93),
+          y: clamp(entry.target.y * (1 - pull) + (ballPos.y + goalUnitY * 8) * pull, 7, 93),
         });
       }
     });
@@ -392,8 +400,8 @@ function computeTeamTargets(
     const carrierSlot = slots[Math.min(carrierSlotIdx, slots.length - 1)];
     if (carrierSlot?.roleCategory !== "GK") {
       targets.set(carrierId, {
-        x: clamp(ballPos.x, 6, 94),
-        y: clamp(ballPos.y, 7, 93),
+        x: clamp(ballPos.x, 7, 93),
+        y: clamp(ballPos.y, 6, 94),
       });
     }
   }
@@ -415,10 +423,10 @@ function computeTeamTargets(
         const nx = dx / dist;
         const ny = dy / dist;
         if (idA !== carrierId) {
-          targets.set(idA, { x: clamp(a.x + nx * push, 6, 94), y: clamp(a.y + ny * push, 7, 93) });
+          targets.set(idA, { x: clamp(a.x + nx * push, 7, 93), y: clamp(a.y + ny * push, 6, 94) });
         }
         if (idB !== carrierId) {
-          targets.set(idB, { x: clamp(b.x - nx * push, 6, 94), y: clamp(b.y - ny * push, 7, 93) });
+          targets.set(idB, { x: clamp(b.x - nx * push, 7, 93), y: clamp(b.y - ny * push, 6, 94) });
         }
       }
     }
@@ -438,14 +446,15 @@ function selectPassTarget(
   oppCoords: Coord[],
   playerMap: Map<number, Player>
 ): number {
-  const dir = isHome ? 1 : -1;
+  // Home attacks toward y=0 (progress is -dy), Away attacks toward y=100 (progress is +dy)
+  const dirY = isHome ? -1 : 1;
   const pool = candidates.filter((id) => id !== carrierId);
   if (pool.length === 0) return carrierId;
 
   const scored = pool.map((id) => {
     const pos = coords[id] ?? { x: ballPos.x, y: ballPos.y };
     const dist = Math.hypot(pos.x - ballPos.x, pos.y - ballPos.y);
-    const progress = (pos.x - ballPos.x) * dir;
+    const progress = (pos.y - ballPos.y) * dirY;
     const p = playerMap.get(id);
     const isGk = p?.roleCategory === "GK";
 
@@ -457,13 +466,13 @@ function selectPassTarget(
 
     let score = 1.0;
     if (isGk) {
-      const localBallX = isHome ? ballPos.x : 100 - ballPos.x;
-      score = localBallX < 34 ? 0.55 : 0.03;
+      const localBallY = isHome ? ballPos.y : 100 - ballPos.y;
+      score = localBallY > 66 ? 0.55 : 0.03;
     } else if (tactics.passingStyle === "Short") {
       score += dist >= 7 && dist <= 25 ? 2.4 : dist < 35 ? 1.0 : 0.25;
-      score += progress > -5 ? 1.1 : 0.3;
+      score += progress > -4 ? 1.1 : 0.3;
     } else if (tactics.passingStyle === "Direct") {
-      score += progress > 12 ? 3.2 : progress > 2 ? 1.4 : 0.35;
+      score += progress > 11 ? 3.2 : progress > 2 ? 1.4 : 0.35;
       if (p?.roleCategory === "ATT" || p?.primaryPosition === "CAM") score += 1.4;
     } else {
       score += progress > 3 ? 2.1 : progress > -4 ? 1.1 : 0.45;
@@ -500,11 +509,11 @@ function buildFormationSeedCoords(
   const seed: Record<number, Coord> = {};
   homeIds.forEach((id, idx) => {
     const slot = homeSlots[Math.min(slotIndexMap.get(id) ?? idx, homeSlots.length - 1)];
-    seed[id] = getBaseHorizontalCoord(slot.x, slot.y, true, homeTactics);
+    seed[id] = getBaseVerticalCoord(slot.x, slot.y, true, homeTactics);
   });
   awayIds.forEach((id, idx) => {
     const slot = awaySlots[Math.min(slotIndexMap.get(id) ?? idx, awaySlots.length - 1)];
-    seed[id] = getBaseHorizontalCoord(slot.x, slot.y, false, awayTactics);
+    seed[id] = getBaseVerticalCoord(slot.x, slot.y, false, awayTactics);
   });
   return seed;
 }
@@ -575,7 +584,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const slots = isHomeSub ? homeSlots : awaySlots;
           const slot = slots[Math.min(prevSlot, slots.length - 1)];
           const tac = isHomeSub ? homeTactics : awayTactics;
-          const spawnCoord = getBaseHorizontalCoord(slot.x, slot.y, isHomeSub, tac);
+          const spawnCoord = getBaseVerticalCoord(slot.x, slot.y, isHomeSub, tac);
           setLiveCoords((prev) =>
             prev[ev.playerId] ? prev : { ...prev, [ev.playerId]: spawnCoord }
           );
@@ -604,8 +613,29 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   }, [session.fixtureId, homeTactics.formation, awayTactics.formation, isPlaying, session.minute]);
 
   // Compute rendered positions from continuous liveCoords with smooth fallback
+  // When the match is finished, return cleanly spread initial formation positions with ratings
   const playerPositions = useMemo(() => {
     const posMap = new Map<number, { coord: Coord; isHome: boolean; label: string }>();
+
+    if (session.finished) {
+      const addFinishedTeam = (
+        activeIds: number[],
+        slots: FormationSlot[],
+        isHome: boolean,
+        tactics: Tactics
+      ) => {
+        activeIds.forEach((id, fallbackIdx) => {
+          const slotIdx = slotIndexRef.current.get(id) ?? fallbackIdx;
+          const slot = slots[Math.min(slotIdx, slots.length - 1)];
+          const coord = getBaseVerticalCoord(slot.x, slot.y, isHome, tactics, true);
+          posMap.set(id, { coord, isHome, label: slot.label });
+        });
+      };
+      addFinishedTeam(session.homeActiveIds, homeSlots, true, homeTactics);
+      addFinishedTeam(session.awayActiveIds, awaySlots, false, awayTactics);
+      return posMap;
+    }
+
     const addTeam = (
       activeIds: number[],
       slots: FormationSlot[],
@@ -616,7 +646,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         const slotIdx = slotIndexRef.current.get(id) ?? fallbackIdx;
         const slot = slots[Math.min(slotIdx, slots.length - 1)];
         const coord =
-          liveCoords[id] ?? getBaseHorizontalCoord(slot.x, slot.y, isHome, tactics);
+          liveCoords[id] ?? getBaseVerticalCoord(slot.x, slot.y, isHome, tactics);
         posMap.set(id, { coord, isHome, label: slot.label });
       });
     };
@@ -626,6 +656,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   }, [
     session.homeActiveIds,
     session.awayActiveIds,
+    session.finished,
     homeSlots,
     awaySlots,
     homeTactics,
@@ -688,25 +719,25 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       targetGoalCoord?: Coord
     ): { shooterCoord: Coord } => {
       const shooterCoord: Coord = {
-        x: attackingHome ? 82 + Math.random() * 9 : 9 + Math.random() * 9,
-        y: 37 + Math.random() * 26,
+        x: 36 + Math.random() * 28,
+        y: attackingHome ? 10 + Math.random() * 9 : 90 - Math.random() * 9,
       };
       const updated: Record<number, Coord> = { ...curCoords };
       const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
       const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
-      const goalX = attackingHome ? 94 : 6;
+      const goalY = attackingHome ? 4.5 : 95.5;
 
       if (shooterId !== null) {
         updated[shooterId] = shooterCoord;
       }
       if (assisterId !== undefined) {
-        const wingY =
-          shooterCoord.y < 50 ? 18 + Math.random() * 18 : 64 + Math.random() * 18;
+        const wingX =
+          shooterCoord.x < 50 ? 14 + Math.random() * 16 : 70 + Math.random() * 16;
         updated[assisterId] = {
-          x: attackingHome
-            ? clamp(shooterCoord.x - 8 - Math.random() * 8, 65, 88)
-            : clamp(shooterCoord.x + 8 + Math.random() * 8, 12, 35),
-          y: wingY,
+          x: wingX,
+          y: attackingHome
+            ? clamp(shooterCoord.y + 7 + Math.random() * 8, 12, 36)
+            : clamp(shooterCoord.y - 7 - Math.random() * 8, 64, 88),
         };
       }
 
@@ -718,8 +749,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         const base = updated[id] ?? { x: 50, y: 50 };
         const boxPull = p.roleCategory === "ATT" || p.roleCategory === "MID" ? 0.55 : 0.25;
         updated[id] = {
-          x: clamp(base.x * (1 - boxPull) + (attackingHome ? 76 : 24) * boxPull, 12, 92),
-          y: clamp(base.y * 0.75 + shooterCoord.y * 0.25, 10, 90),
+          x: clamp(base.x * 0.75 + shooterCoord.x * 0.25, 10, 90),
+          y: clamp(base.y * (1 - boxPull) + (attackingHome ? 24 : 76) * boxPull, 8, 92),
         };
       }
       for (const id of defIds) {
@@ -727,16 +758,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         if (!p) continue;
         if (p.roleCategory === "GK" && targetGoalCoord) {
           updated[id] = {
-            x: attackingHome ? 94.5 : 5.5,
-            y: clamp(50 + (targetGoalCoord.y - 50) * 0.45, 43, 57),
+            x: clamp(50 + (targetGoalCoord.x - 50) * 0.45, 43, 57),
+            y: attackingHome ? 4.5 : 95.5,
           };
           continue;
         }
-        const base = updated[id] ?? { x: goalX, y: 50 };
+        const base = updated[id] ?? { x: 50, y: goalY };
         const boxPull = p.roleCategory === "DEF" ? 0.6 : 0.4;
         updated[id] = {
-          x: clamp(base.x * (1 - boxPull) + (attackingHome ? 84 : 16) * boxPull, 8, 92),
-          y: clamp(base.y * 0.7 + shooterCoord.y * 0.3, 14, 86),
+          x: clamp(base.x * 0.7 + shooterCoord.x * 0.3, 14, 86),
+          y: clamp(base.y * (1 - boxPull) + (attackingHome ? 14 : 86) * boxPull, 6, 94),
         };
       }
 
@@ -745,8 +776,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     };
 
     if (latest.type === "goal") {
-      const goalX = isHomeEvent ? 98.2 : 1.8;
-      const goalY = 47 + Math.random() * 6;
+      const goalX = 50 + (Math.random() * 4 - 2);
+      const goalY = isHomeEvent ? 1.6 : 98.4;
       const { shooterCoord } = choreographBoxAction(
         isHomeEvent,
         latest.playerId,
@@ -788,8 +819,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       // On "save", latest.clubId is the keeper's club; opposing side took the shot
       const attackingHome = !isHomeEvent;
       const keeperTarget: Coord = {
-        x: isHomeEvent ? 5.2 : 94.8,
-        y: 46 + Math.random() * 8,
+        x: 48 + Math.random() * 4,
+        y: isHomeEvent ? 95.5 : 4.5,
       };
       const oppIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
       const oppAttackers = oppIds.filter((id) => playerMap.get(id)?.roleCategory === "ATT");
@@ -818,8 +849,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       });
       highlightPauseUntilRef.current = now + 1300;
     } else if (latest.type === "chance") {
-      const missX = isHomeEvent ? 98 : 2;
-      const missY = Math.random() < 0.5 ? 39 : 61;
+      const missX = Math.random() < 0.5 ? 35 : 65;
+      const missY = isHomeEvent ? 1.5 : 98.5;
       const { shooterCoord } = choreographBoxAction(isHomeEvent, latest.playerId);
 
       setPlayPhase("final_third");
@@ -909,8 +940,10 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       if (keepSameTeam && currentCarrierId !== null) {
         const carrierPlayer = cur.playerMap.get(currentCarrierId);
-        const carrierLocalX = prevIsHome ? nextBallPos.x : 100 - nextBallPos.x;
-        const dir = prevIsHome ? 1 : -1;
+        const progressNorm = prevIsHome
+          ? clamp((92 - nextBallPos.y) / 84, 0, 1)
+          : clamp((nextBallPos.y - 8) / 84, 0, 1);
+        const dirY = prevIsHome ? -1 : 1;
         const dribbleRate =
           carrierPlayer?.roleCategory === "ATT" || carrierPlayer?.primaryPosition === "CAM"
             ? 0.42
@@ -918,15 +951,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             ? 0.34
             : 0.22;
 
-        if (carrierLocalX < 85 && Math.random() < dribbleRate) {
-          // Dribble progression: carrier drives forward or cuts diagonally inside
+        if (progressNorm < 0.85 && Math.random() < dribbleRate) {
+          // Dribble progression along vertical axis: carrier drives forward or cuts inside
           const paceBoost = ((carrierPlayer?.faceStats.dribbling ?? 72) - 65) * 0.08;
-          const stepX = (4.8 + Math.random() * 5.2 + Math.max(0, paceBoost)) * dir;
-          const cutCenterY =
-            carrierLocalX > 62 ? (50 - nextBallPos.y) * 0.25 : Math.random() * 10 - 5;
+          const stepY = (4.8 + Math.random() * 5.2 + Math.max(0, paceBoost)) * dirY;
+          const cutCenterX =
+            progressNorm > 0.6 ? (50 - nextBallPos.x) * 0.25 : Math.random() * 10 - 5;
           nextBallPos = {
-            x: clamp(nextBallPos.x + stepX, 6, 94),
-            y: clamp(nextBallPos.y + cutCenterY + (Math.random() * 4 - 2), 8, 92),
+            x: clamp(nextBallPos.x + cutCenterX + (Math.random() * 4 - 2), 8, 92),
+            y: clamp(nextBallPos.y + stepY, 6, 94),
           };
           curCoords[currentCarrierId] = nextBallPos;
           setTrail(null);
@@ -945,11 +978,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           );
           const receiverCoord = curCoords[receiverId] ?? nextBallPos;
           const receiverRun = activeRunsRef.current.get(receiverId);
-          const leadX = (receiverRun ? receiverRun.vx * 0.45 : dir * (2 + Math.random() * 4));
-          const leadY = receiverRun ? receiverRun.vy * 0.45 : Math.random() * 6 - 3;
+          const leadX = receiverRun ? receiverRun.vx * 0.45 : Math.random() * 6 - 3;
+          const leadY = receiverRun ? receiverRun.vy * 0.45 : dirY * (2 + Math.random() * 4);
           const targetBall: Coord = {
-            x: clamp(receiverCoord.x + leadX, 6, 94),
-            y: clamp(receiverCoord.y + leadY, 7, 93),
+            x: clamp(receiverCoord.x + leadX, 7, 93),
+            y: clamp(receiverCoord.y + leadY, 6, 94),
           };
 
           setTrail({
@@ -997,19 +1030,23 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         nextCarrierId = bestInterceptor;
         setTrail(null);
 
-        const newLocalBallX = nextIsHome ? nextBallPos.x : 100 - nextBallPos.x;
-        if (newLocalBallX < 60) {
+        const newProgress = nextIsHome
+          ? (92 - nextBallPos.y) / 84
+          : (nextBallPos.y - 8) / 84;
+        if (newProgress < 0.58) {
           counterUntilTickRef.current = tick + 6;
         }
       }
 
-      // Compute current PlayPhase for the possession side
-      const newLocalBallX = nextIsHome ? nextBallPos.x : 100 - nextBallPos.x;
-      if (tick <= counterUntilTickRef.current && newLocalBallX < 74) {
+      // Compute current PlayPhase for the possession side along the vertical pitch
+      const currentProgress = nextIsHome
+        ? (92 - nextBallPos.y) / 84
+        : (nextBallPos.y - 8) / 84;
+      if (tick <= counterUntilTickRef.current && currentProgress < 0.72) {
         nextPhase = "counter";
-      } else if (newLocalBallX < 40) {
+      } else if (currentProgress < 0.36) {
         nextPhase = "build_up";
-      } else if (newLocalBallX < 68) {
+      } else if (currentProgress < 0.68) {
         nextPhase = "progression";
       } else {
         nextPhase = "final_third";
@@ -1023,7 +1060,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       }
       const attackIds = nextIsHome ? cur.session.homeActiveIds : cur.session.awayActiveIds;
       const attackSlots = nextIsHome ? cur.homeSlots : cur.awaySlots;
-      const attDir = nextIsHome ? 1 : -1;
+      const attDirY = nextIsHome ? -1 : 1;
       const attRunners = Array.from(activeRunsRef.current.keys()).filter((id) =>
         attackIds.includes(id)
       ).length;
@@ -1039,28 +1076,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const slot = attackSlots[Math.min(slotIdx, attackSlots.length - 1)];
           const duration = 3 + Math.floor(Math.random() * 4);
           const runnerCoord = curCoords[runnerId] ?? { x: 50, y: 50 };
-          const runnerLocalY = nextIsHome ? runnerCoord.y : 100 - runnerCoord.y;
 
           let runType: RunType = "support";
-          let vx = attDir * (6 + Math.random() * 6);
-          let vy = 0;
+          let vx = 0;
+          let vy = attDirY * (6 + Math.random() * 6);
 
           if (isFullbackSlot(slot.label)) {
             runType = "overlap";
-            vx = attDir * (10 + Math.random() * 8);
-            vy = (runnerLocalY < 50 ? -1 : 1) * (nextIsHome ? 4 : -4);
+            vx = (runnerCoord.x < 50 ? -1 : 1) * 3;
+            vy = attDirY * (10 + Math.random() * 8);
           } else if (isWingerSlot(slot.label)) {
             runType = nextPhase === "final_third" ? "cut_inside" : "in_behind";
-            vx = attDir * (9 + Math.random() * 8);
-            vy = runType === "cut_inside" ? (50 - runnerCoord.y) * 0.35 : 0;
+            vx = runType === "cut_inside" ? (50 - runnerCoord.x) * 0.35 : 0;
+            vy = attDirY * (9 + Math.random() * 8);
           } else if (slot.roleCategory === "ATT") {
             runType = "in_behind";
-            vx = attDir * (10 + Math.random() * 9);
-            vy = (Math.random() * 14 - 7);
+            vx = Math.random() * 12 - 6;
+            vy = attDirY * (10 + Math.random() * 9);
           } else if (slot.label === "CM" || slot.label === "CAM") {
             runType = nextPhase === "final_third" || nextPhase === "counter" ? "box_crash" : "support";
-            vx = runType === "box_crash" ? attDir * (11 + Math.random() * 7) : attDir * 5;
-            vy = (nextBallPos.y - runnerCoord.y) * 0.2;
+            vx = (nextBallPos.x - runnerCoord.x) * 0.2;
+            vy = runType === "box_crash" ? attDirY * (11 + Math.random() * 7) : attDirY * 5;
           }
 
           activeRunsRef.current.set(runnerId, {
@@ -1179,19 +1215,24 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           <span className="inline-flex items-center gap-1.5 font-bold text-white">
             <span
               className="h-3 w-3 rounded-full ring-1 ring-white/40"
-              style={{ backgroundColor: homeKitColors.primary }}
-            />
-            {homeClub.shortName} ({homeTactics.formation}) →
-          </span>
-          <span className="text-slate-600">|</span>
-          <span className="inline-flex items-center gap-1.5 font-bold text-white">
-            ← {awayClub.shortName} ({awayTactics.formation})
-            <span
-              className="h-3 w-3 rounded-full ring-1 ring-white/40"
               style={{ backgroundColor: awayKitColors.primary }}
             />
+            ▲ {awayClub.shortName} ({awayTactics.formation})
           </span>
-          {!session.finished && carrierPlayer && (
+          <span className="text-slate-600">vs</span>
+          <span className="inline-flex items-center gap-1.5 font-bold text-white">
+            ▼ {homeClub.shortName} ({homeTactics.formation})
+            <span
+              className="h-3 w-3 rounded-full ring-1 ring-white/40"
+              style={{ backgroundColor: homeKitColors.primary }}
+            />
+          </span>
+          {session.finished ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+              <Star className="h-3 w-3 text-amber-400" />
+              Fim de Jogo • Formação Inicial & Notas
+            </span>
+          ) : carrierPlayer ? (
             <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-0.5 text-[11px] text-slate-300">
               <span
                 className="h-2 w-2 rounded-full animate-pulse"
@@ -1216,7 +1257,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 {PLAY_PHASE_LABELS[playPhase]}
               </span>
             </span>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -1253,12 +1294,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         </div>
       </div>
 
-      {/* Horizontal 2D Pitch */}
+      {/* Vertical 2D Pitch */}
       <div
-        className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border-2 border-emerald-800 select-none"
+        className="relative aspect-[3/4] w-full max-w-xl mx-auto overflow-hidden rounded-xl border-2 border-emerald-800 select-none"
         style={{
           backgroundImage:
-            "repeating-linear-gradient(90deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",
+            "repeating-linear-gradient(180deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",
         }}
       >
         {/* SVG Field Lines & Ball Trail */}
@@ -1269,22 +1310,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         >
           {/* Outer boundary */}
           <rect
-            x="2"
-            y="4"
-            width="96"
-            height="92"
+            x="4"
+            y="3"
+            width="92"
+            height="94"
             fill="none"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
           {/* Halfway line & center circle */}
           <line
-            x1="50"
-            y1="4"
-            x2="50"
-            y2="96"
+            x1="4"
+            y1="50"
+            x2="96"
+            y2="50"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
           <circle
             cx="50"
@@ -1292,72 +1333,112 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             r="11"
             fill="none"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
           <circle cx="50" cy="50" r="0.8" fill="rgba(255,255,255,0.45)" />
 
-          {/* Left Penalty & Goal Box */}
+          {/* Top Penalty Box & Goal Box (Away side defending top) */}
           <rect
-            x="2"
-            y="22"
-            width="15"
-            height="56"
+            x="22"
+            y="3"
+            width="56"
+            height="15"
             fill="none"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
           <rect
-            x="2"
-            y="36"
-            width="5.5"
-            height="28"
+            x="36"
+            y="3"
+            width="28"
+            height="5.5"
             fill="none"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
-          {/* Left Goal */}
+          <circle cx="50" cy="11.5" r="0.6" fill="rgba(255,255,255,0.45)" />
+          <path
+            d="M 40 18 A 9 9 0 0 0 60 18"
+            fill="none"
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth="0.5"
+          />
+          {/* Top Goal Net */}
           <rect
-            x="0.3"
-            y="42"
-            width="1.7"
-            height="16"
+            x="42"
+            y="0.6"
+            width="16"
+            height="2.4"
             fill="rgba(255,255,255,0.12)"
             stroke="rgba(255,255,255,0.65)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
 
-          {/* Right Penalty & Goal Box */}
+          {/* Bottom Penalty Box & Goal Box (Home side defending bottom) */}
           <rect
-            x="83"
-            y="22"
-            width="15"
-            height="56"
+            x="22"
+            y="82"
+            width="56"
+            height="15"
             fill="none"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
           <rect
-            x="92.5"
-            y="36"
-            width="5.5"
-            height="28"
+            x="36"
+            y="91.5"
+            width="28"
+            height="5.5"
             fill="none"
             stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
           />
-          {/* Right Goal */}
+          <circle cx="50" cy="88.5" r="0.6" fill="rgba(255,255,255,0.45)" />
+          <path
+            d="M 40 82 A 9 9 0 0 1 60 82"
+            fill="none"
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth="0.5"
+          />
+          {/* Bottom Goal Net */}
           <rect
-            x="98"
-            y="42"
-            width="1.7"
-            height="16"
+            x="42"
+            y="97"
+            width="16"
+            height="2.4"
             fill="rgba(255,255,255,0.12)"
             stroke="rgba(255,255,255,0.65)"
-            strokeWidth="0.4"
+            strokeWidth="0.5"
+          />
+
+          {/* Corner Arcs */}
+          <path
+            d="M 4 5 A 2 2 0 0 0 6 3"
+            fill="none"
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth="0.5"
+          />
+          <path
+            d="M 94 3 A 2 2 0 0 0 96 5"
+            fill="none"
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth="0.5"
+          />
+          <path
+            d="M 4 95 A 2 2 0 0 0 6 97"
+            fill="none"
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth="0.5"
+          />
+          <path
+            d="M 94 97 A 2 2 0 0 0 96 95"
+            fill="none"
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth="0.5"
           />
 
           {/* Pass / Shot Trajectory */}
-          {trail && (
+          {!session.finished && trail && (
             <line
               x1={trail.x1}
               y1={trail.y1}
@@ -1524,8 +1605,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                       +
                     </span>
                   )}
-                  {showRatings && (
-                    <span className="absolute -right-1.5 -top-1 rounded bg-slate-950/95 px-1 text-[8px] font-bold text-amber-300 ring-1 ring-white/15">
+                  {(showRatings || session.finished) && (
+                    <span
+                      className={`absolute -right-1.5 -top-1 rounded px-1 text-[8px] font-black ${
+                        session.finished
+                          ? "bg-amber-400 text-slate-950 ring-1 ring-black/60"
+                          : "bg-slate-950/95 text-amber-300 ring-1 ring-white/15"
+                      }`}
+                    >
                       {rating}
                     </span>
                   )}
@@ -1557,8 +1644,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     </span>
                   )}
 
-                  {showRatings && (
-                    <span className="absolute -right-2 -top-1.5 rounded bg-slate-950/90 px-1 text-[8px] font-bold text-amber-300 ring-1 ring-white/15">
+                  {(showRatings || session.finished) && (
+                    <span
+                      className={`absolute -right-2 -top-1.5 rounded px-1 text-[8px] font-black ${
+                        session.finished
+                          ? "bg-amber-400 text-slate-950 ring-1 ring-black/60"
+                          : "bg-slate-950/90 text-amber-300 ring-1 ring-white/15"
+                      }`}
+                    >
                       {rating}
                     </span>
                   )}
@@ -1571,12 +1664,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   <span className="max-w-[66px] truncate rounded bg-slate-950/90 px-1 text-[9px] font-semibold leading-tight text-white">
                     {surname}
                   </span>
-                  <div className="mt-0.5 h-0.5 w-6 overflow-hidden rounded-full bg-slate-900">
-                    <div
-                      className={`h-full ${getStaminaColor(stamina)}`}
-                      style={{ width: `${stamina}%` }}
-                    />
-                  </div>
+                  {!session.finished && (
+                    <div className="mt-0.5 h-0.5 w-6 overflow-hidden rounded-full bg-slate-900">
+                      <div
+                        className={`h-full ${getStaminaColor(stamina)}`}
+                        style={{ width: `${stamina}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </button>
@@ -1584,12 +1679,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         })}
 
         {/* Animated Ball */}
-        <div
-          style={{ left: `${ballPos.x}%`, top: `${ballPos.y}%` }}
-          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ease-out"
-        >
-          <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950" />
-        </div>
+        {!session.finished && (
+          <div
+            style={{ left: `${ballPos.x}%`, top: `${ballPos.y}%` }}
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ease-out"
+          >
+            <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950" />
+          </div>
+        )}
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
