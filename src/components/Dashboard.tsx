@@ -292,9 +292,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Mandante
                     </div>
-                    <div className="text-lg font-black text-white sm:text-xl">
+                    <h2 className="text-xl text-white sm:text-2xl">
                       {homeClub.name}
-                    </div>
+                    </h2>
                     <div className="text-xs text-slate-400">
                       {standings.find((s) => s.club.id === homeClub.id)?.position}º • OVR{" "}
                       {homePower.overall}
@@ -313,9 +313,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Visitante
                     </div>
-                    <div className="text-lg font-black text-white sm:text-xl">
+                    <h2 className="text-xl text-white sm:text-2xl">
                       {awayClub.name}
-                    </div>
+                    </h2>
                     <div className="text-xs text-slate-400">
                       {standings.find((s) => s.club.id === awayClub.id)?.position}º • OVR{" "}
                       {awayPower.overall}
@@ -395,9 +395,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Left: Mini Standings */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 lg:col-span-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+            <h2 className="flex items-center gap-2 text-lg text-white">
               <Trophy className="h-4 w-4 text-emerald-400" /> Premier League 26/27
-            </h3>
+            </h2>
             <button
               onClick={() => onNavigate("league")}
               className="text-xs font-semibold text-emerald-400 hover:underline"
@@ -516,9 +516,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {/* Key Players */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+              <h2 className="flex items-center gap-2 text-lg text-white">
                 <TrendingUp className="h-4 w-4 text-sky-400" /> Destaques do Elenco
-              </h3>
+              </h2>
               <button
                 onClick={() => onNavigate("tactics")}
                 className="text-xs font-semibold text-emerald-400 hover:underline"
@@ -586,9 +586,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* News Feed */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
+            <h2 className="mb-3 flex items-center gap-2 text-lg text-white">
               <Newspaper className="h-4 w-4 text-amber-400" /> Central de Notícias da Liga
-            </h3>
+            </h2>
             <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
               {news.slice(0, 8).map((item) => (
                 <div

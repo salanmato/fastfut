@@ -1064,7 +1064,7 @@ export const App: React.FC = () => {
             <ClubBadge club={userClub} size="md" />
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-black text-white">{userClub.name}</span>
+                <h1 className="text-base text-white">{userClub.name}</h1>
                 <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-100">
                   {save.seasonFinished ? "Fim da Temporada" : `Rodada ${save.currentMatchweek}/38`}
                 </span>
