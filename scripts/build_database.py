@@ -688,12 +688,14 @@ def main() -> None:
 
     # 3. Synchronize Players
     players: list[dict[str, Any]] = []
-    seen_keys: set[tuple[str, int]] = set()
+    seen_person_keys: set[tuple[str, str]] = set()
     next_player_id = 1
 
     # 3a. Ingest FC27 players for European, English, Saudi, MLS clubs
     with fc27_zip.open("fc27_players_database.csv") as f:
-        reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+        reader = list(csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig")))
+        # Sort: Base official cards (eaId < 50_000_000) first, then higher overall
+        reader.sort(key=lambda r: (1 if to_int(r.get("eaId"), 0) > 50_000_000 else 0, -to_int(r.get("overall"), 0)))
         for row in reader:
             league = (row.get("league") or "").strip()
             raw_club = (row.get("club") or "").strip()
@@ -713,11 +715,12 @@ def main() -> None:
             club_obj = clubs[club_id - 1]
             player_name = (row.get("player_name") or "").strip()
             full_name = (row.get("full_name") or player_name).strip()
+            nationality = (row.get("nation") or club_obj["country"]).strip()
 
-            dedup_key = (normalize_name(player_name), club_id)
-            if dedup_key in seen_keys:
+            person_key = (normalize_name(player_name), normalize_name(nationality))
+            if person_key in seen_person_keys:
                 continue
-            seen_keys.add(dedup_key)
+            seen_person_keys.add(person_key)
 
             raw_positions = [p.strip() for p in (row.get("positions") or "CM").split(",") if p.strip()]
             primary_pos = raw_positions[0] if raw_positions else "CM"
@@ -845,10 +848,11 @@ def main() -> None:
             if not p_name:
                 continue
 
-            dedup_key = (normalize_name(p_name), club_id)
-            if dedup_key in seen_keys:
+            nationality = (row.get("country_of_citizenship") or "Brasil").strip()
+            person_key = (normalize_name(p_name), normalize_name(nationality))
+            if person_key in seen_person_keys:
                 continue
-            seen_keys.add(dedup_key)
+            seen_person_keys.add(person_key)
 
             dob = (row.get("date_of_birth") or "1998-01-01")[:4]
             birth_year = to_int(dob, 1998)
@@ -916,28 +920,28 @@ def main() -> None:
 
     # 3c. Ensure Positional Balance & Minimum Squad Size (>= 18) for EVERY club
     first_names_by_country: dict[str, list[str]] = {
-        "Inglaterra": ["Jack", "Harry", "George", "Callum", "Liam", "Ethan", "Mason", "Noah", "Lewis", "Dan"],
-        "Espanha": ["Alejandro", "Carlos", "David", "Pablo", "Javier", "Álvaro", "Hugo", "Lucas", "Mateo", "Diego"],
-        "Itália": ["Lorenzo", "Leonardo", "Francesco", "Alessandro", "Mattia", "Federico", "Gabriele", "Matteo"],
-        "Alemanha": ["Lukas", "Leon", "Finn", "Elias", "Jonas", "Niklas", "Tim", "Paul", "Felix", "Maximilian"],
-        "França": ["Lucas", "Théo", "Enzo", "Maxime", "Alexandre", "Hugo", "Antoine", "Clément", "Mathis"],
-        "Arábia Saudita": ["Mohammed", "Abdullah", "Ali", "Fahad", "Sultan", "Saud", "Nasser", "Hassan", "Salem"],
-        "Brasil": ["Gabriel", "Lucas", "Matheus", "Guilherme", "Rafael", "Felipe", "Thiago", "Rodrigo", "Vinicius"],
-        "Portugal": ["Bernardo", "Gonçalo", "Diogo", "Rodrigo", "Afonso", "Martim", "Duarte", "Tomás", "Tiago"],
-        "Holanda": ["Daan", "Sem", "Lucas", "Milan", "Levi", "Finn", "Jesse", "Lars", "Ruben", "Bram"],
-        "Estados Unidos": ["Tyler", "Christian", "Weston", "Brendan", "Miles", "Walker", "Antonee", "Caleb"],
+        "Inglaterra": ["Jack", "Harry", "George", "Callum", "Liam", "Ethan", "Mason", "Noah", "Lewis", "Dan", "Oliver", "Alfie", "Harvey", "Kieran", "Nathan", "Toby", "Ben", "Josh", "Sam", "Joe"],
+        "Espanha": ["Alejandro", "Carlos", "David", "Pablo", "Javier", "Álvaro", "Hugo", "Lucas", "Mateo", "Diego", "Adrián", "Marcos", "Manuel", "Sergio", "Daniel", "Iván", "Rubén", "Raúl", "Iker", "Jorge"],
+        "Itália": ["Lorenzo", "Leonardo", "Francesco", "Alessandro", "Mattia", "Federico", "Gabriele", "Matteo", "Andrea", "Riccardo", "Tommaso", "Edoardo", "Filippo", "Davide", "Christian", "Nicolo", "Simone", "Pietro", "Luca", "Marco"],
+        "Alemanha": ["Lukas", "Leon", "Finn", "Elias", "Jonas", "Niklas", "Tim", "Paul", "Felix", "Maximilian", "Moritz", "Julian", "Jan", "Tobias", "Florian", "Fabian", "Bastian", "Sebastian", "Simon", "Philipp"],
+        "França": ["Lucas", "Théo", "Enzo", "Maxime", "Alexandre", "Hugo", "Antoine", "Clément", "Mathis", "Valentin", "Nathan", "Julien", "Romain", "Florian", "Guillaume", "Adrien", "Nicolas", "Alexis", "Dimitri", "Bastien"],
+        "Arábia Saudita": ["Mohammed", "Abdullah", "Ali", "Fahad", "Sultan", "Saud", "Nasser", "Hassan", "Salem", "Turki", "Khaled", "Mansour", "Saad", "Yasser", "Waleed", "Majed", "Bader", "Faisal", "Hussain", "Rayan"],
+        "Brasil": ["Gabriel", "Lucas", "Matheus", "Guilherme", "Rafael", "Felipe", "Thiago", "Rodrigo", "Vinicius", "Caio", "Gustavo", "Leonardo", "Renan", "Murilo", "Igor", "Danilo", "Otávio", "Kauã", "Breno", "Vitor"],
+        "Portugal": ["Bernardo", "Gonçalo", "Diogo", "Rodrigo", "Afonso", "Martim", "Duarte", "Tomás", "Tiago", "Rui", "Vasco", "Simão", "Henrique", "Lourenço", "Salvador", "Francisco", "João", "Pedro", "Manuel", "António"],
+        "Holanda": ["Daan", "Sem", "Lucas", "Milan", "Levi", "Finn", "Jesse", "Lars", "Ruben", "Bram", "Thijs", "Stijn", "Sven", "Niels", "Cas", "Luuk", "Jasper", "Wouter", "Jelle", "Bas"],
+        "Estados Unidos": ["Tyler", "Christian", "Weston", "Brendan", "Miles", "Walker", "Antonee", "Caleb", "Jordan", "Paxten", "Johnny", "Bryan", "Auston", "Daryl", "Keaton", "Gianluca", "Caden", "Griffin", "Quinn", "Cole"],
     }
     last_names_by_country: dict[str, list[str]] = {
-        "Inglaterra": ["Smith", "Jones", "Taylor", "Brown", "Wilson", "Evans", "Thomas", "Roberts", "Walker", "Wright"],
-        "Espanha": ["García", "Martínez", "López", "González", "Rodríguez", "Fernández", "Pérez", "Gómez", "Sánchez"],
-        "Itália": ["Rossi", "Russo", "Ferrari", "Esposito", "Bianchi", "Romano", "Colombo", "Ricci", "Marino"],
-        "Alemanha": ["Müller", "Schmidt", "Schneider", "Fischer", "Weber", "Meyer", "Wagner", "Becker", "Schulz"],
-        "França": ["Martin", "Bernard", "Thomas", "Petit", "Robert", "Richard", "Durand", "Dubois", "Moreau"],
-        "Arábia Saudita": ["Al-Dawsari", "Al-Shahrani", "Al-Brikan", "Al-Ghamdi", "Al-Muwallad", "Al-Faraj", "Al-Shehri"],
-        "Brasil": ["Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", "Pereira", "Lima"],
-        "Portugal": ["Silva", "Santos", "Ferreira", "Pereira", "Oliveira", "Costa", "Rodrigues", "Martins", "Sousa"],
-        "Holanda": ["de Jong", "Jansen", "de Vries", "van den Berg", "van Dijk", "Bakker", "Janssen", "Visser"],
-        "Estados Unidos": ["Adams", "Pulisic", "McKennie", "Robinson", "Zimmerman", "Turner", "Morris", "Johnson"],
+        "Inglaterra": ["Smith", "Jones", "Taylor", "Brown", "Wilson", "Evans", "Thomas", "Roberts", "Walker", "Wright", "Thompson", "White", "Hughes", "Edwards", "Green", "Hall", "Wood", "Clarke", "Cooper", "Ward"],
+        "Espanha": ["García", "Martínez", "López", "González", "Rodríguez", "Fernández", "Pérez", "Gómez", "Sánchez", "Díaz", "Moreno", "Muñoz", "Álvarez", "Romero", "Alonso", "Gutiérrez", "Navarro", "Torres", "Domínguez", "Ramos"],
+        "Itália": ["Rossi", "Russo", "Ferrari", "Esposito", "Bianchi", "Romano", "Colombo", "Ricci", "Marino", "Greco", "Bruno", "Gallo", "Conti", "De Luca", "Mancini", "Costa", "Giordano", "Rizzo", "Lombardi", "Moretti"],
+        "Alemanha": ["Müller", "Schmidt", "Schneider", "Fischer", "Weber", "Meyer", "Wagner", "Becker", "Schulz", "Hoffmann", "Schäfer", "Koch", "Bauer", "Richter", "Klein", "Wolf", "Schröder", "Neumann", "Schwarz", "Zimmermann"],
+        "França": ["Martin", "Bernard", "Thomas", "Petit", "Robert", "Richard", "Durand", "Dubois", "Moreau", "Laurent", "Simon", "Michel", "Lefebvre", "Leroy", "Roux", "David", "Bertrand", "Morel", "Fournier", "Girard"],
+        "Arábia Saudita": ["Al-Dawsari", "Al-Shahrani", "Al-Brikan", "Al-Ghamdi", "Al-Muwallad", "Al-Faraj", "Al-Shehri", "Al-Khaibari", "Al-Boushal", "Al-Harbi", "Al-Najei", "Al-Hassan", "Al-Olayan", "Al-Ghannam", "Al-Tambakti", "Al-Amri", "Al-Sulayhim", "Al-Bulaihi", "Al-Hamdan", "Al-Juhani"],
+        "Brasil": ["Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", "Pereira", "Lima", "Gomes", "Costa", "Ribeiro", "Martins", "Carvalho", "Almeida", "Lopes", "Soares", "Fernandes", "Vieira", "Barbosa"],
+        "Portugal": ["Silva", "Santos", "Ferreira", "Pereira", "Oliveira", "Costa", "Rodrigues", "Martins", "Sousa", "Fernandes", "Gonçalves", "Gomes", "Lopes", "Marques", "Alves", "Almeida", "Ribeiro", "Pinto", "Carvalho", "Teixeira"],
+        "Holanda": ["de Jong", "Jansen", "de Vries", "van den Berg", "van Dijk", "Bakker", "Janssen", "Visser", "Smit", "Meijer", "de Boer", "Mulder", "de Groot", "Bos", "Vos", "Peters", "Hendriks", "van Leeuwen", "Dekker", "Brouwer"],
+        "Estados Unidos": ["Adams", "Pulisic", "McKennie", "Robinson", "Zimmerman", "Turner", "Morris", "Johnson", "Carter", "Vickers", "Richards", "Scally", "McKenzie", "Aaronson", "De la Torre", "Musah", "Reyna", "Pepi", "Wright", "Ferreira"],
     }
 
     pos_by_cat = {
@@ -947,15 +951,33 @@ def main() -> None:
         "ATT": ["ST", "LW", "RW", "ST"],
     }
 
+    used_full_names: set[str] = {p["fullName"].lower() for p in players}
+
     def make_depth_player(club: dict[str, Any], cat: str, seq_idx: int) -> dict[str, Any]:
         nonlocal next_player_id
         country = club["country"]
         fns = first_names_by_country.get(country, first_names_by_country["Inglaterra"])
         lns = last_names_by_country.get(country, last_names_by_country["Inglaterra"])
-        fn = fns[(club["id"] * 3 + seq_idx) % len(fns)]
-        ln = lns[(club["id"] * 5 + seq_idx * 2) % len(lns)]
-        short_n = f"{fn[0]}. {ln}"
-        full_n = f"{fn} {ln}"
+        
+        full_n = ""
+        total_combos = len(fns) * len(lns)
+        base_offset = (club["id"] * 17 + seq_idx * 7) % total_combos
+        for loop_count in range(1000):
+            idx = (base_offset + loop_count) % total_combos
+            fn = fns[idx // len(lns)]
+            ln = lns[idx % len(lns)]
+            suffix = f" {loop_count // total_combos + 1}" if loop_count >= total_combos else ""
+            candidate = f"{fn} {ln}{suffix}".strip()
+            if candidate.lower() not in used_full_names:
+                full_n = candidate
+                used_full_names.add(candidate.lower())
+                break
+
+        if not full_n:
+            full_n = f"Player {club['id']}_{seq_idx}_{next_player_id}"
+            used_full_names.add(full_n.lower())
+
+        short_n = f"{full_n.split()[0][0]}. {full_n.split()[-1]}"
 
         tier = club["tier"]
         base_min = {1: 72, 2: 66, 3: 60, 4: 56}.get(tier, 70)
