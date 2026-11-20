@@ -366,6 +366,18 @@ export interface WorldTransfer {
 
 export type SquadRole = "key_player" | "important" | "rotation" | "prospect";
 
+export interface CulturalProfile {
+  compatriotsInSquadCount: number;
+  compatriotNames: string[];
+  compatriotsInLeagueCount: number;
+  playerLanguageLabel: string;
+  clubLanguageLabel: string;
+  languageCompatibility: "same" | "close" | "barrier";
+  managerConnection: "compatriot" | "same_language" | "none";
+  managerName?: string;
+  managerNationalityLabel?: string;
+}
+
 export interface PlayerInterestEvaluation {
   interestScore: number; // 0 a 100
   feasibility: "impossible" | "hard" | "open" | "very_interested";
@@ -376,6 +388,7 @@ export interface PlayerInterestEvaluation {
   expectedRole: SquadRole;
   loyaltyPenaltyApplied?: boolean;
   rivalryPenaltyApplied?: boolean;
+  culturalProfile?: CulturalProfile;
 }
 
 export interface ClubValuationEvaluation {

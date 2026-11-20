@@ -38,6 +38,7 @@ interface PlayerProfileModalProps {
   userSquadSize: number;
   userClub?: Club;
   sellerClub?: Club;
+  allPlayers?: Player[];
   windowStatus?: TransferWindowStatus;
   isShortlisted?: boolean;
   onToggleShortlist?: (playerId: number) => void;
@@ -60,6 +61,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   userSquadSize,
   userClub,
   sellerClub,
+  allPlayers,
   windowStatus,
   isShortlisted = false,
   onToggleShortlist,
@@ -87,7 +89,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   const shirtAffinity = evaluateShirtNumberAffinity(player);
 
   const playerInterest = userClub
-    ? evaluatePlayerInterest(userClub, sellerClub, player)
+    ? evaluatePlayerInterest(userClub, sellerClub, player, allPlayers)
     : null;
   const rivalryInfo = userClub ? areRivals(userClub, sellerClub) : { isRival: false };
 
@@ -512,6 +514,33 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                       {rivalryInfo.isRival && (
                         <div className="text-[11px] font-bold text-rose-400">
                           🔥 Rivalidade Histórica ({rivalryInfo.reason})
+                        </div>
+                      )}
+
+                      {playerInterest.culturalProfile && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                          <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300">
+                            🗣️ {playerInterest.culturalProfile.playerLanguageLabel}
+                          </span>
+                          {playerInterest.culturalProfile.languageCompatibility === "same" ? (
+                            <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-500/30">
+                              ✓ Mesmo Idioma
+                            </span>
+                          ) : playerInterest.culturalProfile.languageCompatibility === "close" ? (
+                            <span className="rounded bg-sky-500/20 px-2 py-0.5 font-bold text-sky-300 border border-sky-500/30">
+                              Afinidade Latina
+                            </span>
+                          ) : null}
+                          {playerInterest.culturalProfile.compatriotsInSquadCount > 0 && (
+                            <span className="rounded bg-sky-500/20 px-2 py-0.5 font-bold text-sky-300 border border-sky-500/30">
+                              👥 {playerInterest.culturalProfile.compatriotsInSquadCount} compatriota(s) no elenco
+                            </span>
+                          )}
+                          {playerInterest.culturalProfile.managerConnection === "compatriot" && (
+                            <span className="rounded bg-indigo-500/20 px-2 py-0.5 font-bold text-indigo-300 border border-indigo-500/30">
+                              ★ Treinador Compatriota
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

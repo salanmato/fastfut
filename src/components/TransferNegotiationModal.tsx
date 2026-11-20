@@ -14,6 +14,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Building,
+  Globe,
 } from "lucide-react";
 import type { Club, Player, SquadRole } from "../types/game";
 import {
@@ -31,6 +32,7 @@ interface TransferNegotiationModalProps {
   userClub: Club;
   sellerClub: Club | null | undefined;
   userBudgetEur: number;
+  allPlayers?: Player[];
   onClose: () => void;
   onCompleteTransfer: (
     player: Player,
@@ -46,6 +48,7 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
   userClub,
   sellerClub,
   userBudgetEur,
+  allPlayers = [],
   onClose,
   onCompleteTransfer,
 }) => {
@@ -53,7 +56,7 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
 
   // Initial evaluations
   const clubValuation = evaluateClubValuation(sellerClub, userClub, player);
-  const playerInterest = evaluatePlayerInterest(userClub, sellerClub, player);
+  const playerInterest = evaluatePlayerInterest(userClub, sellerClub, player, allPlayers);
   const userPrestige = calculateClubPrestige(userClub);
   const sellerPrestige = sellerClub ? calculateClubPrestige(sellerClub) : 40;
 
@@ -604,6 +607,90 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
                 <p className="text-xs text-slate-300 leading-relaxed">
                   {playerInterest.summary}
                 </p>
+
+                {/* Cultural, Language & Locker Room Profile */}
+                {playerInterest.culturalProfile && (
+                  <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-200">
+                        <Globe className="h-4 w-4 text-sky-400" />
+                        <span>Ambientação & Cultura do Vestiário</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        Nacionalidade: <strong className="text-white">{player.nationality}</strong>
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2.5 sm:grid-cols-3 text-xs">
+                      {/* Idioma */}
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 space-y-1">
+                        <div className="text-[10px] font-bold uppercase text-slate-500">
+                          Idioma & Comunicação
+                        </div>
+                        <div className="flex items-center gap-1 font-bold text-white text-xs">
+                          <span>{playerInterest.culturalProfile.playerLanguageLabel}</span>
+                          <span className="text-slate-500">➜</span>
+                          <span>{playerInterest.culturalProfile.clubLanguageLabel}</span>
+                        </div>
+                        <div>
+                          {playerInterest.culturalProfile.languageCompatibility === "same" ? (
+                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300 border border-emerald-500/30">
+                              ✓ Mesmo Idioma
+                            </span>
+                          ) : playerInterest.culturalProfile.languageCompatibility === "close" ? (
+                            <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-300 border border-sky-500/30">
+                              Afinidade Latina
+                            </span>
+                          ) : (
+                            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-300 border border-amber-500/30">
+                              ⚠️ Barreira de Idioma
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Compatriotas */}
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 space-y-1">
+                        <div className="text-[10px] font-bold uppercase text-slate-500">
+                          Compatriotas no Elenco
+                        </div>
+                        <div className="text-xs font-black text-white">
+                          {playerInterest.culturalProfile.compatriotsInSquadCount} atleta(s) no elenco
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate">
+                          {playerInterest.culturalProfile.compatriotNames.length > 0
+                            ? playerInterest.culturalProfile.compatriotNames.join(", ")
+                            : "Nenhum no vestiário atual"}
+                        </div>
+                      </div>
+
+                      {/* Treinador */}
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 space-y-1">
+                        <div className="text-[10px] font-bold uppercase text-slate-500">
+                          Comissão Técnica
+                        </div>
+                        <div className="text-xs font-bold text-white truncate">
+                          {userClub.manager}
+                        </div>
+                        <div>
+                          {playerInterest.culturalProfile.managerConnection === "compatriot" ? (
+                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300 border border-emerald-500/30">
+                              ★ Treinador Compatriota
+                            </span>
+                          ) : playerInterest.culturalProfile.managerConnection === "same_language" ? (
+                            <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-300 border border-sky-500/30">
+                              Mesmo Idioma
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">
+                              {userClub.managerNationality || "Internacional"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Positive & Negative Factors list */}
                 <div className="grid gap-3 pt-2 sm:grid-cols-2">

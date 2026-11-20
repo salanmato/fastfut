@@ -1889,6 +1889,7 @@ export const App: React.FC = () => {
         }
         userBudgetEur={userClub.transferBudgetEur}
         userSquadSize={userSquad.length}
+        allPlayers={save.players}
         windowStatus={windowStatus}
         isShortlisted={
           inspectedPlayer ? (save.shortlistIds ?? []).includes(inspectedPlayer.id) : false
@@ -1919,6 +1920,7 @@ export const App: React.FC = () => {
               : undefined
           }
           userBudgetEur={userClub.transferBudgetEur}
+          allPlayers={save.players}
           onClose={() => setNegotiatingPlayer(null)}
           onCompleteTransfer={handleCompleteTransfer}
         />

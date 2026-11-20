@@ -1,5 +1,6 @@
 import type {
   Club,
+  CulturalProfile,
   NewsItem,
   Player,
   PlayerInterestEvaluation,
@@ -131,12 +132,162 @@ export function areRivals(
 }
 
 /**
- * Evaluates a player's genuine interest and feasibility of joining a prospective club
+ * Normalizes nationalities, demonyms and country names to canonical Portuguese keys
+ */
+export function normalizeNationality(nat?: string | null): string {
+  if (!nat) return "Desconhecido";
+  const s = nat.trim().toLowerCase();
+
+  if (s.includes("brazil") || s.includes("brasil") || s.includes("brazilian")) return "Brasil";
+  if (s.includes("portugal") || s.includes("portuguese")) return "Portugal";
+  if (s.includes("spain") || s.includes("espanha") || s.includes("spanish")) return "Espanha";
+  if (s.includes("argentina") || s.includes("argentine")) return "Argentina";
+  if (s.includes("uruguay") || s.includes("uruguai") || s.includes("uruguayan")) return "Uruguai";
+  if (s.includes("colombia") || s.includes("colômbia") || s.includes("colombian")) return "Colômbia";
+  if (s.includes("chile") || s.includes("chilean")) return "Chile";
+  if (s.includes("paraguay") || s.includes("paraguai") || s.includes("paraguayan")) return "Paraguai";
+  if (s.includes("peru") || s.includes("peruvian")) return "Peru";
+  if (s.includes("ecuador") || s.includes("equador") || s.includes("ecuadorian")) return "Equador";
+  if (s.includes("venezuela") || s.includes("venezuelan")) return "Venezuela";
+  if (s.includes("bolivia") || s.includes("bolívia") || s.includes("bolivian")) return "Bolívia";
+  if (s.includes("mexico") || s.includes("méxico") || s.includes("mexican")) return "México";
+
+  if (s.includes("england") || s.includes("inglaterra") || s.includes("english")) return "Inglaterra";
+  if (s.includes("scotland") || s.includes("escócia") || s.includes("scottish")) return "Escócia";
+  if (s.includes("wales") || s.includes("país de gales") || s.includes("welsh")) return "País de Gales";
+  if (s.includes("ireland") || s.includes("irlanda") || s.includes("irish")) return "Irlanda";
+  if (s.includes("united states") || s.includes("estados unidos") || s.includes("american") || s === "usa") return "Estados Unidos";
+  if (s.includes("canada") || s.includes("canadá") || s.includes("canadian")) return "Canadá";
+  if (s.includes("australia") || s.includes("austrália") || s.includes("australian")) return "Austrália";
+
+  if (s.includes("france") || s.includes("frança") || s.includes("french")) return "França";
+  if (s.includes("germany") || s.includes("alemanha") || s.includes("german")) return "Alemanha";
+  if (s.includes("italy") || s.includes("itália") || s.includes("italian")) return "Itália";
+  if (s.includes("netherlands") || s.includes("holanda") || s.includes("dutch")) return "Holanda";
+  if (s.includes("belgium") || s.includes("bélgica") || s.includes("belgian")) return "Bélgica";
+  if (s.includes("austria") || s.includes("áustria") || s.includes("austrian")) return "Áustria";
+  if (s.includes("switzerland") || s.includes("suíça") || s.includes("swiss")) return "Suíça";
+  if (s.includes("saudi") || s.includes("arábia") || s.includes("saudi arabia")) return "Arábia Saudita";
+  if (s.includes("japan") || s.includes("japão") || s.includes("japanese")) return "Japão";
+  if (s.includes("korea") || s.includes("coreia")) return "Coreia do Sul";
+  if (s.includes("croatia") || s.includes("croácia") || s.includes("croatian")) return "Croácia";
+  if (s.includes("serbia") || s.includes("sérvia") || s.includes("serbian")) return "Sérvia";
+  if (s.includes("poland") || s.includes("polônia") || s.includes("polish")) return "Polônia";
+  if (s.includes("denmark") || s.includes("dinamarca") || s.includes("danish")) return "Dinamarca";
+  if (s.includes("sweden") || s.includes("suécia") || s.includes("swedish")) return "Suécia";
+  if (s.includes("norway") || s.includes("noruega") || s.includes("norwegian")) return "Noruega";
+  if (s.includes("morocco") || s.includes("marrocos") || s.includes("moroccan")) return "Marrocos";
+  if (s.includes("nigeria") || s.includes("nigéria") || s.includes("nigerian")) return "Nigéria";
+  if (s.includes("senegal") || s.includes("senegalese")) return "Senegal";
+  if (s.includes("ivory coast") || s.includes("costa do marfim")) return "Costa do Marfim";
+  if (s.includes("ghana") || s.includes("gana")) return "Gana";
+  if (s.includes("turkey") || s.includes("türkiye") || s.includes("turquia")) return "Turquia";
+
+  return nat.trim();
+}
+
+export interface LanguageInfo {
+  language: string;
+  label: string;
+  group: "romance" | "germanic" | "semitic" | "other";
+}
+
+/**
+ * Returns primary language and language family group
+ */
+export function getPrimaryLanguage(countryOrNat?: string | null): LanguageInfo {
+  const norm = normalizeNationality(countryOrNat).toLowerCase();
+
+  // Portuguese
+  if (
+    norm === "brasil" ||
+    norm === "portugal" ||
+    norm.includes("angola") ||
+    norm.includes("cabo verde") ||
+    norm.includes("moçambique")
+  ) {
+    return { language: "portuguese", label: "Português", group: "romance" };
+  }
+
+  // Spanish
+  if (
+    norm === "espanha" ||
+    norm === "argentina" ||
+    norm === "uruguai" ||
+    norm === "colômbia" ||
+    norm === "chile" ||
+    norm === "paraguai" ||
+    norm === "peru" ||
+    norm === "equador" ||
+    norm === "venezuela" ||
+    norm === "bolívia" ||
+    norm === "méxico" ||
+    norm.includes("costa rica")
+  ) {
+    return { language: "spanish", label: "Espanhol", group: "romance" };
+  }
+
+  // Italian
+  if (norm === "itália") {
+    return { language: "italian", label: "Italiano", group: "romance" };
+  }
+
+  // French
+  if (
+    norm === "frança" ||
+    norm === "senegal" ||
+    norm === "costa do marfim" ||
+    norm === "camarões" ||
+    norm === "mali" ||
+    norm === "haiti"
+  ) {
+    return { language: "french", label: "Francês", group: "romance" };
+  }
+
+  // English
+  if (
+    norm === "inglaterra" ||
+    norm === "escócia" ||
+    norm === "país de gales" ||
+    norm === "irlanda" ||
+    norm === "irlanda do norte" ||
+    norm === "estados unidos" ||
+    norm === "canadá" ||
+    norm === "austrália" ||
+    norm === "jamaica" ||
+    norm === "nigéria" ||
+    norm === "gana"
+  ) {
+    return { language: "english", label: "Inglês", group: "germanic" };
+  }
+
+  // German
+  if (norm === "alemanha" || norm === "áustria" || norm === "suíça") {
+    return { language: "german", label: "Alemão", group: "germanic" };
+  }
+
+  // Dutch
+  if (norm === "holanda" || norm === "bélgica" || norm === "suriname") {
+    return { language: "dutch", label: "Holandês", group: "germanic" };
+  }
+
+  // Arabic
+  if (norm === "arábia saudita" || norm === "marrocos" || norm.includes("egito")) {
+    return { language: "arabic", label: "Árabe", group: "semitic" };
+  }
+
+  return { language: "other", label: normalizeNationality(countryOrNat), group: "other" };
+}
+
+/**
+ * Evaluates a player's genuine interest and feasibility of joining a prospective club,
+ * taking into account prestige, homecoming, rivalries, squad role, and cultural/language harmony.
  */
 export function evaluatePlayerInterest(
   buyerClub: Club,
   sellerClub: Club | null | undefined,
-  player: Player
+  player: Player,
+  allPlayers?: Player[]
 ): PlayerInterestEvaluation {
   const buyerPrestige = calculateClubPrestige(buyerClub);
   const sellerPrestige = sellerClub ? calculateClubPrestige(sellerClub) : 40;
@@ -165,11 +316,25 @@ export function evaluatePlayerInterest(
   }
 
   // 2. Nationality & Homecoming / Veteran factor
-  const isSouthAmericanPlayer = ["Brasil", "Brazil", "Argentina", "Uruguai", "Uruguay", "Colômbia", "Colombia"].includes(
-    player.nationality
+  const playerNat = normalizeNationality(player.nationality);
+  const buyerCountry = normalizeNationality(
+    buyerClub.country || (buyerClub.league?.includes("Brasileirão") ? "Brasil" : "Inglaterra")
   );
-  const isBuyerSouthAmerican = buyerClub.country === "Brasil" || (buyerClub.league ?? "").includes("Brasileirão");
-  const isSellerAbroad = sellerClub && sellerClub.country !== "Brasil" && !(sellerClub.league ?? "").includes("Brasileirão");
+  const isSouthAmericanPlayer = [
+    "Brasil",
+    "Argentina",
+    "Uruguai",
+    "Colômbia",
+    "Chile",
+    "Paraguai",
+    "Equador",
+  ].includes(playerNat);
+  const isBuyerSouthAmerican =
+    buyerCountry === "Brasil" || (buyerClub.league ?? "").includes("Brasileirão");
+  const isSellerAbroad =
+    sellerClub &&
+    sellerClub.country !== "Brasil" &&
+    !(sellerClub.league ?? "").includes("Brasileirão");
 
   if (isSouthAmericanPlayer && isBuyerSouthAmerican && isSellerAbroad) {
     if (player.age >= 31) {
@@ -183,14 +348,126 @@ export function evaluatePlayerInterest(
 
   // Young talent wanting big European spotlight
   const isBuyerTopEurope =
-    ["Inglaterra", "Espanha", "Itália", "Alemanha", "França"].includes(buyerClub.country ?? "") &&
+    ["Inglaterra", "Espanha", "Itália", "Alemanha", "França"].includes(buyerCountry) &&
     buyerPrestige >= 80;
   if (isBuyerTopEurope && isBuyerSouthAmerican && player.age <= 23 && player.potential >= 79) {
     score += 30;
     positiveFactors.push("Sonho de disputar a elite das ligas europeias (+30%)");
   }
 
-  // 3. Squad status in current club
+  // 3. Cultural, Language & Locker Room Factors
+  const playerLang = getPrimaryLanguage(player.nationality);
+  const clubLang = getPrimaryLanguage(buyerClub.country || buyerClub.league || "");
+  const managerNat = normalizeNationality(buyerClub.managerNationality || "");
+  const managerLang = getPrimaryLanguage(buyerClub.managerNationality || "");
+
+  // Compatriots in Buyer Squad
+  const squadCompatriots = allPlayers
+    ? allPlayers.filter(
+        (p) =>
+          p.clubId === buyerClub.id &&
+          normalizeNationality(p.nationality) === playerNat &&
+          p.id !== player.id
+      )
+    : [];
+  const compatriotsInSquadCount = squadCompatriots.length;
+  const compatriotNames = squadCompatriots.slice(0, 4).map((p) => p.name);
+
+  // Compatriots in Buyer League
+  const leagueCompatriots = allPlayers
+    ? allPlayers.filter(
+        (p) =>
+          (p.league === buyerClub.league || p.league === buyerClub.division) &&
+          normalizeNationality(p.nationality) === playerNat &&
+          p.id !== player.id
+      )
+    : [];
+  const compatriotsInLeagueCount = leagueCompatriots.length;
+
+  // Language Compatibility
+  let languageCompatibility: "same" | "close" | "barrier" = "barrier";
+  if (playerLang.language === clubLang.language) {
+    languageCompatibility = "same";
+    score += 18;
+    positiveFactors.push(
+      `Mesmo idioma falado (${clubLang.label}): transição cultural suave e sem barreira de comunicação (+18%)`
+    );
+  } else if (playerLang.group === "romance" && clubLang.group === "romance") {
+    languageCompatibility = "close";
+    score += 10;
+    positiveFactors.push(
+      `Afinidade linguística latina (${playerLang.label} ↔ ${clubLang.label}): rápida ambientação no país (+10%)`
+    );
+  } else {
+    languageCompatibility = "barrier";
+    // If going to foreign country with different language and < 2 compatriots
+    if (playerNat !== buyerCountry && compatriotsInSquadCount < 2) {
+      score -= 14;
+      negativeFactors.push(
+        `Barreira de idioma (${playerLang.label} → ${clubLang.label}): preocupação com choque cultural e comunicação técnica (-14%)`
+      );
+    }
+  }
+
+  // Locker room compatriots bonus / penalty
+  if (compatriotsInSquadCount >= 4) {
+    score += 22;
+    positiveFactors.push(
+      `Forte contingente de compatriotas no vestiário (${compatriotsInSquadCount} atletas): acolhimento e apoio diário (+22%)`
+    );
+  } else if (compatriotsInSquadCount >= 2) {
+    score += 14;
+    positiveFactors.push(
+      `Presença de compatriotas no elenco (${compatriotsInSquadCount} atletas): suporte para rápida integração (+14%)`
+    );
+  } else if (compatriotsInSquadCount === 1) {
+    score += 7;
+    positiveFactors.push(
+      `Presença de 1 compatriota no elenco: ponto de apoio importante no vestiário (+7%)`
+    );
+  } else if (playerNat !== buyerCountry && allPlayers && allPlayers.length > 0) {
+    // Zero compatriots in a foreign club
+    score -= 8;
+    negativeFactors.push(
+      `Nenhum compatriota no elenco atual: receio de isolamento social no vestiário (-8%)`
+    );
+  }
+
+  // League compatriots bonus / penalty
+  if (compatriotsInLeagueCount >= 12) {
+    score += 8;
+    positiveFactors.push(
+      `Grande comunidade de compatriotas na ${buyerClub.league ?? "liga"} (${compatriotsInLeagueCount} atletas): liga tradicional para jogadores do seu país (+8%)`
+    );
+  } else if (
+    playerNat !== buyerCountry &&
+    allPlayers &&
+    allPlayers.length > 0 &&
+    compatriotsInLeagueCount <= 2
+  ) {
+    score -= 8;
+    negativeFactors.push(
+      `Escassa presença de compatriotas na ${buyerClub.league ?? "liga"}: adaptação será um desafio solitário (-8%)`
+    );
+  }
+
+  // Manager connection
+  let managerConnection: "compatriot" | "same_language" | "none" = "none";
+  if (buyerClub.managerNationality && managerNat === playerNat && managerNat !== "Desconhecido") {
+    managerConnection = "compatriot";
+    score += 14;
+    positiveFactors.push(
+      `Treinador compatriota (${buyerClub.manager} • ${buyerClub.managerNationality}): sintonia direta com a comissão técnica (+14%)`
+    );
+  } else if (managerLang.language === playerLang.language && managerLang.language !== "other") {
+    managerConnection = "same_language";
+    score += 8;
+    positiveFactors.push(
+      `Treinador fala o mesmo idioma (${managerLang.label}): instruções táticas diretas sem ruído (+8%)`
+    );
+  }
+
+  // 4. Squad status in current club
   if (player.isTransferListed) {
     score += 25;
     positiveFactors.push("Listado para transferência: busca novos ares com urgência (+25%)");
@@ -199,14 +476,14 @@ export function evaluatePlayerInterest(
     negativeFactors.push("Atleta é o grande astro do time atual (-15%)");
   }
 
-  // 4. Rivalry penalty
+  // 5. Rivalry penalty
   const rivalry = areRivals(buyerClub, sellerClub);
   if (rivalry.isRival) {
     score -= 40;
     negativeFactors.push(`Rivalidade Histórica (${rivalry.reason}): forte receio da torcida (-40%)`);
   }
 
-  // 5. Playing time expectations (Role)
+  // 6. Playing time expectations (Role)
   let expectedRole: SquadRole = "rotation";
   const ovrDiffVsBuyer = player.overall - (buyerClub.avgOverall ?? 74);
   if (ovrDiffVsBuyer >= 2) {
@@ -221,16 +498,23 @@ export function evaluatePlayerInterest(
     expectedRole = "rotation";
   }
 
-  // 6. Minimum wage expectation
-  // Higher overall and higher age or moving down prestige requires higher wage
+  // 7. Minimum wage expectation
   let wageMultiplier = 1.15; // standard +15%
   if (prestigeDiff < -10) {
-    wageMultiplier = 1.6; // must compensate with huge money
+    wageMultiplier = 1.55; // must compensate with huge money
   } else if (prestigeDiff >= 15) {
-    wageMultiplier = 1.1; // willing to accept moderate raise
+    wageMultiplier = 1.08; // willing to accept moderate raise
   }
   if (rivalry.isRival) {
     wageMultiplier += 0.4; // hazard bonus
+  }
+
+  // Cultural ease reduces financial demands; cultural barrier increases wage demand
+  if (languageCompatibility === "same" || compatriotsInSquadCount >= 3) {
+    wageMultiplier -= 0.08;
+  }
+  if (languageCompatibility === "barrier" && compatriotsInSquadCount === 0) {
+    wageMultiplier += 0.22;
   }
 
   const minAcceptableWageEur = Math.max(
@@ -258,6 +542,18 @@ export function evaluatePlayerInterest(
     summary = "O jogador está muito entusiasmado com a oportunidade e quer fechar o negócio!";
   }
 
+  const culturalProfile: CulturalProfile = {
+    compatriotsInSquadCount,
+    compatriotNames,
+    compatriotsInLeagueCount,
+    playerLanguageLabel: playerLang.label,
+    clubLanguageLabel: clubLang.label,
+    languageCompatibility,
+    managerConnection,
+    managerName: buyerClub.manager,
+    managerNationalityLabel: buyerClub.managerNationality,
+  };
+
   return {
     interestScore: score,
     feasibility,
@@ -268,6 +564,7 @@ export function evaluatePlayerInterest(
     expectedRole,
     loyaltyPenaltyApplied: false,
     rivalryPenaltyApplied: rivalry.isRival,
+    culturalProfile,
   };
 }
 

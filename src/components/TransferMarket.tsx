@@ -171,7 +171,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
     const isShortlisted = shortlistSet.has(p.id);
     const isLoaned = Boolean(p.loan?.isLoan);
     const sellerClub = clubs.find((c) => c.id === p.clubId);
-    const interest = evaluatePlayerInterest(userClub, sellerClub, p);
+    const interest = evaluatePlayerInterest(userClub, sellerClub, p, players);
     const canAfford = userClub.transferBudgetEur >= p.marketValueEur;
     const canBuyNow = windowStatus.isOpen && !isLoaned;
 
