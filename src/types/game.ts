@@ -175,7 +175,8 @@ export type MatchEventType =
   | "yellow_card"
   | "red_card"
   | "injury"
-  | "substitution";
+  | "substitution"
+  | "offside";
 
 export interface MatchEvent {
   id: string;
@@ -187,6 +188,7 @@ export interface MatchEvent {
   assistPlayerId?: number;
   assistPlayerName?: string;
   text: string;
+  disallowedGoal?: boolean;
 }
 
 export interface MatchTeamStats {
@@ -198,6 +200,7 @@ export interface MatchTeamStats {
   fouls: number;
   yellowCards: number;
   redCards: number;
+  offsides?: number;
 }
 
 export interface MatchInjury {

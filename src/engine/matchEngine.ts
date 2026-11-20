@@ -408,6 +408,7 @@ export function initLiveMatchSession(
       fouls: 0,
       yellowCards: 0,
       redCards: 0,
+      offsides: 0,
     },
     awayStats: {
       possession: 50,
@@ -418,6 +419,7 @@ export function initLiveMatchSession(
       fouls: 0,
       yellowCards: 0,
       redCards: 0,
+      offsides: 0,
     },
     events: [],
     homeActiveIds,
@@ -534,6 +536,65 @@ function maybePerformAiSub(
     candidateOut.name,
     candidateIn.name
   );
+}
+
+
+const WINGER_POSITIONS = ["LW", "RW", "LM", "RM", "LAM", "RAM"];
+
+function avgOf(players: Player[], fn: (p: Player) => number, fallback: number): number {
+  if (players.length === 0) return fallback;
+  return players.reduce((sum, p) => sum + fn(p), 0) / players.length;
+}
+
+/**
+ * Offside risk multiplier (1.0 = league average, ~2 offsides per team per match).
+ * - Direct passing / through balls and attacking mentality raise the risk.
+ * - Fast attackers with weak positioning/reactions get caught more often.
+ * - A high defensive line (High pressing) with good defensive awareness lays offside traps.
+ */
+export function computeOffsideRiskMultiplier(
+  attackers: Player[],
+  defenders: Player[],
+  attTactics: Tactics,
+  defTactics: Tactics
+): number {
+  const forwards = attackers.filter(
+    (p) => p.roleCategory === "ATT" || p.primaryPosition === "CAM" || WINGER_POSITIONS.includes(p.primaryPosition)
+  );
+  const backline = defenders.filter((p) => p.roleCategory === "DEF" || p.roleCategory === "GK");
+
+  let mult = 1;
+  mult += attTactics.passingStyle === "Direct" ? 0.4 : attTactics.passingStyle === "Short" ? -0.2 : 0;
+  mult += attTactics.mentality === "Attacking" ? 0.12 : attTactics.mentality === "Defensive" ? -0.12 : 0;
+
+  // Defensive line height: High press = high line = more traps
+  mult += defTactics.pressing === "High" ? 0.35 : defTactics.pressing === "Low" ? -0.25 : 0;
+  mult += defTactics.mentality === "Attacking" ? 0.1 : defTactics.mentality === "Defensive" ? -0.1 : 0;
+
+  const defAwareness = avgOf(backline, (p) => p.stats.defensiveAwareness, 70);
+  mult += (defAwareness - 70) * 0.012;
+
+  const fwdPace = avgOf(forwards, (p) => p.faceStats.pace, 75);
+  const fwdTiming = avgOf(forwards, (p) => (p.stats.positioning + p.stats.reactions) / 2, 75);
+  mult += (fwdPace - 75) * 0.01;
+  mult -= (fwdTiming - 75) * 0.012;
+
+  return Math.max(0.45, Math.min(2.2, mult));
+}
+
+function pickOffsideOffender(attackers: Player[], session: LiveMatchSession): Player | null {
+  const candidates = attackers.filter((p) => p.roleCategory !== "GK");
+  if (candidates.length === 0) return null;
+  return weightedPick(candidates, (p) => {
+    let role = 0.12;
+    if (p.roleCategory === "ATT") role = WINGER_POSITIONS.includes(p.primaryPosition) ? 2.4 : 3.2;
+    else if (p.primaryPosition === "CAM") role = 1.4;
+    else if (p.roleCategory === "MID") role = 0.6;
+    const pace = 0.6 + p.faceStats.pace / 100;
+    const timing = 1.5 - (p.stats.positioning + p.stats.reactions) / 200;
+    const stam = session.playerStamina[p.id] ?? 100;
+    return role * pace * timing * (0.9 + 0.1 * (stam / 100));
+  });
 }
 
 export function stepLiveMatchMinute(
@@ -894,6 +955,33 @@ export function stepLiveMatchMinute(
     );
 
     if (Math.random() < goalProb) {
+      // VAR / assistant referee: goal can be ruled out for offside
+      const isForward =
+        shooter.roleCategory === "ATT" ||
+        shooter.primaryPosition === "CAM" ||
+        WINGER_POSITIONS.includes(shooter.primaryPosition);
+      const defTacticsForCheck = isHome ? awayTactics : homeTactics;
+      const offsideMult = computeOffsideRiskMultiplier(attTeam, defTeam, attTactics, defTacticsForCheck);
+      const disallowProb = (isForward ? 0.05 : 0.012) * offsideMult;
+      if (Math.random() < disallowProb) {
+        stats.offsides = (stats.offsides ?? 0) + 1;
+        session.playerRatings[shooter.id] = Math.max(
+          4.5,
+          (session.playerRatings[shooter.id] ?? 6.5) - 0.25
+        );
+        session.events.push({
+          id: `offside-goal-${session.fixtureId}-${min}-${shooter.id}-${stats.shots}`,
+          minute: min,
+          type: "offside",
+          clubId,
+          playerId: shooter.id,
+          playerName: shooter.name,
+          disallowedGoal: true,
+          text: `GOL ANULADO! ${shooter.name} (${clubName}) balança a rede, mas a bandeirinha assinala impedimento e o VAR confirma.`,
+        });
+        return;
+      }
+
       if (isHome) session.homeGoals += 1;
       else session.awayGoals += 1;
 
@@ -933,8 +1021,47 @@ export function stepLiveMatchMinute(
     }
   };
 
-  resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
-  resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
+  // Offside flags (independent of shots): ~2 per team per match, driven by tactics & player traits
+  const checkOffside = (
+    isHome: boolean,
+    attTeam: Player[],
+    defTeam: Player[],
+    attTactics: Tactics,
+    defTactics: Tactics,
+    clubName: string
+  ): boolean => {
+    const mult = computeOffsideRiskMultiplier(attTeam, defTeam, attTactics, defTactics);
+    if (Math.random() > 0.0155 * mult) return false;
+    const offender = pickOffsideOffender(attTeam, session);
+    if (!offender) return false;
+
+    const stats = isHome ? session.homeStats : session.awayStats;
+    stats.offsides = (stats.offsides ?? 0) + 1;
+    session.playerRatings[offender.id] = Math.max(
+      4.5,
+      (session.playerRatings[offender.id] ?? 6.5) - 0.08
+    );
+    session.events.push({
+      id: `offside-${session.fixtureId}-${min}-${offender.id}-${stats.offsides}`,
+      minute: min,
+      type: "offside",
+      clubId: isHome ? session.homeClubId : session.awayClubId,
+      playerId: offender.id,
+      playerName: offender.name,
+      text: `Impedimento! ${offender.name} (${clubName}) arranca antes da hora e a bandeirinha levanta a bandeira.`,
+    });
+    return true;
+  };
+
+  const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
+  const awayOffside = checkOffside(false, awayActive, homeActive, awayTactics, homeTactics, awayClub.shortName);
+
+  if (!homeOffside) {
+    resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
+  }
+  if (!awayOffside) {
+    resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
+  }
 
   // Check end of match
   if (min >= session.stoppageEnd) {

@@ -110,7 +110,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const sessionsRef = useRef<LiveMatchSession[]>([]);
   const [, setTick] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [speedMs, setSpeedMs] = useState<number>(280);
+  const [speedMs, setSpeedMs] = useState<number>(1200);
+  const simPauseUntilRef = useRef<number>(0);
+  const halftimeTriggeredRef = useRef<boolean>(false);
   const [subOutId, setSubOutId] = useState<number | null>(null);
   const [tacticalStopReason, setTacticalStopReason] = useState<{
     type: "red_card" | "injury";
@@ -148,10 +150,20 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const allFinished =
     sessionsRef.current.length > 0 && sessionsRef.current.every((s) => s.finished);
 
+  const isHalftime =
+    Boolean(userSession) &&
+    !allFinished &&
+    !isPlaying &&
+    halftimeTriggeredRef.current &&
+    userSession!.minute === 45;
+
   useEffect(() => {
     if (!isPlaying || allFinished) return;
 
     const timer = window.setInterval(() => {
+      // Freeze the clock during goal celebrations / big chances so nothing is skipped
+      if (Date.now() < simPauseUntilRef.current) return;
+
       const uSess = sessionsRef.current.find(
         (s) => s.homeClubId === userClubId || s.awayClubId === userClubId
       );
@@ -173,6 +185,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
           userClubId,
           stadiumByClub[session.homeClubId]
         );
+      }
+
+      // Half-time break for the user's match
+      if (uSess && !uSess.finished && uSess.minute === 45 && !halftimeTriggeredRef.current) {
+        halftimeTriggeredRef.current = true;
+        setIsPlaying(false);
       }
 
       if (uSess && !uSess.finished && uSess.events.length > prevUserEventsLen) {
@@ -350,26 +368,26 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   </>
                 )}
               </button>
-              <button
-                onClick={() => setSpeedMs(280)}
-                className={`rounded-xl px-3 py-2 text-xs font-bold ${
-                  speedMs === 280
-                    ? "bg-emerald-500 text-slate-950"
-                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                }`}
-              >
-                1x
-              </button>
-              <button
-                onClick={() => setSpeedMs(75)}
-                className={`inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold ${
-                  speedMs === 75
-                    ? "bg-emerald-500 text-slate-950"
-                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                }`}
-              >
-                <FastForward className="h-3.5 w-3.5" /> 4x
-              </button>
+              {[
+                { label: "0.5x", ms: 2400 },
+                { label: "1x", ms: 1200 },
+                { label: "2x", ms: 600 },
+                { label: "4x", ms: 300 },
+                { label: "8x", ms: 150 },
+              ].map((opt) => (
+                <button
+                  key={opt.ms}
+                  onClick={() => setSpeedMs(opt.ms)}
+                  title={`${opt.label}: ~${Math.round((opt.ms * 93) / 60000 * 10) / 10} min para os 90 minutos`}
+                  className={`inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold ${
+                    speedMs === opt.ms
+                      ? "bg-emerald-500 text-slate-950"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {opt.ms <= 300 && <FastForward className="h-3.5 w-3.5" />} {opt.label}
+                </button>
+              ))}
               <button
                 onClick={handleSimulateToEnd}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-bold text-amber-300 hover:bg-slate-700"
@@ -387,6 +405,25 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
           )}
         </div>
       </div>
+
+      {isHalftime && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-3.5">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wider text-amber-300">
+              Intervalo • {userSession.homeGoals} x {userSession.awayGoals}
+            </div>
+            <div className="text-xs text-slate-300">
+              Hora de ajustar a formação, trocar jogadores e corrigir o rumo do jogo antes do 2º tempo.
+            </div>
+          </div>
+          <button
+            onClick={() => setIsPlaying(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-5 py-2 text-xs font-black text-slate-950 hover:bg-amber-300"
+          >
+            <Play className="h-3.5 w-3.5 fill-current" /> Iniciar 2º Tempo
+          </button>
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="grid gap-5 lg:grid-cols-12">
@@ -414,9 +451,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 >
                   {userSession.finished
                     ? "FIM DE JOGO"
-                    : userSession.minute > 90
-                    ? `90+${userSession.minute - 90}'`
-                    : `${userSession.minute}'`}
+                    : isHalftime
+                    ? "INTERVALO"
+                    : `${userSession.minute <= 45 ? "1º TEMPO" : "2º TEMPO"} • ${
+                        userSession.minute > 90
+                          ? `90+${userSession.minute - 90}'`
+                          : `${userSession.minute}'`
+                      }`}
                 </span>
               </div>
 
@@ -503,6 +544,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             userClubId={userClubId}
             userKitVariant={userKitVariant}
             isPlaying={isPlaying}
+            speedMs={speedMs}
+            simPauseRef={simPauseUntilRef}
             subOutId={subOutId}
             onSelectSubOut={(pid) => setSubOutId((prev) => (prev === pid ? null : pid))}
           />
@@ -534,6 +577,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   `${userSession.awayStats.shots} (${userSession.awayStats.shotsOnTarget})`,
                   userSession.homeStats.shots,
                   userSession.awayStats.shots,
+                ],
+                [
+                  "Impedimentos",
+                  `${userSession.homeStats.offsides ?? 0}`,
+                  `${userSession.awayStats.offsides ?? 0}`,
+                  userSession.homeStats.offsides ?? 0,
+                  userSession.awayStats.offsides ?? 0,
                 ],
                 [
                   "Escanteios / Faltas",
@@ -588,6 +638,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
                       : ev.type === "substitution"
                       ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
+                      : ev.type === "offside"
+                      ? "border-orange-500/40 bg-orange-500/10 text-orange-200"
                       : "border-slate-800 bg-slate-950/60 text-slate-300";
 
                   return (

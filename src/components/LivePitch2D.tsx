@@ -21,8 +21,36 @@ interface LivePitch2DProps {
   userClubId: number;
   userKitVariant?: "home" | "away";
   isPlaying: boolean;
+  speedMs?: number;
+  simPauseRef?: React.MutableRefObject<number>;
   subOutId: number | null;
   onSelectSubOut: (playerId: number) => void;
+}
+
+const ACTION_EVERY = 4; // pitch ticks per ball action (pass / dribble / turnover)
+
+interface OffsideMark {
+  lineY: number;
+  offenderId: number;
+  attackingHome: boolean;
+  disallowedGoal: boolean;
+}
+
+function computeOffsideLineY(
+  defIds: number[],
+  coords: Record<number, Coord>,
+  defendingIsHome: boolean
+): number | null {
+  const ys = defIds
+    .map((id) => coords[id]?.y)
+    .filter((y): y is number => typeof y === "number");
+  if (ys.length < 2) return null;
+  if (defendingIsHome) {
+    ys.sort((a, b) => b - a);
+    return Math.max(ys[1], 50);
+  }
+  ys.sort((a, b) => a - b);
+  return Math.min(ys[1], 50);
 }
 
 type PlayPhase = "build_up" | "progression" | "final_third" | "counter";
@@ -57,7 +85,7 @@ const PLAY_PHASE_LABELS: Record<PlayPhase, string> = {
 
 interface EventBanner {
   text: string;
-  tone: "goal" | "save" | "chance" | "card";
+  tone: "goal" | "save" | "chance" | "card" | "offside";
   minute?: number;
   clubName?: string;
   clubColor?: string;
@@ -528,9 +556,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   userClubId,
   userKitVariant = "home",
   isPlaying,
+  speedMs = 1200,
+  simPauseRef,
   subOutId,
   onSelectSubOut,
 }) => {
+  const [showOffsideLine, setShowOffsideLine] = useState(true);
+  const [offsideMark, setOffsideMark] = useState<OffsideMark | null>(null);
   const [showNames, setShowNames] = useState(true);
   const [showRatings, setShowRatings] = useState(true);
   const [showKits, setShowKits] = useState(true);
@@ -666,6 +698,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
   const lastHandledEventIdRef = useRef<string | null>(null);
   const highlightPauseUntilRef = useRef<number>(0);
+  const speedRef = useRef<number>(speedMs);
+  speedRef.current = speedMs;
+  const setHighlightPause = (baseMs: number, minMs = 500) => {
+    const scale = clamp(speedRef.current / 1200, 0.4, 1.4);
+    const until = Date.now() + Math.max(minMs, Math.round(baseMs * scale));
+    highlightPauseUntilRef.current = until;
+    if (simPauseRef) simPauseRef.current = until;
+  };
+  const pitchTickMs = clamp(Math.round((speedMs * 0.7) / ACTION_EVERY), 65, 225);
   const ballPosRef = useRef<Coord>(ballPos);
   const carrierIdRef = useRef<number | null>(carrierId);
   const carrierClubIdRef = useRef<number>(carrierClubId);
@@ -709,7 +750,6 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     lastHandledEventIdRef.current = latest.id;
 
     const isHomeEvent = latest.clubId === homeClub.id;
-    const now = Date.now();
     const curCoords = liveCoordsRef.current;
 
     const choreographBoxAction = (
@@ -814,7 +854,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ? (session.playerRatings[latest.assistPlayerId] ?? 7.1).toFixed(1)
           : undefined,
       });
-      highlightPauseUntilRef.current = now + 2400;
+      setHighlightPause(2400, 1600);
     } else if (latest.type === "save") {
       // On "save", latest.clubId is the keeper's club; opposing side took the shot
       const attackingHome = !isHomeEvent;
@@ -847,7 +887,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         text: `DEFESAÇA! ${latest.playerName} (${latest.minute}')`,
         tone: "save",
       });
-      highlightPauseUntilRef.current = now + 1300;
+      setHighlightPause(1300);
     } else if (latest.type === "chance") {
       const missX = Math.random() < 0.5 ? 35 : 65;
       const missY = isHomeEvent ? 1.5 : 98.5;
@@ -868,7 +908,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         text: `QUASE! ${latest.playerName} (${latest.minute}')`,
         tone: "chance",
       });
-      highlightPauseUntilRef.current = now + 1100;
+      setHighlightPause(1100);
     } else if (latest.type === "yellow_card" || latest.type === "red_card" || latest.type === "injury") {
       setBanner({
         text:
@@ -879,7 +919,74 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             : `AMARELO: ${latest.playerName} (${latest.minute}')`,
         tone: "card",
       });
-      highlightPauseUntilRef.current = now + 1100;
+      setHighlightPause(1100);
+    } else if (latest.type === "offside") {
+      const attackingHome = isHomeEvent;
+      const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
+      const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
+      const lineY = computeOffsideLineY(defIds, curCoords, !attackingHome) ?? 50;
+      const offenderOld = curCoords[latest.playerId] ?? { x: 50, y: 50 };
+      const beyond = 2.2 + Math.random() * 2.8;
+      const offenderCoord: Coord = {
+        x: clamp(offenderOld.x, 12, 88),
+        y: attackingHome ? clamp(lineY - beyond, 8, 47) : clamp(lineY + beyond, 53, 92),
+      };
+
+      // Passer: a midfielder behind the line who plays the through ball
+      const passerId =
+        attIds.find(
+          (id) =>
+            id !== latest.playerId &&
+            playerMap.get(id)?.roleCategory === "MID"
+        ) ?? attIds.find((id) => id !== latest.playerId && playerMap.get(id)?.roleCategory !== "GK");
+      const passerCoord: Coord = passerId
+        ? { ...(curCoords[passerId] ?? { x: 50, y: 50 }) }
+        : { x: 50, y: attackingHome ? 60 : 40 };
+      const updatedCoords = { ...curCoords, [latest.playerId]: offenderCoord };
+      setLiveCoords(updatedCoords);
+
+      setOffsideMark({
+        lineY,
+        offenderId: latest.playerId,
+        attackingHome,
+        disallowedGoal: Boolean(latest.disallowedGoal),
+      });
+      setPlayPhase("final_third");
+      setCarrierId(latest.playerId);
+      setCarrierClubId(latest.clubId);
+      setTrail({
+        x1: passerCoord.x,
+        y1: passerCoord.y,
+        x2: offenderCoord.x,
+        y2: offenderCoord.y,
+        kind: "pass",
+      });
+      setBallPos(offenderCoord);
+      setBanner({
+        text: latest.disallowedGoal
+          ? `GOL ANULADO! Impedimento de ${latest.playerName} (${latest.minute}')`
+          : `IMPEDIMENTO! ${latest.playerName} (${latest.minute}')`,
+        tone: "offside",
+      });
+      setHighlightPause(latest.disallowedGoal ? 2400 : 1700, 1100);
+
+      // After the whistle: free kick for the defending side, taken by their best-placed defender/keeper
+      const freeKickDelay = Math.max(900, Math.round((latest.disallowedGoal ? 2400 : 1700) * clamp(speedRef.current / 1200, 0.4, 1.4)));
+      window.setTimeout(() => {
+        const defendingHome = !attackingHome;
+        const takerId =
+          defIds.find((id) => playerMap.get(id)?.roleCategory === "DEF") ??
+          defIds.find((id) => playerMap.get(id)?.roleCategory === "GK") ??
+          null;
+        if (takerId !== null) {
+          const takerCoord = liveCoordsRef.current[takerId] ?? { x: 50, y: defendingHome ? 78 : 22 };
+          setCarrierId(takerId);
+          setCarrierClubId(defendingHome ? homeClub.id : awayClub.id);
+          setBallPos(takerCoord);
+          setPlayPhase("build_up");
+          setTrail(null);
+        }
+      }, freeKickDelay);
     }
   }, [session.events.length, homeClub.id, awayClub.id, playerMap]);
 
@@ -894,6 +1001,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     return () => window.clearTimeout(t);
   }, [banner]);
 
+  // Clear offside overlay after a short while
+  useEffect(() => {
+    if (!offsideMark) return;
+    const t = window.setTimeout(() => setOffsideMark(null), offsideMark.disallowedGoal ? 3000 : 2200);
+    return () => window.clearTimeout(t);
+  }, [offsideMark]);
+
   // Sub-tick continuous tactical movement, active runs, dribbling & progressive passing (220ms)
   useEffect(() => {
     if (!isPlaying || session.finished) return;
@@ -903,6 +1017,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       tickCountRef.current += 1;
       const tick = tickCountRef.current;
+      const doAction = tick % ACTION_EVERY === 0;
       const cur = latestSimRef.current;
       const curCoords = { ...liveCoordsRef.current };
 
@@ -938,7 +1053,19 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       let nextBallPos: Coord = { ...ballPosRef.current };
       let nextPhase: PlayPhase = playPhaseRef.current;
 
-      if (keepSameTeam && currentCarrierId !== null) {
+      if (!doAction) {
+        // Between ball actions the carrier keeps possession, drifting slowly toward goal
+        if (
+          currentCarrierId !== null &&
+          cur.playerMap.get(currentCarrierId)?.roleCategory !== "GK"
+        ) {
+          const driftDir = prevIsHome ? -1 : 1;
+          nextBallPos = {
+            x: clamp(nextBallPos.x + (50 - nextBallPos.x) * 0.02, 8, 92),
+            y: clamp(nextBallPos.y + driftDir * 0.55, 6, 94),
+          };
+        }
+      } else if (keepSameTeam && currentCarrierId !== null) {
         const carrierPlayer = cur.playerMap.get(currentCarrierId);
         const progressNorm = prevIsHome
           ? clamp((92 - nextBallPos.y) / 84, 0, 1)
@@ -1034,7 +1161,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ? (92 - nextBallPos.y) / 84
           : (nextBallPos.y - 8) / 84;
         if (newProgress < 0.58) {
-          counterUntilTickRef.current = tick + 6;
+          counterUntilTickRef.current = tick + 6 * ACTION_EVERY;
         }
       }
 
@@ -1074,7 +1201,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const runnerId = eligible[Math.floor(Math.random() * eligible.length)];
           const slotIdx = slotIndexRef.current.get(runnerId) ?? 5;
           const slot = attackSlots[Math.min(slotIdx, attackSlots.length - 1)];
-          const duration = 3 + Math.floor(Math.random() * 4);
+          const duration = Math.round((3 + Math.floor(Math.random() * 4)) * ACTION_EVERY * 0.6);
           const runnerCoord = curCoords[runnerId] ?? { x: 50, y: 50 };
 
           let runType: RunType = "support";
@@ -1148,8 +1275,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const stam = cur.session.playerStamina[id] ?? player?.stamina ?? 85;
           const counterMult = nextPhase === "counter" ? 1.2 : 1.0;
           const activeRunBonus = activeRunsRef.current.has(id) ? 1.25 : 1.0;
+          const tickScale =
+            (pitchTickMs / 220) * 0.62 * clamp(Math.sqrt(1200 / speedRef.current), 0.7, 2.6);
           const maxStep =
-            (3.4 + (pace / 100) * 2.2) * (0.72 + 0.28 * (stam / 100)) * counterMult * activeRunBonus;
+            (3.4 + (pace / 100) * 2.2) *
+            (0.72 + 0.28 * (stam / 100)) *
+            counterMult *
+            activeRunBonus *
+            tickScale;
 
           const dx = target.x - prev.x;
           const dy = target.y - prev.y;
@@ -1176,10 +1309,10 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       setCarrierClubId(nextClubId);
       setPlayPhase(nextPhase);
       setLiveCoords(nextCoords);
-    }, 220);
+    }, pitchTickMs);
 
     return () => window.clearInterval(timer);
-  }, [isPlaying, session.finished]);
+  }, [isPlaying, session.finished, pitchTickMs]);
 
   const homeVisuals = getClubVisuals(homeClub);
   const awayVisuals = getClubVisuals(awayClub);
@@ -1206,6 +1339,18 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const awayTextColor = isLightColor(awayKitColors.primary) ? "#0f172a" : "#ffffff";
   const carrierClub = carrierClubId === homeClub.id ? homeClub : awayClub;
   const carrierPlayer = carrierId ? playerMap.get(carrierId) : undefined;
+
+  // Live offside line: shown for the defending side when the ball is in the attacker's half
+  const defendingIsHome = carrierClubId !== homeClub.id;
+  const attackerInOppHalf = defendingIsHome ? ballPos.y < 58 : ballPos.y > 42;
+  const liveOffsideLineY =
+    showOffsideLine && attackerInOppHalf
+      ? computeOffsideLineY(
+          defendingIsHome ? session.homeActiveIds : session.awayActiveIds,
+          liveCoords,
+          defendingIsHome
+        )
+      : null;
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
@@ -1262,6 +1407,17 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
         <div className="flex items-center gap-1.5">
           <button
+            onClick={() => setShowOffsideLine((v) => !v)}
+            title="Mostra a linha do penúltimo defensor (referência para impedimento)"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+              showOffsideLine
+                ? "border-orange-500/40 bg-orange-500/15 text-orange-300"
+                : "border-slate-700 bg-slate-800 text-slate-400"
+            }`}
+          >
+            🚩 Impedimento
+          </button>
+          <button
             onClick={() => setShowKits((v) => !v)}
             className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
               showKits
@@ -1296,146 +1452,107 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       {/* Vertical 2D Pitch */}
       <div
-        className="relative aspect-[3/4] w-full max-w-xl mx-auto overflow-hidden rounded-xl border-2 border-emerald-800 select-none"
+        className="relative aspect-[3/4] w-full max-w-2xl mx-auto overflow-hidden rounded-xl border-2 border-emerald-800 select-none shadow-[inset_0_0_60px_rgba(0,0,0,0.35)]"
         style={{
           backgroundImage:
             "repeating-linear-gradient(180deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",
         }}
       >
-        {/* SVG Field Lines & Ball Trail */}
+        {/* SVG Field Lines, Offside Line & Ball Trail */}
         <svg
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           className="pointer-events-none absolute inset-0 h-full w-full"
         >
-          {/* Outer boundary */}
-          <rect
-            x="4"
-            y="3"
-            width="92"
-            height="94"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          {/* Halfway line & center circle */}
-          <line
-            x1="4"
-            y1="50"
-            x2="96"
-            y2="50"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="11"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <circle cx="50" cy="50" r="0.8" fill="rgba(255,255,255,0.45)" />
+          {/* Real-world proportions (105x68m) with non-scaling strokes so circles stay round */}
+          <g fill="none" stroke="rgba(255,255,255,0.42)" strokeWidth={1.4} vectorEffect="non-scaling-stroke">
+            <rect x="4" y="3" width="92" height="94" vectorEffect="non-scaling-stroke" />
+            <line x1="4" y1="50" x2="96" y2="50" vectorEffect="non-scaling-stroke" />
+            <ellipse cx="50" cy="50" rx="12.4" ry="8.4" vectorEffect="non-scaling-stroke" />
 
-          {/* Top Penalty Box & Goal Box (Away side defending top) */}
+            {/* Top: penalty area, goal area, arc */}
+            <rect x="22.8" y="3" width="54.4" height="14.8" vectorEffect="non-scaling-stroke" />
+            <rect x="37.6" y="3" width="24.8" height="4.9" vectorEffect="non-scaling-stroke" />
+            <path d="M 40.17 17.8 A 12.4 8.2 0 0 0 59.83 17.8" vectorEffect="non-scaling-stroke" />
+
+            {/* Bottom: penalty area, goal area, arc */}
+            <rect x="22.8" y="82.2" width="54.4" height="14.8" vectorEffect="non-scaling-stroke" />
+            <rect x="37.6" y="92.1" width="24.8" height="4.9" vectorEffect="non-scaling-stroke" />
+            <path d="M 40.17 82.2 A 12.4 8.2 0 0 1 59.83 82.2" vectorEffect="non-scaling-stroke" />
+
+            {/* Corner arcs */}
+            <path d="M 4 3.9 A 1.35 0.9 0 0 0 5.35 3" vectorEffect="non-scaling-stroke" />
+            <path d="M 94.65 3 A 1.35 0.9 0 0 0 96 3.9" vectorEffect="non-scaling-stroke" />
+            <path d="M 4 96.1 A 1.35 0.9 0 0 1 5.35 97" vectorEffect="non-scaling-stroke" />
+            <path d="M 94.65 97 A 1.35 0.9 0 0 1 96 96.1" vectorEffect="non-scaling-stroke" />
+          </g>
+
+          {/* Center mark & penalty spots */}
+          <g fill="rgba(255,255,255,0.6)">
+            <ellipse cx="50" cy="50" rx="0.8" ry="0.6" />
+            <ellipse cx="50" cy="12.85" rx="0.6" ry="0.45" />
+            <ellipse cx="50" cy="87.15" rx="0.6" ry="0.45" />
+          </g>
+
+          {/* Goals */}
           <rect
-            x="22"
-            y="3"
-            width="56"
-            height="15"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <rect
-            x="36"
-            y="3"
-            width="28"
-            height="5.5"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <circle cx="50" cy="11.5" r="0.6" fill="rgba(255,255,255,0.45)" />
-          <path
-            d="M 40 18 A 9 9 0 0 0 60 18"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          {/* Top Goal Net */}
-          <rect
-            x="42"
+            x="45.05"
             y="0.6"
-            width="16"
+            width="9.9"
             height="2.4"
-            fill="rgba(255,255,255,0.12)"
-            stroke="rgba(255,255,255,0.65)"
-            strokeWidth="0.5"
-          />
-
-          {/* Bottom Penalty Box & Goal Box (Home side defending bottom) */}
-          <rect
-            x="22"
-            y="82"
-            width="56"
-            height="15"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
+            fill="rgba(255,255,255,0.14)"
+            stroke="rgba(255,255,255,0.75)"
+            strokeWidth={1.4}
+            vectorEffect="non-scaling-stroke"
           />
           <rect
-            x="36"
-            y="91.5"
-            width="28"
-            height="5.5"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <circle cx="50" cy="88.5" r="0.6" fill="rgba(255,255,255,0.45)" />
-          <path
-            d="M 40 82 A 9 9 0 0 1 60 82"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          {/* Bottom Goal Net */}
-          <rect
-            x="42"
+            x="45.05"
             y="97"
-            width="16"
+            width="9.9"
             height="2.4"
-            fill="rgba(255,255,255,0.12)"
-            stroke="rgba(255,255,255,0.65)"
-            strokeWidth="0.5"
+            fill="rgba(255,255,255,0.14)"
+            stroke="rgba(255,255,255,0.75)"
+            strokeWidth={1.4}
+            vectorEffect="non-scaling-stroke"
           />
 
-          {/* Corner Arcs */}
-          <path
-            d="M 4 5 A 2 2 0 0 0 6 3"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <path
-            d="M 94 3 A 2 2 0 0 0 96 5"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <path
-            d="M 4 95 A 2 2 0 0 0 6 97"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
-          <path
-            d="M 94 97 A 2 2 0 0 0 96 95"
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth="0.5"
-          />
+          {/* Live offside line (second-last defender of the defending team) */}
+          {!session.finished && !offsideMark && liveOffsideLineY !== null && (
+            <line
+              x1="4"
+              y1={liveOffsideLineY}
+              x2="96"
+              y2={liveOffsideLineY}
+              stroke="rgba(251,191,36,0.55)"
+              strokeWidth={1.4}
+              strokeDasharray="6 5"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+
+          {/* Offside call highlight */}
+          {offsideMark && (
+            <>
+              <rect
+                x="4"
+                y={offsideMark.attackingHome ? 3 : offsideMark.lineY}
+                width="92"
+                height={
+                  offsideMark.attackingHome ? offsideMark.lineY - 3 : 97 - offsideMark.lineY
+                }
+                fill="rgba(249,115,22,0.10)"
+              />
+              <line
+                x1="4"
+                y1={offsideMark.lineY}
+                x2="96"
+                y2={offsideMark.lineY}
+                stroke="#f97316"
+                strokeWidth={2.4}
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
+          )}
 
           {/* Pass / Shot Trajectory */}
           {!session.finished && trail && (
@@ -1449,13 +1566,36 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   ? "#fbbf24"
                   : trail.kind === "shot"
                   ? "#fb7185"
-                  : "rgba(255,255,255,0.45)"
+                  : "rgba(255,255,255,0.55)"
               }
-              strokeWidth={trail.kind === "pass" ? "0.45" : "0.75"}
-              strokeDasharray={trail.kind === "pass" ? "1.2 1.2" : "none"}
+              strokeWidth={trail.kind === "pass" ? 1.6 : 2.6}
+              strokeDasharray={trail.kind === "pass" ? "5 4" : undefined}
+              vectorEffect="non-scaling-stroke"
             />
           )}
         </svg>
+
+        {/* Linesman flag at the touchline when offside is called */}
+        {offsideMark && (
+          <div
+            className="pointer-events-none absolute left-1 z-20 -translate-y-1/2 flex items-center gap-1"
+            style={{ top: `${offsideMark.lineY}%` }}
+          >
+            <span className="text-base leading-none">🚩</span>
+            <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-950">
+              Impedimento
+            </span>
+          </div>
+        )}
+
+        {!offsideMark && liveOffsideLineY !== null && !session.finished && (
+          <div
+            className="pointer-events-none absolute right-1 z-10 -translate-y-1/2 rounded bg-slate-950/70 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300/80"
+            style={{ top: `${liveOffsideLineY}%` }}
+          >
+            Linha de impedimento
+          </div>
+        )}
 
         {/* Event Banner Overlay */}
         {banner &&
@@ -1539,6 +1679,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     ? "bg-sky-500 text-white border-sky-200"
                     : banner.tone === "chance"
                     ? "bg-emerald-500 text-slate-950 border-emerald-200"
+                    : banner.tone === "offside"
+                    ? "bg-orange-500 text-slate-950 border-orange-200"
                     : "bg-rose-500 text-white border-rose-200"
                 }`}
               >
@@ -1575,8 +1717,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               style={{
                 left: `${info.coord.x}%`,
                 top: `${info.coord.y}%`,
+                transitionDuration: `${pitchTickMs}ms`,
               }}
-              className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-200 ease-linear ${
+              className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-[left,top,transform] ease-linear ${
                 isUserPlayer && !session.finished ? "cursor-pointer hover:scale-110" : "cursor-default"
               }`}
             >
@@ -1681,10 +1824,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         {/* Animated Ball */}
         {!session.finished && (
           <div
-            style={{ left: `${ballPos.x}%`, top: `${ballPos.y}%` }}
-            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ease-out"
+            style={{
+              left: `${ballPos.x}%`,
+              top: `${ballPos.y}%`,
+              transitionDuration: `${Math.min(420, pitchTickMs * 2)}ms`,
+            }}
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-[left,top] ease-out"
           >
-            <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950" />
+            <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950 shadow-[0_2px_4px_rgba(0,0,0,0.55)]" />
           </div>
         )}
       </div>
