@@ -11,6 +11,15 @@ import {
   Shirt,
   Send,
   Building,
+  Lock,
+  Flame,
+  Languages,
+  Users,
+  Check,
+  ArrowUp,
+  ArrowDown,
+  ArrowRight,
+  Package,
 } from "lucide-react";
 import type { Club, Player } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
@@ -476,8 +485,9 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
           {(canBuy || canSell) && (
             <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
               {windowClosed && windowStatus && (
-                <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200">
-                  🔒 Mercado Fechado ({windowStatus.detailText})
+                <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200">
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                  <span>Mercado Fechado ({windowStatus.detailText})</span>
                 </div>
               )}
 
@@ -512,19 +522,22 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                       </div>
                       <p className="text-xs text-slate-300">{playerInterest.summary}</p>
                       {rivalryInfo.isRival && (
-                        <div className="text-[11px] font-bold text-rose-400">
-                          🔥 Rivalidade Histórica ({rivalryInfo.reason})
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-400">
+                          <Flame className="h-3.5 w-3.5 shrink-0" />
+                          <span>Rivalidade Histórica ({rivalryInfo.reason})</span>
                         </div>
                       )}
 
                       {playerInterest.culturalProfile && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
-                          <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300">
-                            🗣️ {playerInterest.culturalProfile.playerLanguageLabel}
+                          <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-slate-300">
+                            <Languages className="h-3 w-3 text-slate-400" />
+                            <span>{playerInterest.culturalProfile.playerLanguageLabel}</span>
                           </span>
                           {playerInterest.culturalProfile.languageCompatibility === "same" ? (
-                            <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-500/30">
-                              ✓ Mesmo Idioma
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-500/30">
+                              <Check className="h-2.5 w-2.5" />
+                              <span>Mesmo Idioma</span>
                             </span>
                           ) : playerInterest.culturalProfile.languageCompatibility === "close" ? (
                             <span className="rounded bg-sky-500/20 px-2 py-0.5 font-bold text-sky-300 border border-sky-500/30">
@@ -532,13 +545,15 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                             </span>
                           ) : null}
                           {playerInterest.culturalProfile.compatriotsInSquadCount > 0 && (
-                            <span className="rounded bg-sky-500/20 px-2 py-0.5 font-bold text-sky-300 border border-sky-500/30">
-                              👥 {playerInterest.culturalProfile.compatriotsInSquadCount} compatriota(s) no elenco
+                            <span className="inline-flex items-center gap-1 rounded bg-sky-500/20 px-2 py-0.5 font-bold text-sky-300 border border-sky-500/30">
+                              <Users className="h-3 w-3 text-sky-400" />
+                              <span>{playerInterest.culturalProfile.compatriotsInSquadCount} compatriota(s) no elenco</span>
                             </span>
                           )}
                           {playerInterest.culturalProfile.managerConnection === "compatriot" && (
-                            <span className="rounded bg-indigo-500/20 px-2 py-0.5 font-bold text-indigo-300 border border-indigo-500/30">
-                              ★ Treinador Compatriota
+                            <span className="inline-flex items-center gap-1 rounded bg-indigo-500/20 px-2 py-0.5 font-bold text-indigo-300 border border-indigo-500/30">
+                              <Star className="h-3 w-3 text-indigo-300" />
+                              <span>Treinador Compatriota</span>
                             </span>
                           )}
                         </div>
@@ -567,7 +582,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                           }`}
                         >
                           <Star className={`h-3.5 w-3.5 ${isShortlisted ? "fill-current" : ""}`} />
-                          {isShortlisted ? "Nos Alvos ★" : "Adicionar aos Alvos"}
+                          <span>{isShortlisted ? "Nos Alvos" : "Adicionar aos Alvos"}</span>
                         </button>
                       )}
 
@@ -580,8 +595,18 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                           }}
                           className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 shadow-lg shadow-emerald-500/20"
                         >
-                          <Building className="h-4 w-4" />
-                          <span>{windowClosed ? "🔒 Janela Fechada" : "Negociar Contratação ➜"}</span>
+                          {windowClosed ? (
+                            <>
+                              <Lock className="h-4 w-4" />
+                              <span>Janela Fechada</span>
+                            </>
+                          ) : (
+                            <>
+                              <Building className="h-4 w-4" />
+                              <span>Negociar Contratação</span>
+                              <ArrowRight className="h-4 w-4" />
+                            </>
+                          )}
                         </button>
                       ) : (
                         <button
@@ -590,13 +615,18 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                             onBuyPlayer?.(player);
                             onClose();
                           }}
-                          className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                          className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                         >
-                          {windowClosed
-                            ? "🔒 Janela Fechada"
-                            : canAfford
-                            ? "Fechar Contratação"
-                            : "Orçamento Insuficiente"}
+                          {windowClosed ? (
+                            <>
+                              <Lock className="h-4 w-4" />
+                              <span>Janela Fechada</span>
+                            </>
+                          ) : canAfford ? (
+                            "Fechar Contratação"
+                          ) : (
+                            "Orçamento Insuficiente"
+                          )}
                         </button>
                       )}
                     </div>
@@ -611,12 +641,14 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-slate-300">Situação no Mercado:</span>
                       {player.isTransferListed ? (
-                        <span className="rounded bg-amber-400/20 px-2 py-0.5 text-xs font-black uppercase text-amber-300 border border-amber-400/40">
-                          📦 Na Lista de Transferências
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 px-2 py-0.5 text-xs font-black uppercase text-amber-300 border border-amber-400/40">
+                          <Package className="h-3 w-3" />
+                          <span>Na Lista de Transferências</span>
                         </span>
                       ) : (
-                        <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
-                          🛡️ No Elenco (Não Listado)
+                        <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
+                          <Shield className="h-3 w-3" />
+                          <span>No Elenco (Não Listado)</span>
                         </span>
                       )}
                     </div>
@@ -667,13 +699,18 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                         onSellPlayer?.(player);
                         onClose();
                       }}
-                      className="rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-2 text-xs font-bold text-rose-200 transition hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-2 text-xs font-bold text-rose-200 transition hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                     >
-                      {windowClosed
-                        ? "🔒 Janela Fechada"
-                        : userSquadSize <= 16
-                        ? "Elenco no Mínimo (16)"
-                        : "Venda Rápida (92%)"}
+                      {windowClosed ? (
+                        <>
+                          <Lock className="h-3.5 w-3.5" />
+                          <span>Janela Fechada</span>
+                        </>
+                      ) : userSquadSize <= 16 ? (
+                        "Elenco no Mínimo (16)"
+                      ) : (
+                        "Venda Rápida (92%)"
+                      )}
                     </button>
                   </div>
                 </div>
@@ -685,9 +722,10 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                       onPromoteYouth(player.id);
                       onClose();
                     }}
-                    className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400"
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400"
                   >
-                    ⬆️ Subir ao Elenco Principal
+                    <ArrowUp className="h-4 w-4" />
+                    <span>Subir ao Elenco Principal</span>
                   </button>
                 )}
 
@@ -697,9 +735,10 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                       onDemoteToYouth(player.id);
                       onClose();
                     }}
-                    className="rounded-xl border border-amber-400/50 bg-amber-400/10 px-5 py-2.5 text-sm font-bold text-amber-300 transition hover:bg-amber-400/20"
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-5 py-2.5 text-sm font-bold text-amber-300 transition hover:bg-amber-400/20"
                   >
-                    ⬇️ Mover para a Base Sub-20
+                    <ArrowDown className="h-4 w-4" />
+                    <span>Mover para a Base Sub-20</span>
                   </button>
                 )}
 

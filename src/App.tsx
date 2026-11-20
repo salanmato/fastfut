@@ -163,7 +163,7 @@ function buildWindowMilestoneNews(
         id: `win-summer-dl-${Date.now()}`,
         matchweek,
         category: "transfer",
-        title: "🚨 DEADLINE DAY! Último dia da Janela de Verão",
+        title: "DEADLINE DAY! Último dia da Janela de Verão",
         body: "O mercado fecha hoje (01/09/2026) antes da Rodada 3. Aproveite as últimas horas para reforçar o elenco!",
       });
     } else if (
@@ -175,7 +175,7 @@ function buildWindowMilestoneNews(
         id: `win-summer-close-${Date.now()}`,
         matchweek,
         category: "transfer",
-        title: "🔒 Janela de Verão Encerrada",
+        title: "Janela de Verão Encerrada",
         body: "O mercado de transferências fechou e só reabrirá em 01/01/2027 para a Janela de Inverno.",
       });
     }
@@ -189,7 +189,7 @@ function buildWindowMilestoneNews(
         id: `win-winter-open-${Date.now()}`,
         matchweek,
         category: "transfer",
-        title: "🔓 Janela de Inverno Aberta!",
+        title: "Janela de Inverno Aberta!",
         body: "Chegamos a janeiro! O mercado de transferências está oficialmente aberto até 02/02/2027.",
       });
     }
@@ -199,7 +199,7 @@ function buildWindowMilestoneNews(
         id: `win-winter-dl-${Date.now()}`,
         matchweek,
         category: "transfer",
-        title: "🚨 DEADLINE DAY de Inverno! Último dia de mercado",
+        title: "DEADLINE DAY de Inverno! Último dia de mercado",
         body: "Últimas horas para contratar ou vender antes do fechamento hoje (02/02/2027).",
       });
     } else if (prevDate <= WINTER_WINDOW_END && nextDate > WINTER_WINDOW_END) {
@@ -207,7 +207,7 @@ function buildWindowMilestoneNews(
         id: `win-winter-close-${Date.now()}`,
         matchweek,
         category: "transfer",
-        title: "🔒 Janela de Inverno Encerrada",
+        title: "Janela de Inverno Encerrada",
         body: `O mercado fechou até ${formatDatePtBr(
           POST_SEASON_WINDOW_START
         )} (pós-temporada). Use a Lista de Alvos para observar reforços.`,
@@ -218,7 +218,7 @@ function buildWindowMilestoneNews(
       id: `win-post-open-${Date.now()}`,
       matchweek,
       category: "transfer",
-      title: "🔓 Janela de Pós-Temporada Aberta",
+      title: "Janela de Pós-Temporada Aberta",
       body: "Com o término da Premier League 2026/27, o mercado foi reaberto para reformulação do elenco.",
     });
   }
@@ -722,7 +722,7 @@ export const App: React.FC = () => {
             id: `fac-due-${nextMwValue}`,
             matchweek: nextMwValue,
             category: "cup",
-            title: `🏆 Copa da Inglaterra: ${dueCupRound.name} disponível!`,
+            title: `Copa da Inglaterra: ${dueCupRound.name} disponível!`,
             body: `Os confrontos eliminatórios da ${dueCupRound.shortName} estão prontos. Acesse a aba FA Cup para simular a fase.`,
           },
         ]
@@ -758,7 +758,7 @@ export const App: React.FC = () => {
       if (generatedOffers.length > 0) {
         nextTransferOffers = [...generatedOffers, ...nextTransferOffers];
         transferNews = [...transferNews, ...offerNews];
-        offerToastMsg = `📩 PROPOSTA: ${generatedOffers[0].fromClubName} ofereceu ${formatMoney(
+        offerToastMsg = `PROPOSTA: ${generatedOffers[0].fromClubName} ofereceu ${formatMoney(
           generatedOffers[0].offeredAmountEur
         )} por ${generatedOffers[0].playerName}!`;
       }
@@ -807,11 +807,11 @@ export const App: React.FC = () => {
     const milestoneToast = offerToastMsg
       ? offerToastMsg
       : dueCupRound
-      ? `🏆 FA Cup liberada: ${dueCupRound.name}!`
+      ? `FA Cup liberada: ${dueCupRound.name}!`
       : milestoneNews[0]?.title;
     setToast(
       seasonFinished
-        ? "🏆 Temporada 2026/27 encerrada! Confira o Dashboard de Desempenho."
+        ? "Temporada 2026/27 encerrada! Confira o Dashboard de Desempenho."
         : milestoneToast
         ? milestoneToast
         : userHomeRevenue > 0
@@ -854,7 +854,7 @@ export const App: React.FC = () => {
 
     setToast(
       userBonus > 0
-        ? `🏆 ${activeRound.shortName} concluída! Seu clube avançou e faturou +${formatMoney(
+        ? `${activeRound.shortName} concluída! Seu clube avançou e faturou +${formatMoney(
             userBonus
           )}.`
         : headlines[0]?.title ?? `Copa da Inglaterra (${activeRound.shortName}) concluída!`
@@ -868,7 +868,7 @@ export const App: React.FC = () => {
     setTransitionReport(report);
     setActiveTab("dashboard");
     setToast(
-      `🚀 Bem-vindo à Temporada ${report.newSeason}! Novo orçamento e calendário de 38 rodadas disponíveis.`
+      `Bem-vindo à Temporada ${report.newSeason}! Novo orçamento e calendário de 38 rodadas disponíveis.`
     );
   };
 
@@ -1123,7 +1123,7 @@ export const App: React.FC = () => {
       matchweek: save.currentMatchweek,
       category: "transfer",
       clubId: userClub.id,
-      title: `🤝 REFORÇO DE PESO: ${target.name} assina com o ${userClub.name}!`,
+      title: `REFORÇO DE PESO: ${target.name} assina com o ${userClub.name}!`,
       body: `Negócio fechado em definitivo por ${formatMoney(finalFeeEur)} junto ao ${
         sellerClub?.name || target.clubName || "mercado"
       } (salário: ${formatWage(wageEur)}, papel: ${squadRole})${sellOnPct > 0 ? ` com ${sellOnPct}% de futura venda` : ""}${
@@ -1159,7 +1159,7 @@ export const App: React.FC = () => {
     };
 
     setSave(nextSave);
-    setToast(`🎉 Negócio concluído! ${target.name} é oficialmente do ${userClub.name}!`);
+    setToast(`Negócio concluído! ${target.name} é oficialmente do ${userClub.name}!`);
     setNegotiatingPlayer(null);
   };
 
@@ -1175,8 +1175,8 @@ export const App: React.FC = () => {
     setSave(nextSave);
     setToast(
       nextStatus
-        ? `📦 ${target.name} colocado na Lista de Transferências! Clubes enviarão mais propostas.`
-        : `🛡️ ${target.name} retirado da Lista de Transferências.`
+        ? `${target.name} colocado na Lista de Transferências! Clubes enviarão mais propostas.`
+        : `${target.name} retirado da Lista de Transferências.`
     );
   };
 
@@ -1240,7 +1240,7 @@ export const App: React.FC = () => {
       matchweek: save.currentMatchweek,
       category: "transfer",
       clubId: save.userClubId,
-      title: `🌱 JOIA PROMOVIDA: ${promotedPlayer.name} sobe ao elenco principal!`,
+      title: `JOIA PROMOVIDA: ${promotedPlayer.name} sobe ao elenco principal!`,
       body: `O técnico promoveu o jovem ${promotedPlayer.name} (${promotedPlayer.primaryPosition}, ${promotedPlayer.overall} OVR, ${promotedPlayer.potential}★) das categorias de base para treinar e jogar com os profissionais.`,
     };
     setSave({
@@ -1249,7 +1249,7 @@ export const App: React.FC = () => {
       tacticsByClub: nextTacticsByClub,
       news: [newsItem, ...save.news].slice(0, 50),
     });
-    setToast(`🎉 ${promotedPlayer.name} foi promovido ao Elenco Principal!`);
+    setToast(`${promotedPlayer.name} foi promovido ao Elenco Principal!`);
   };
 
   const handleDemoteToYouth = (playerId: number) => {
@@ -1320,7 +1320,7 @@ export const App: React.FC = () => {
       matchweek: save.currentMatchweek,
       category: "transfer",
       clubId: save.userClubId,
-      title: `✍️ EM DEFINITIVO: ${boughtPlayer?.name} é comprado pelo ${save.clubs.find((c) => c.id === save.userClubId)?.name}!`,
+      title: `EM DEFINITIVO: ${boughtPlayer?.name} é comprado pelo ${save.clubs.find((c) => c.id === save.userClubId)?.name}!`,
       body: message,
     };
     setSave({
@@ -1409,11 +1409,16 @@ export const App: React.FC = () => {
       }.`,
     };
 
+    const nextTransferOffers = (save.transferOffers ?? []).filter(
+      (o) => o.playerId !== target.id
+    );
+
     setSave({
       ...save,
       clubs: nextClubs,
       players: nextPlayers,
       tacticsByClub: nextTacticsByClub,
+      transferOffers: nextTransferOffers,
       news: [newsItem, ...save.news].slice(0, 40),
     });
     setToast(`${target.name} vendido por ${formatMoney(saleRevenue)}!`);
@@ -1958,12 +1963,12 @@ export const App: React.FC = () => {
                 </div>
                 {transitionReport.userPromoted && (
                   <div className="mt-1 font-bold text-emerald-400">
-                    🎉 ACESSO CONQUISTADO! O clube subiu para a {transitionReport.userDivision}!
+                    ACESSO CONQUISTADO! O clube subiu para a {transitionReport.userDivision}!
                   </div>
                 )}
                 {transitionReport.userRelegated && (
                   <div className="mt-1 font-bold text-rose-400">
-                    ⚠️ REBAIXAMENTO: O clube disputará a {transitionReport.userDivision}.
+                    REBAIXAMENTO: O clube disputará a {transitionReport.userDivision}.
                   </div>
                 )}
               </div>

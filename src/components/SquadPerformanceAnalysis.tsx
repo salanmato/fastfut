@@ -4,6 +4,8 @@ import {
   Search,
   ArrowUpDown,
   ArrowRight,
+  Award,
+  Footprints,
 } from "lucide-react";
 import type { Club, Fixture, Player, Tactics } from "../types/game";
 import { getOverallColor, getRoleBadgeClass, getStaminaColor } from "../utils/format";
@@ -271,8 +273,9 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Gols do Elenco
           </div>
-          <div className="mt-1 text-2xl font-black text-emerald-400">
-            {totalGoals} ⚽
+          <div className="mt-1 flex items-center gap-1.5 text-2xl font-black text-emerald-400">
+            <span>{totalGoals}</span>
+            <Award className="h-5 w-5 text-emerald-400" />
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
             {topScorer && topScorer.seasonGoals > 0
@@ -285,8 +288,9 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Assistências
           </div>
-          <div className="mt-1 text-2xl font-black text-sky-300">
-            {totalAssists} 👟
+          <div className="mt-1 flex items-center gap-1.5 text-2xl font-black text-sky-300">
+            <span>{totalAssists}</span>
+            <Footprints className="h-5 w-5 text-sky-300" />
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
             {topAssister && topAssister.seasonAssists > 0
@@ -302,10 +306,13 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
           <div className="mt-1 text-base font-black text-white truncate">
             {topRated ? topRated.name : "-"}
           </div>
-          <div className="text-[11px] font-bold text-amber-300 mt-0.5">
-            {topRated && topRated.seasonAppearances > 0
-              ? `⭐ ${topRated.seasonAvgRating.toFixed(1)} (${topRated.seasonAppearances} jogos)`
-              : "Sem partidas suficientes"}
+          <div className="flex items-center gap-1 text-[11px] font-bold text-amber-300 mt-0.5">
+            <Star className="h-3 w-3 fill-amber-300" />
+            <span>
+              {topRated && topRated.seasonAppearances > 0
+                ? `${topRated.seasonAvgRating.toFixed(1)} (${topRated.seasonAppearances} jogos)`
+                : "Sem partidas suficientes"}
+            </span>
           </div>
         </div>
 
@@ -314,8 +321,14 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
             Disciplina
           </div>
           <div className="mt-1 text-2xl font-black text-white flex items-center gap-3">
-            <span className="text-amber-400">{totalYellows} 🟨</span>
-            <span className="text-rose-400">{totalReds} 🟥</span>
+            <span className="flex items-center gap-1.5 text-amber-400">
+              {totalYellows}
+              <span className="inline-block h-4 w-3 rounded-[1px] bg-amber-400 border border-amber-600 shadow-sm" />
+            </span>
+            <span className="flex items-center gap-1.5 text-rose-400">
+              {totalReds}
+              <span className="inline-block h-4 w-3 rounded-[1px] bg-rose-600 border border-rose-300 shadow-sm" />
+            </span>
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
             Total de infrações
@@ -404,7 +417,8 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
                   className="py-3.5 px-3 text-center cursor-pointer hover:text-white"
                 >
                   <div className="flex items-center justify-center gap-1">
-                    ⚽ Gols
+                    <Award className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Gols</span>
                     <ArrowUpDown className="h-3 w-3" />
                   </div>
                 </th>
@@ -413,7 +427,8 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
                   className="py-3.5 px-3 text-center cursor-pointer hover:text-white"
                 >
                   <div className="flex items-center justify-center gap-1">
-                    👟 Assist
+                    <Footprints className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Assist</span>
                     <ArrowUpDown className="h-3 w-3" />
                   </div>
                 </th>
@@ -440,7 +455,8 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
                   className="py-3.5 pr-4 pl-3 text-right cursor-pointer hover:text-white"
                 >
                   <div className="flex items-center justify-end gap-1 text-amber-300">
-                    ⭐ Nota Média
+                    <Star className="h-3 w-3 fill-amber-300" />
+                    <span>Nota Média</span>
                     <ArrowUpDown className="h-3 w-3" />
                   </div>
                 </th>
@@ -537,15 +553,17 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
                     </td>
                     <td className="py-3 px-3 text-center text-slate-300">
                       {p.seasonYellowCards > 0 || p.seasonRedCards > 0 ? (
-                        <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold">
+                        <div className="flex items-center justify-center gap-2 text-[11px] font-bold">
                           {p.seasonYellowCards > 0 && (
-                            <span className="text-amber-400">
-                              {p.seasonYellowCards}🟨
+                            <span className="inline-flex items-center gap-1 text-amber-400">
+                              <span>{p.seasonYellowCards}</span>
+                              <span className="inline-block h-3 w-2 rounded-[1px] bg-amber-400 border border-amber-600 shadow-sm" />
                             </span>
                           )}
                           {p.seasonRedCards > 0 && (
-                            <span className="text-rose-400">
-                              {p.seasonRedCards}🟥
+                            <span className="inline-flex items-center gap-1 text-rose-400">
+                              <span>{p.seasonRedCards}</span>
+                              <span className="inline-block h-3 w-2 rounded-[1px] bg-rose-600 border border-rose-300 shadow-sm" />
                             </span>
                           )}
                         </div>

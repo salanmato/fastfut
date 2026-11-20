@@ -660,6 +660,23 @@ export function evaluateClubFeeOffer(
   };
 }
 
+export function formatSquadRolePt(role?: SquadRole | string | null): string {
+  if (!role) return "Não Definido";
+  const norm = role.toLowerCase().trim();
+  switch (norm) {
+    case "key_player":
+      return "Estrela Principal";
+    case "important":
+      return "Titular Importante";
+    case "rotation":
+      return "Jogador de Rotação";
+    case "prospect":
+      return "Jovem Promessa";
+    default:
+      return role;
+  }
+}
+
 /**
  * Evaluates contract terms presented to the player
  */
@@ -701,17 +718,24 @@ export function evaluateContractOffer(
     prospect: 1,
   };
 
-  const expectedRank = roleHierarchy[interestEval.expectedRole];
-  const offeredRank = roleHierarchy[offeredRole];
+  const normOffered = (offeredRole || "rotation").toLowerCase() as SquadRole;
+  const expectedRank = roleHierarchy[interestEval.expectedRole] ?? 3;
+  const offeredRank = roleHierarchy[normOffered] ?? 2;
 
   if (offeredRank > expectedRank) {
-    score += 12; // Offered higher status than expected
+    score += 10; // Offered higher status than expected
   } else if (offeredRank === expectedRank) {
     score += 5;
   } else {
     // Demoted role
     const drop = expectedRank - offeredRank;
-    score -= drop * 22;
+    // Going from key_player to important is just starter to starter: small adjustment (-10),
+    // and can be compensated if wage is generous or signing bonus is paid
+    let penalty = drop === 1 && expectedRank === 4 ? 10 : drop * 18;
+    if (wageRatio >= 1.2 && drop === 1) {
+      penalty = Math.max(3, penalty - 7); // Good wage compensates slight status drop
+    }
+    score -= penalty;
   }
 
   // 3. Signing Bonus (Luvas)
@@ -723,7 +747,7 @@ export function evaluateContractOffer(
 
   score = Math.max(0, Math.min(100, Math.round(score)));
 
-  if (score >= 52) {
+  if (score >= 50) {
     return {
       accepted: true,
       finalScore: score,
@@ -738,11 +762,13 @@ export function evaluateContractOffer(
   if (wageRatio < 1.0) {
     refusalDetail = `O atleta exige no mínimo ${formatWage(
       interestEval.minAcceptableWageEur
-    )} de salário.`;
+    )} de salário semanal.`;
   } else if (offeredRank < expectedRank) {
-    refusalDetail = `O jogador não aceita ser rebaixado para '${offeredRole}' e exige o papel de '${interestEval.expectedRole}'.`;
+    const offeredName = formatSquadRolePt(offeredRole);
+    const expectedName = formatSquadRolePt(interestEval.expectedRole);
+    refusalDetail = `O atleta não aceita atuar como '${offeredName}' e exige status de '${expectedName}'.`;
   } else {
-    refusalDetail = `O atleta não se sentiu seguro com o projeto esportivo apresentado.`;
+    refusalDetail = `O atleta não se sentiu seguro com o projeto esportivo apresentado. Tente elevar o salário ou as luvas de assinatura.`;
   }
 
   return {
@@ -824,7 +850,7 @@ export function offerPlayerToMarket(
       matchweek: save.currentMatchweek,
       category: "transfer",
       clubId: save.userClubId,
-      title: `📩 PROPOSTA RECEBIDA: ${buyer.name} oficializou oferta por ${player.name}!`,
+      title: `PROPOSTA RECEBIDA: ${buyer.name} oficializou oferta por ${player.name}!`,
       body: `Após o jogador ser oferecido ao mercado, o ${buyer.name} apresentou proposta de ${formatMoney(
         offeredAmount
       )} pelo atleta. Responda na aba Mercado.`,

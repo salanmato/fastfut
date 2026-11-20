@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Shirt, Star } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Shirt,
+  Star,
+  Flag,
+  Award,
+  Footprints,
+  Activity,
+  ArrowUp,
+  Plus,
+} from "lucide-react";
 import type { Club, MatchEvent, Player, Tactics } from "../types/game";
 import type { LiveMatchSession } from "../engine/matchEngine";
 import {
@@ -1764,13 +1775,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           <button
             onClick={() => setShowOffsideLine((v) => !v)}
             title="Mostra a linha do penúltimo defensor (referência para impedimento)"
-            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
               showOffsideLine
                 ? "border-orange-500/40 bg-orange-500/15 text-orange-300"
                 : "border-slate-700 bg-slate-800 text-slate-400"
             }`}
           >
-            🚩 Impedimento
+            <Flag className="h-3 w-3" /> Impedimento
           </button>
           <button
             onClick={() => setShowKits((v) => !v)}
@@ -1964,10 +1975,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         {/* Linesman flag at the touchline when offside is called */}
         {offsideMark && (
           <div
-            className="pointer-events-none absolute left-1 z-20 -translate-y-1/2 flex items-center gap-1"
+            className="pointer-events-none absolute left-1 z-20 -translate-y-1/2 flex items-center gap-1.5"
             style={{ top: `${offsideMark.lineY}%` }}
           >
-            <span className="text-base leading-none">🚩</span>
+            <div className="flex h-5 w-5 items-center justify-center rounded bg-orange-500 text-slate-950 shadow-md">
+              <Flag className="h-3 w-3 fill-slate-950" />
+            </div>
             <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-950">
               Impedimento
             </span>
@@ -2005,8 +2018,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     {/* Scorer Row */}
                     <div className="flex items-center justify-between gap-3 rounded border border-emerald-500/40 bg-emerald-500/15 px-3 py-2">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
-                          ⚽ GOL
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
+                          <Award className="h-3 w-3" /> GOL
                         </span>
                         {banner.scorerShirt !== undefined && (
                           <span className="shrink-0 text-xs font-black text-amber-300">
@@ -2029,8 +2042,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                       {banner.assistName ? (
                         <>
                           <div className="flex min-w-0 items-center gap-2">
-                            <span className="shrink-0 rounded bg-sky-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
-                              👟 ASSIST
+                            <span className="shrink-0 inline-flex items-center gap-1 rounded bg-sky-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
+                              <Footprints className="h-3 w-3" /> ASSIST
                             </span>
                             {banner.assistShirt !== undefined && (
                               <span className="shrink-0 text-xs font-black text-sky-300">
@@ -2060,9 +2073,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ) : banner.tone === "yellow_card" ? (
             <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
               <div className="flex items-center gap-2.5 rounded-lg border-2 border-amber-300 bg-amber-400 px-4 py-2 text-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.7)] font-black">
-                <div className="flex h-5 w-3.5 items-center justify-center rounded-[2px] bg-amber-300 border border-amber-600 shadow-sm text-[10px]">
-                  🟨
-                </div>
+                <div className="h-5 w-3.5 rounded-[2px] bg-amber-300 border border-amber-600 shadow-sm" />
                 <div>
                   <div className="text-[9px] uppercase tracking-widest text-amber-950 font-bold">
                     Advertência Disciplinar
@@ -2074,9 +2085,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ) : banner.tone === "red_card" ? (
             <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
               <div className="flex items-center gap-2.5 rounded-lg border-2 border-rose-300 bg-rose-600 px-4 py-2 text-white shadow-[0_0_30px_rgba(244,63,94,0.8)] font-black">
-                <div className="flex h-5 w-3.5 items-center justify-center rounded-[2px] bg-rose-500 border border-white shadow-sm text-[10px]">
-                  🟥
-                </div>
+                <div className="h-5 w-3.5 rounded-[2px] bg-rose-500 border border-rose-200 shadow-sm" />
                 <div>
                   <div className="text-[9px] uppercase tracking-widest text-rose-200 font-bold">
                     Expulsão de Campo
@@ -2088,7 +2097,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ) : banner.tone === "injury" ? (
             <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
               <div className="flex items-center gap-2.5 rounded-lg border-2 border-rose-400 bg-slate-950 px-4 py-2 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.5)] font-black">
-                <span className="text-base">🚑</span>
+                <div className="flex h-5 w-5 items-center justify-center rounded bg-rose-500 text-white">
+                  <Activity className="h-3.5 w-3.5" />
+                </div>
                 <div>
                   <div className="text-[9px] uppercase tracking-widest text-rose-500 font-bold">
                     Atendimento Médico
@@ -2155,26 +2166,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 <div className="pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center animate-bounce">
                   {cardHighlight.type === "yellow_card" ? (
                     <>
-                      <div className="flex h-6 w-4 items-center justify-center rounded-[2px] bg-amber-400 border border-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.9)] text-[10px] font-black text-slate-950">
-                        🟨
-                      </div>
+                      <div className="h-5 w-3.5 rounded-[2px] bg-amber-400 border border-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.9)]" />
                       <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-amber-300 ring-1 ring-amber-400/50 shadow-md">
                         Amarelo ({cardHighlight.minute}')
                       </span>
                     </>
                   ) : cardHighlight.type === "red_card" ? (
                     <>
-                      <div className="flex h-6 w-4 items-center justify-center rounded-[2px] bg-rose-600 border border-rose-200 shadow-[0_0_18px_rgba(225,29,72,0.9)] text-[10px] font-black text-white">
-                        🟥
-                      </div>
+                      <div className="h-5 w-3.5 rounded-[2px] bg-rose-600 border border-rose-200 shadow-[0_0_18px_rgba(225,29,72,0.9)]" />
                       <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-300 ring-1 ring-rose-500/50 shadow-md">
                         Expulsão ({cardHighlight.minute}')
                       </span>
                     </>
                   ) : (
                     <>
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 border border-white shadow-[0_0_15px_rgba(225,29,72,0.8)] text-xs text-white">
-                        🚑
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 border border-white shadow-[0_0_15px_rgba(225,29,72,0.8)] text-white">
+                        <Plus className="h-3 w-3 stroke-[3]" />
                       </div>
                       <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-300 ring-1 ring-rose-500/50 shadow-md">
                         Lesão ({cardHighlight.minute}')
@@ -2327,21 +2334,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               className="pointer-events-none absolute z-25 -translate-x-1/2 -translate-y-1/2 transition-[transform] duration-75 ease-out"
             >
               <div className="relative flex items-center justify-center">
-                {/* Textured Soccer Ball */}
-                <div
-                  className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full border border-slate-900 shadow-md flex items-center justify-center overflow-hidden"
-                  style={{
-                    background:
-                      "radial-gradient(circle at 35% 35%, #ffffff 0%, #f1f5f9 55%, #94a3b8 100%)",
-                  }}
-                >
-                  <div className="h-1.5 w-1.5 rounded-full bg-slate-950/80" />
+                {/* Flat 2D Soccer Ball Token */}
+                <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950 shadow-sm flex items-center justify-center">
+                  <div className="h-1 w-1 rounded-full bg-slate-950" />
                 </div>
 
                 {/* Aerial altitude pill */}
                 {ballVisual.altitude > 0.45 && (
-                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-1 py-0.2 text-[7px] font-black tracking-wider text-sky-300 ring-1 ring-sky-400/50 shadow-sm">
-                    ✈️ Alto
+                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-0.5 whitespace-nowrap rounded-full bg-slate-950/90 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-sky-300 ring-1 ring-sky-400/50 shadow-sm">
+                    <ArrowUp className="h-2 w-2" />
+                    <span>ALTO</span>
                   </span>
                 )}
               </div>

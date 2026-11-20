@@ -17,6 +17,8 @@ import {
   XCircle,
   Building,
   Send,
+  Package,
+  MessageSquare,
 } from "lucide-react";
 import type { Club, Player, RoleCategory, TransferOffer, WorldTransfer } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
@@ -228,9 +230,10 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               {interest.rivalryPenaltyApplied && (
                 <span
                   title="Clube Rival Histórico"
-                  className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-300 border border-rose-500/40"
+                  className="inline-flex items-center gap-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-300 border border-rose-500/40"
                 >
-                  🔥 Rival
+                  <Flame className="h-2.5 w-2.5" />
+                  <span>Rival</span>
                 </span>
               )}
             </div>
@@ -277,20 +280,29 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               onClick={() => onStartNegotiation(p)}
               className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 shadow-sm shadow-emerald-500/20"
             >
-              <Building className="h-3.5 w-3.5" />
-              <span>{!windowStatus.isOpen ? "🔒 Fechada" : "Negociar"}</span>
+              {windowStatus.isOpen ? (
+                <Building className="h-3.5 w-3.5" />
+              ) : (
+                <Lock className="h-3.5 w-3.5" />
+              )}
+              <span>{!windowStatus.isOpen ? "Fechada" : "Negociar"}</span>
             </button>
           ) : (
             <button
               disabled={!canBuyNow}
               onClick={() => onBuyPlayer(p)}
-              className="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
             >
-              {!windowStatus.isOpen
-                ? "🔒 Janela Fechada"
-                : canAfford
-                ? "Contratar"
-                : "Caro"}
+              {!windowStatus.isOpen ? (
+                <>
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>Fechada</span>
+                </>
+              ) : canAfford ? (
+                "Contratar"
+              ) : (
+                "Caro"
+              )}
             </button>
           )}
         </div>
@@ -332,10 +344,8 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-black text-white">
                 {windowStatus.isDeadlineDay
-                  ? "🚨 DEADLINE DAY! Último dia de mercado aberto!"
-                  : windowStatus.isOpen
-                  ? `🔓 ${windowStatus.headline}`
-                  : `🔒 ${windowStatus.headline}`}
+                  ? "DEADLINE DAY! Último dia de mercado aberto!"
+                  : windowStatus.headline}
               </span>
               <span className="rounded bg-black/30 px-2 py-0.5 text-[10px] font-bold text-slate-200">
                 {formatDatePtBr(currentDate)}
@@ -660,8 +670,9 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
 
                         {/* Buyer note */}
                         {offer.buyerReason && (
-                          <div className="mt-3 rounded-lg border border-slate-800/80 bg-slate-950/50 p-2.5 text-xs text-slate-300">
-                            💬 <em>"{offer.buyerReason}"</em>
+                          <div className="mt-3 flex items-start gap-1.5 rounded-lg border border-slate-800/80 bg-slate-950/50 p-2.5 text-xs text-slate-300">
+                            <MessageSquare className="h-3.5 w-3.5 shrink-0 text-slate-400 mt-0.5" />
+                            <em>"{offer.buyerReason}"</em>
                           </div>
                         )}
                       </div>
@@ -921,8 +932,9 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
 
                     {/* Transfer Listed Status Badge */}
                     {p.isTransferListed ? (
-                      <span className="rounded bg-amber-400/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300 border border-amber-400/40">
-                        📦 Listado
+                      <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300 border border-amber-400/40">
+                        <Package className="h-2.5 w-2.5" />
+                        <span>Listado</span>
                       </span>
                     ) : (
                       <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-400">
@@ -973,13 +985,21 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                       disabled={!canSell}
                       onClick={() => onSellPlayer(p)}
                       title="Venda rápida direta com 8% de deságio"
-                      className="rounded-xl bg-rose-500/80 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                      className="inline-flex items-center gap-1 rounded-xl bg-rose-500/80 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                     >
-                      {isLoaned
-                        ? "🔒 Emprestado"
-                        : !windowStatus.isOpen
-                        ? "🔒 Fechada"
-                        : "Venda Rápida"}
+                      {isLoaned ? (
+                        <>
+                          <Lock className="h-3 w-3" />
+                          <span>Emprestado</span>
+                        </>
+                      ) : !windowStatus.isOpen ? (
+                        <>
+                          <Lock className="h-3 w-3" />
+                          <span>Fechada</span>
+                        </>
+                      ) : (
+                        "Venda Rápida"
+                      )}
                     </button>
                   </div>
                 </div>

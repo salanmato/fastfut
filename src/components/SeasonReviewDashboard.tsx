@@ -10,6 +10,8 @@ import {
   Building2,
   BarChart3,
   ArrowUpRight,
+  Footprints,
+  Zap,
 } from "lucide-react";
 import type {
   Club,
@@ -403,8 +405,8 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                 >
                   <div className="relative">
                     <PlayerAvatar name={mvp.name} imageUrl={mvp.imageUrl} size="sm" accentColor={userClub.primaryColor} />
-                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
-                      ★
+                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow-sm">
+                      <Star className="h-3 w-3 fill-slate-950" />
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -427,8 +429,8 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                 >
                   <div className="relative">
                     <PlayerAvatar name={topScorer.name} imageUrl={topScorer.imageUrl} size="sm" accentColor={userClub.primaryColor} />
-                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-slate-950 font-black text-[10px]">
-                      ⚽
+                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-sm">
+                      <Award className="h-3 w-3" />
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -451,8 +453,8 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                 >
                   <div className="relative">
                     <PlayerAvatar name={topAssister.name} imageUrl={topAssister.imageUrl} size="sm" accentColor={userClub.primaryColor} />
-                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-sky-400 text-slate-950 font-black text-[10px]">
-                      👟
+                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-sky-400 text-slate-950 shadow-sm">
+                      <Footprints className="h-3 w-3" />
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -475,8 +477,8 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                 >
                   <div className="relative">
                     <PlayerAvatar name={bestYoungster.name} imageUrl={bestYoungster.imageUrl} size="sm" accentColor={userClub.primaryColor} />
-                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-400 text-slate-950 font-black text-[10px]">
-                      ⚡
+                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-400 text-slate-950 shadow-sm">
+                      <Zap className="h-3 w-3 fill-slate-950" />
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -545,7 +547,10 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-black text-amber-300">★ {p.seasonAvgRating.toFixed(1)}</div>
+                    <div className="flex items-center gap-1 text-xs font-black text-amber-300">
+                      <Star className="h-3 w-3 fill-amber-300" />
+                      <span>{p.seasonAvgRating.toFixed(1)}</span>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -667,7 +672,14 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                 <div>
                   <div className="text-[10px] font-bold uppercase text-slate-400">Fase Alcançada</div>
                   <div className="text-base font-black text-white">
-                    {faCupProgress.wonCup ? "🏆 CAMPEÃO DA FA CUP!" : faCupProgress.highestRound}
+                    {faCupProgress.wonCup ? (
+                      <span className="inline-flex items-center gap-1.5 text-amber-300">
+                        <Trophy className="h-4 w-4" />
+                        <span>CAMPEÃO DA FA CUP!</span>
+                      </span>
+                    ) : (
+                      faCupProgress.highestRound
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -772,8 +784,9 @@ export const SeasonReviewDashboard: React.FC<SeasonReviewDashboardProps> = ({
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-black text-white">
-                    {hist.position === 1 ? "🏆 Campeão" : `${hist.position}º Lugar`}
+                  <span className="text-sm font-black text-white inline-flex items-center gap-1">
+                    {hist.position === 1 && <Trophy className="h-3.5 w-3.5 text-amber-400" />}
+                    <span>{hist.position === 1 ? "Campeão" : `${hist.position}º Lugar`}</span>
                   </span>
                   <span className="text-xs font-bold text-emerald-400">
                     {hist.points} pts ({hist.won}V-{hist.drawn}E-{hist.lost}D)

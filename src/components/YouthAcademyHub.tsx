@@ -82,24 +82,24 @@ export const YouthAcademyHub: React.FC<YouthAcademyHubProps> = ({
     const growth = p.potential - p.overall;
     if (p.potential >= 85) {
       return {
-        label: "🌟 Joia de Nível Mundial",
+        label: "Joia de Nível Mundial",
         bg: "border-amber-400/40 bg-amber-500/15 text-amber-300",
       };
     }
     if (p.potential >= 80) {
       return {
-        label: "⭐ Promessa de Seleção",
+        label: "Promessa de Alto Nível",
         bg: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
       };
     }
     if (growth >= 8) {
       return {
-        label: "📈 Alto Crescimento (+ " + growth + ")",
+        label: "Alto Crescimento (+" + growth + ")",
         bg: "border-sky-500/40 bg-sky-500/15 text-sky-300",
       };
     }
     return {
-      label: "⚽ Composição da Base",
+      label: "Composição de Elenco",
       bg: "border-slate-700 bg-slate-800 text-slate-300",
     };
   };

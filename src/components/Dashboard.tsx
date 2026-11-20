@@ -14,6 +14,8 @@ import {
   Unlock,
   Flame,
   BarChart3,
+  Award,
+  Footprints,
 } from "lucide-react";
 import type {
   Club,
@@ -196,9 +198,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {faCup && (
             <button
               onClick={() => onNavigate("facup")}
-              className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20"
             >
-              🏆 FA Cup{currentCupRound ? ` (${currentCupRound.shortName})` : ""}
+              <Trophy className="h-3.5 w-3.5" />
+              <span>FA Cup{currentCupRound ? ` (${currentCupRound.shortName})` : ""}</span>
             </button>
           )}
           <button
@@ -627,8 +630,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     onClick={() => onSelectPlayer(topClubScorer)}
                     className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-left text-xs text-emerald-200 transition hover:bg-emerald-500/15"
                   >
-                    <span className="truncate">
-                      ⚽ Artilheiro: <strong className="text-white">{topClubScorer.name}</strong>
+                    <span className="flex items-center gap-1.5 truncate">
+                      <Award className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span>Artilheiro: <strong className="text-white">{topClubScorer.name}</strong></span>
                     </span>
                     <span className="shrink-0 font-black text-emerald-300">
                       {topClubScorer.seasonGoals} {topClubScorer.seasonGoals === 1 ? "gol" : "gols"}
@@ -640,8 +644,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     onClick={() => onSelectPlayer(topClubAssister)}
                     className="flex items-center justify-between rounded-xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2 text-left text-xs text-sky-200 transition hover:bg-sky-500/15"
                   >
-                    <span className="truncate">
-                      👟 Assistências: <strong className="text-white">{topClubAssister.name}</strong>
+                    <span className="flex items-center gap-1.5 truncate">
+                      <Footprints className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                      <span>Assistências: <strong className="text-white">{topClubAssister.name}</strong></span>
                     </span>
                     <span className="shrink-0 font-black text-sky-300">
                       {topClubAssister.seasonAssists} {topClubAssister.seasonAssists === 1 ? "assist." : "assist."}

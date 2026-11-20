@@ -279,7 +279,7 @@ export function simulateFACupRound(
       matchweek: currentMatchweek,
       category: "cup",
       clubId: userClubId,
-      title: `🏆 Copa da Inglaterra (${round.shortName})`,
+      title: `Copa da Inglaterra (${round.shortName})`,
       body: userTieSummary,
     });
   }
@@ -291,7 +291,7 @@ export function simulateFACupRound(
       id: `fac-upset-${rIdx}-${Date.now()}`,
       matchweek: currentMatchweek,
       category: "cup",
-      title: `🔥 ZEBRA NA FA CUP! ${biggest.winner.name} elimina ${biggest.loser.name}`,
+      title: `ZEBRA NA FA CUP! ${biggest.winner.name} elimina ${biggest.loser.name}`,
       body: `Surpresa na ${round.shortName}: ${biggest.score} (${biggest.winner.division ?? "EFL"} derruba clube da ${biggest.loser.division ?? "divisão superior"}).`,
     });
   }
@@ -333,7 +333,7 @@ export function simulateFACupRound(
       matchweek: currentMatchweek,
       category: "cup",
       clubId: champClub.id,
-      title: `👑 ${champClub.name} é CAMPEÃO da Copa da Inglaterra 2026/27!`,
+      title: `${champClub.name} é CAMPEÃO da Copa da Inglaterra 2026/27!`,
       body: `Em Wembley, o ${champClub.name} levantou a taça da Emirates FA Cup e levou o prêmio de ${formatMoney(
         round.prizeEur
       )}!`,

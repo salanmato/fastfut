@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   HeartPulse,
   Compass,
+  Flag,
 } from "lucide-react";
 import type {
   Club,
@@ -481,8 +482,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   </div>
                   <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
                     {homeGoalEvents.map((g) => (
-                      <div key={g.id}>
-                        ⚽ {g.playerName} ({g.minute}')
+                      <div key={g.id} className="flex items-center gap-1.5">
+                        <Award className="h-3 w-3 text-emerald-400 shrink-0" />
+                        <span>{g.playerName} ({g.minute}')</span>
                       </div>
                     ))}
                   </div>
@@ -513,8 +515,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   </div>
                   <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
                     {awayGoalEvents.map((g) => (
-                      <div key={g.id}>
-                        ⚽ {g.playerName} ({g.minute}')
+                      <div key={g.id} className="flex items-center gap-1.5">
+                        <Award className="h-3 w-3 text-emerald-400 shrink-0" />
+                        <span>{g.playerName} ({g.minute}')</span>
                       </div>
                     ))}
                   </div>
@@ -644,30 +647,34 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       ? "border-orange-500/40 bg-orange-500/10 text-orange-200"
                       : "border-slate-800 bg-slate-950/60 text-slate-300";
 
-                  const eventIcon =
-                    ev.type === "goal"
-                      ? "⚽"
-                      : ev.type === "yellow_card"
-                      ? "🟨"
-                      : ev.type === "red_card"
-                      ? "🟥"
-                      : ev.type === "injury"
-                      ? "🚑"
-                      : ev.type === "offside"
-                      ? "🚩"
-                      : ev.type === "substitution"
-                      ? "🔄"
-                      : ev.type === "save"
-                      ? "🧤"
-                      : "•";
+                  let eventIconNode: React.ReactNode = <span className="text-slate-500">•</span>;
+                  if (ev.type === "goal") {
+                    eventIconNode = <Award className="h-4 w-4 text-emerald-400" />;
+                  } else if (ev.type === "yellow_card") {
+                    eventIconNode = (
+                      <span className="inline-block h-3.5 w-2.5 rounded-[1px] bg-amber-400 border border-amber-600 shadow-sm mt-0.5" />
+                    );
+                  } else if (ev.type === "red_card") {
+                    eventIconNode = (
+                      <span className="inline-block h-3.5 w-2.5 rounded-[1px] bg-rose-600 border border-rose-300 shadow-sm mt-0.5" />
+                    );
+                  } else if (ev.type === "injury") {
+                    eventIconNode = <HeartPulse className="h-4 w-4 text-rose-400" />;
+                  } else if (ev.type === "offside") {
+                    eventIconNode = <Flag className="h-4 w-4 text-orange-400" />;
+                  } else if (ev.type === "substitution") {
+                    eventIconNode = <ArrowLeftRight className="h-4 w-4 text-sky-400" />;
+                  } else if (ev.type === "save") {
+                    eventIconNode = <Shield className="h-4 w-4 text-indigo-400" />;
+                  }
 
                   return (
                     <div
                       key={ev.id}
-                      className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${badgeStyle}`}
+                      className={`flex items-start gap-2.5 rounded-xl border px-3 py-2 text-xs ${badgeStyle}`}
                     >
                       <span className="font-black text-slate-100">{ev.minute}'</span>
-                      <span className="shrink-0 text-sm leading-none">{eventIcon}</span>
+                      <span className="shrink-0 flex items-center justify-center mt-0.5">{eventIconNode}</span>
                       <span className="min-w-0 flex-1">{ev.text}</span>
                     </div>
                   );

@@ -154,7 +154,7 @@ export function generateAiOffersForUser(
     matchweek: save.currentMatchweek,
     category: "transfer",
     clubId: save.userClubId,
-    title: `📩 PROPOSTA OFICIAL: ${buyer.name} quer contratar ${target.name}!`,
+    title: `PROPOSTA OFICIAL: ${buyer.name} quer contratar ${target.name}!`,
     body: `O ${buyer.name} (${newOffer.fromClubLeague}) formalizou proposta de ${formatMoney(
       offeredAmount
     )} por ${target.name} (valor de mercado: ${formatMoney(
@@ -261,9 +261,12 @@ export function respondToTransferOffer(
       };
     }
 
-    const updatedOffers = offers.map((o) =>
-      o.id === offerId ? { ...o, status: "accepted" as const } : o
-    );
+    // When an offer is accepted for a player, remove all other offers for this player so they disappear completely
+    const updatedOffers = offers
+      .filter((o) => o.playerId !== targetPlayer.id || o.id === offerId)
+      .map((o) =>
+        o.id === offerId ? { ...o, status: "accepted" as const } : o
+      );
 
     const worldTransferRecord: WorldTransfer = {
       id: `wt-${offer.id}`,
@@ -288,7 +291,7 @@ export function respondToTransferOffer(
       matchweek: save.currentMatchweek,
       category: "transfer",
       clubId: userClub.id,
-      title: `🤝 TRANSFERÊNCIA CONCLUÍDA: ${targetPlayer.name} vendido ao ${offer.fromClubName}!`,
+      title: `TRANSFERÊNCIA CONCLUÍDA: ${targetPlayer.name} vendido ao ${offer.fromClubName}!`,
       body: `Negócio fechado em ${formatMoney(finalFee)}. Os valores já foram adicionados ao orçamento de transferências do ${userClub.name}.`,
     };
 
@@ -468,7 +471,7 @@ export function simulateAiWorldTransfers(
         id: `news-wt-${wt.id}`,
         matchweek: save.currentMatchweek,
         category: "transfer",
-        title: `🌐 MERCADO GLOBAL: ${target.name} no ${buyer.name}!`,
+        title: `MERCADO GLOBAL: ${target.name} no ${buyer.name}!`,
         body: `O ${buyer.name} confirmou a contratação de ${target.name} (${target.primaryPosition}, OVR ${target.overall}) junto ao ${seller.name} por ${formatMoney(fee)}.`,
       });
     }

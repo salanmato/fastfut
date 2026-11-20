@@ -9,6 +9,7 @@ import {
   MapPin,
   Layers,
   Users,
+  Footprints,
 } from "lucide-react";
 import type { Club, Fixture, Player, StandingRow } from "../types/game";
 import { getTopAssisters, getTopScorers } from "../engine/standings";
@@ -366,13 +367,13 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
               title: `Artilharia (${userDivision})`,
               list: topScorers,
               metric: "Gols",
-              icon: "⚽",
+              icon: <Award className="h-4 w-4 text-emerald-400" />,
             },
             {
               title: "Líderes em Assistências",
               list: topAssisters,
               metric: "Assist.",
-              icon: "👟",
+              icon: <Footprints className="h-4 w-4 text-sky-400" />,
             },
           ].map((panel) => {
             const ourCount = panel.list.filter((p) => p.clubId === userClubId).length;
@@ -586,10 +587,12 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
                         <span>Posse: {fx.result.awayStats.possession}%</span>
                       </div>
                       {goals.map((g) => (
-                        <div key={g.id} className="text-emerald-300">
-                          ⚽ {g.minute}' {g.playerName} (
-                          {clubMap.get(g.clubId)?.shortName})
-                          {g.assistPlayerName ? ` — assist. ${g.assistPlayerName}` : ""}
+                        <div key={g.id} className="flex items-center gap-1.5 text-emerald-300">
+                          <Award className="h-3 w-3 text-emerald-400 shrink-0" />
+                          <span>
+                            {g.minute}' {g.playerName} ({clubMap.get(g.clubId)?.shortName})
+                            {g.assistPlayerName ? ` — assist. ${g.assistPlayerName}` : ""}
+                          </span>
                         </div>
                       ))}
                     </div>

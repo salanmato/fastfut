@@ -344,7 +344,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
       : undefined,
     clubMvpName: mvp ? `${mvp.name} (${mvp.seasonAvgRating.toFixed(1)}★)` : undefined,
     clubTopScorerName: topScorer && topScorer.seasonGoals > 0
-      ? `${topScorer.name} (${topScorer.seasonGoals}⚽)`
+      ? `${topScorer.name} (${topScorer.seasonGoals} gols)`
       : undefined,
   };
 
@@ -381,7 +381,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
       matchweek: 1,
       category: "league" as const,
       clubId: save.userClubId,
-      title: `🚀 BEM-VINDO À TEMPORADA ${nextSeason}!`,
+      title: `BEM-VINDO À TEMPORADA ${nextSeason}!`,
       body: `A temporada ${nextSeason} da ${newDivision} começou oficialmente! O ${userNewClub.name} recebeu +${formatMoney(
         totalAdded
       )} em premiações e verbas de TV, totalizando orçamento de ${formatMoney(
@@ -395,7 +395,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
             matchweek: 1,
             category: "league" as const,
             clubId: save.userClubId,
-            title: `🎉 HISTÓRICO! ${userNewClub.name} comemora o acesso à ${newDivision}!`,
+            title: `HISTÓRICO! ${userNewClub.name} comemora o acesso à ${newDivision}!`,
             body: `Após campanha brilhante, o clube garantiu a vaga na divisão superior e agora mede forças com a elite nacional.`,
           },
         ]
@@ -406,7 +406,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
             matchweek: 1,
             category: "league" as const,
             clubId: save.userClubId,
-            title: `⚠️ Reconstrução: ${userNewClub.name} disputará a ${newDivision}`,
+            title: `Reconstrução: ${userNewClub.name} disputará a ${newDivision}`,
             body: `O clube inicia a temporada com o objetivo claro de reconquistar seu espaço e lutar pelo acesso imediato.`,
           },
         ]
@@ -418,7 +418,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     matchweek: 1,
     category: "league",
     clubId: save.userClubId,
-    title: `🌱 NOVA SAFRA DA BASE: ${youthIntake.length} promessas chegam à academia!`,
+    title: `NOVA SAFRA DA BASE: ${youthIntake.length} promessas chegam à academia!`,
     body: `A peneira anual da categoria de base promoveu ${youthIntake
       .map((y) => `${y.name} (${y.primaryPosition}, ${y.potential}★)`)
       .join(", ")} ao elenco Sub-20 do ${userNewClub.name}.`,

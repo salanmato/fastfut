@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   X,
   Check,
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   Coins,
   Shield,
@@ -15,6 +16,7 @@ import {
   ThumbsDown,
   Building,
   Globe,
+  Star,
 } from "lucide-react";
 import type { Club, Player, SquadRole } from "../types/game";
 import {
@@ -23,6 +25,7 @@ import {
   evaluateClubFeeOffer,
   evaluatePlayerInterest,
   evaluateContractOffer,
+  formatSquadRolePt,
 } from "../engine/transferNegotiationEngine";
 import { formatMoney, formatWage } from "../utils/format";
 import { PlayerAvatar } from "./PlayerAvatar";
@@ -92,6 +95,13 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
     status: "idle",
     message: "",
   });
+
+  useEffect(() => {
+    setOfferedRole(playerInterest.expectedRole);
+    setOfferedWageEur(playerInterest.minAcceptableWageEur);
+    setSigningBonusEur(0);
+    setPlayerResponse({ status: "idle", message: "" });
+  }, [player?.id, playerInterest.expectedRole, playerInterest.minAcceptableWageEur]);
 
   // Handlers for Step 1
   const handleSendClubOffer = () => {
@@ -331,8 +341,9 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
                     {clubValuation.statusText}
                   </div>
                   {clubValuation.isRival && (
-                    <div className="mt-1 text-[10px] font-bold text-rose-400">
-                      ⚠️ {clubValuation.rivalryReason}
+                    <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-rose-400">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span>{clubValuation.rivalryReason}</span>
                     </div>
                   )}
                 </div>
@@ -634,16 +645,18 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
                         </div>
                         <div>
                           {playerInterest.culturalProfile.languageCompatibility === "same" ? (
-                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300 border border-emerald-500/30">
-                              ✓ Mesmo Idioma
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300 border border-emerald-500/30">
+                              <Check className="h-2.5 w-2.5" />
+                              <span>Mesmo Idioma</span>
                             </span>
                           ) : playerInterest.culturalProfile.languageCompatibility === "close" ? (
                             <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-300 border border-sky-500/30">
                               Afinidade Latina
                             </span>
                           ) : (
-                            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-300 border border-amber-500/30">
-                              ⚠️ Barreira de Idioma
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-300 border border-amber-500/30">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              <span>Barreira de Idioma</span>
                             </span>
                           )}
                         </div>
@@ -674,8 +687,9 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
                         </div>
                         <div>
                           {playerInterest.culturalProfile.managerConnection === "compatriot" ? (
-                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300 border border-emerald-500/30">
-                              ★ Treinador Compatriota
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300 border border-emerald-500/30">
+                              <Star className="h-2.5 w-2.5" />
+                              <span>Treinador Compatriota</span>
                             </span>
                           ) : playerInterest.culturalProfile.managerConnection === "same_language" ? (
                             <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-300 border border-sky-500/30">
@@ -809,21 +823,15 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
                       }}
                       className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-bold text-white outline-none"
                     >
-                      <option value="key_player">🌟 Estrela Principal (Titular Indispensável)</option>
-                      <option value="important">⚽ Titular Importante (Primeiro Time)</option>
-                      <option value="rotation">🔄 Rotação de Elenco (Entra no Rodízio)</option>
-                      <option value="prospect">🌱 Jovem Promessa (Em Desenvolvimento)</option>
+                      <option value="key_player">Estrela Principal (Titular Indispensável)</option>
+                      <option value="important">Titular Importante (Primeiro Time)</option>
+                      <option value="rotation">Rotação de Elenco (Entra no Rodízio)</option>
+                      <option value="prospect">Jovem Promessa (Em Desenvolvimento)</option>
                     </select>
                     <div className="text-[10px] text-slate-400">
                       Expectativa do jogador:{" "}
                       <strong className="text-amber-300">
-                        {playerInterest.expectedRole === "key_player"
-                          ? "Estrela Principal"
-                          : playerInterest.expectedRole === "important"
-                          ? "Titular Importante"
-                          : playerInterest.expectedRole === "rotation"
-                          ? "Rotação"
-                          : "Jovem Promessa"}
+                        {formatSquadRolePt(playerInterest.expectedRole)}
                       </strong>
                     </div>
                   </div>
@@ -865,11 +873,26 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
 
                 {/* Player Refusal message */}
                 {playerResponse.status === "rejected" && (
-                  <div className="rounded-2xl border border-rose-500/50 bg-rose-500/10 p-4">
+                  <div className="space-y-3 rounded-2xl border border-rose-500/50 bg-rose-500/10 p-4">
                     <div className="flex items-start gap-3">
                       <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
-                      <div className="text-xs font-bold text-rose-300 leading-relaxed">
-                        {playerResponse.message}
+                      <div className="space-y-2 text-xs font-bold text-rose-300 leading-relaxed">
+                        <p>{playerResponse.message}</p>
+                        {offeredRole !== playerInterest.expectedRole && (
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOfferedRole(playerInterest.expectedRole);
+                                setPlayerResponse({ status: "idle", message: "" });
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-3 py-1.5 text-xs font-black text-rose-200 border border-rose-500/40 hover:bg-rose-500/30 transition"
+                            >
+                              <span>Atender exigência: Definir papel como {formatSquadRolePt(playerInterest.expectedRole)}</span>
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -941,12 +964,7 @@ export const TransferNegotiationModal: React.FC<TransferNegotiationModalProps> =
                     {formatWage(offeredWageEur)} ({contractYears} anos)
                   </div>
                   <div className="text-[10px] text-slate-400">
-                    Papel:{" "}
-                    {offeredRole === "key_player"
-                      ? "Estrela Principal"
-                      : offeredRole === "important"
-                      ? "Titular Importante"
-                      : "Rotação"}
+                    Papel: {formatSquadRolePt(offeredRole)}
                   </div>
                 </div>
               </div>

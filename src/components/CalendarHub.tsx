@@ -438,14 +438,16 @@ export const CalendarHub: React.FC<CalendarHubProps> = ({
                   )}
 
                   {!isToday && (isSummerDeadline || isWinterDeadline) && (
-                    <span className="rounded bg-amber-400 px-1 py-0.5 text-[9px] font-black text-slate-950">
-                      🚨 Deadline
+                    <span className="inline-flex items-center gap-0.5 rounded bg-amber-400 px-1 py-0.5 text-[9px] font-black text-slate-950">
+                      <Flame className="h-2.5 w-2.5" />
+                      <span>Deadline</span>
                     </span>
                   )}
 
                   {!isToday && (isSummerOpen || isWinterOpen || isPostOpen) && (
-                    <span className="rounded bg-emerald-500 px-1 py-0.5 text-[9px] font-black text-slate-950">
-                      🔓 Abre
+                    <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500 px-1 py-0.5 text-[9px] font-black text-slate-950">
+                      <Unlock className="h-2.5 w-2.5" />
+                      <span>Abre</span>
                     </span>
                   )}
                 </div>
