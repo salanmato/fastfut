@@ -73,7 +73,25 @@ interface PitchTrail {
   y1: number;
   x2: number;
   y2: number;
-  kind: "pass" | "shot" | "goal";
+  kind: "pass" | "shot" | "goal" | "cross" | "header";
+  isAerial: boolean;
+  maxAltitude: number;
+  curveX: number;
+  curveY: number;
+}
+
+interface BallVisualState {
+  x: number;
+  y: number;
+  altitude: number; // 0 = ground, 1 = max aerial flight
+  isAerial: boolean;
+}
+
+interface ActiveCardHighlight {
+  playerId: number;
+  playerName: string;
+  type: "yellow_card" | "red_card" | "injury";
+  minute: number;
 }
 
 const PLAY_PHASE_LABELS: Record<PlayPhase, string> = {
@@ -85,7 +103,14 @@ const PLAY_PHASE_LABELS: Record<PlayPhase, string> = {
 
 interface EventBanner {
   text: string;
-  tone: "goal" | "save" | "chance" | "card" | "offside";
+  tone:
+    | "goal"
+    | "save"
+    | "chance"
+    | "yellow_card"
+    | "red_card"
+    | "injury"
+    | "offside";
   minute?: number;
   clubName?: string;
   clubColor?: string;
@@ -95,6 +120,66 @@ interface EventBanner {
   assistName?: string;
   assistShirt?: number;
   assistRating?: string;
+}
+
+function computeTrajectoryCurve(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  forceAerial: boolean,
+  kind: "pass" | "shot" | "goal" | "cross" | "header"
+): { curveX: number; curveY: number; isAerial: boolean; maxAltitude: number } {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+
+  if (dist < 1.5) {
+    return { curveX: mx, curveY: my, isAerial: false, maxAltitude: 0 };
+  }
+
+  // Perpendicular normal vector
+  const nx = -dy / dist;
+  const ny = dx / dist;
+
+  // Crosses from the wing, long passes, aerial shots
+  const isCross =
+    kind === "cross" ||
+    (Math.abs(x1 - 50) > 22 && Math.abs(x2 - 50) < 22 && dist > 18);
+  const isLongBall = dist > 26;
+  const isHighShot =
+    (kind === "shot" || kind === "goal") && (dist > 18 || Math.random() < 0.45);
+  const isAerial =
+    forceAerial || isCross || isLongBall || isHighShot || kind === "header";
+
+  let maxAltitude = 0;
+  if (isAerial) {
+    if (isCross) maxAltitude = 0.88;
+    else if (isLongBall) maxAltitude = 0.76;
+    else if (isHighShot) maxAltitude = 0.58;
+    else maxAltitude = 0.65;
+  }
+
+  // Curve direction:
+  // For crosses from the flank, curve inward towards goal center
+  let curveDir = 1;
+  if (isCross) {
+    curveDir = x1 < 50 ? 1 : -1;
+  } else {
+    curveDir = (Math.round(x1 + y1 * 3) % 2 === 0 ? 1 : -1);
+  }
+
+  // Curve intensity (magnitude)
+  const curveMagnitude = isAerial
+    ? clamp(dist * 0.14, 3.2, 10.5) * curveDir
+    : clamp(dist * 0.05, 1.2, 4.2) * curveDir;
+
+  const curveX = clamp(mx + nx * curveMagnitude, 5, 95);
+  const curveY = clamp(my + ny * curveMagnitude, 4, 96);
+
+  return { curveX, curveY, isAerial, maxAltitude };
 }
 
 function clamp(val: number, min: number, max: number): number {
@@ -187,10 +272,10 @@ function computeRoleAttackTarget(
   // localBallY: 0 (opponent goal) to 100 (own goal). Higher attackProgress means closer to 0!
   const baseX = clamp(slot.x, 10, 90);
   const mentalityShift =
-    tactics.mentality === "Attacking" ? 5.0 : tactics.mentality === "Defensive" ? -4.5 : 0;
+    tactics.mentality === "Attacking" ? 4.0 : tactics.mentality === "Defensive" ? -4.0 : 0;
   const pressShift =
-    tactics.pressing === "High" ? 2.5 : tactics.pressing === "Low" ? -2.5 : 0;
-  const counterBoost = playPhase === "counter" ? 5.5 : 0;
+    tactics.pressing === "High" ? 2.0 : tactics.pressing === "Low" ? -2.0 : 0;
+  const counterBoost = playPhase === "counter" ? 4.5 : 0;
 
   if (slot.roleCategory === "GK") {
     return {
@@ -204,10 +289,13 @@ function computeRoleAttackTarget(
   const ballOnMyFlank = Math.abs(localBallX - baseX) < 28;
 
   if (label === "CB") {
+    // When ball is in own half (localBallY > 55): CB stays behind ball (localBallY + 14)
+    // When ball is in opponent half: CB steps up to halfway line / midfield (localBallY + 22)
+    const baseOffset = localBallY > 55 ? 14 : 22;
     const attY = clamp(
-      82 - attackProgress * 28 - mentalityShift * 0.65 - pressShift * 0.6,
-      48,
-      86
+      localBallY + baseOffset - mentalityShift * 0.6 - pressShift * 0.5,
+      46,
+      88
     );
     const spreadX = localBallY > 58 ? sideSign * 4.5 : 0;
     const flankX = clamp(baseX * 0.85 + localBallX * 0.15 + spreadX, 20, 80);
@@ -216,75 +304,97 @@ function computeRoleAttackTarget(
 
   if (isFullbackSlot(label)) {
     const isWingback = label === "LWB" || label === "RWB";
-    const flankAdvance = ballOnMyFlank || attackProgress > 0.48 ? 12 : 2;
-    const attY = clamp(
-      78 -
-        attackProgress * 46 -
-        flankAdvance -
-        (isWingback ? 5 : 0) -
-        mentalityShift -
-        counterBoost * 0.4,
-      16,
-      84
-    );
-    const wideBias = localBallY > 30 || ballOnMyFlank ? sideSign * 5 : -sideSign * 3;
+    let attY: number;
+    if (ballOnMyFlank) {
+      const advance = isWingback ? 8 : 4;
+      attY = clamp(
+        localBallY - advance - mentalityShift * 0.8 - counterBoost * 0.4,
+        18,
+        82
+      );
+    } else {
+      // Weak-side fullback stays behind the ball for rest defense
+      attY = clamp(localBallY + 10 - mentalityShift * 0.4, 32, 86);
+    }
+    const wideBias = ballOnMyFlank ? sideSign * 4 : -sideSign * 2;
     const flankX = clamp(baseX + wideBias, 7, 93);
     return { x: flankX, y: attY };
   }
 
   if (label === "CDM") {
-    const anchorY = Math.min(localBallY + 11, 72 - attackProgress * 32);
-    const attY = clamp(anchorY - mentalityShift * 0.5, 28, 76);
+    // Anchors strictly BEHIND the ball as the pivot to recycle play
+    const anchorY = clamp(localBallY + 9 - mentalityShift * 0.4, 28, 78);
     const flankX = clamp(baseX * 0.66 + localBallX * 0.34, 22, 78);
-    return { x: flankX, y: attY };
+    return { x: flankX, y: anchorY };
   }
 
   if (label === "CM" || label === "CAM") {
     const isCam = label === "CAM" || player?.primaryPosition === "CAM";
-    const boxCrash = attackProgress > 0.6 || playPhase === "counter" ? (isCam ? 12 : 8) : 0;
-    const attY = clamp(
-      (isCam ? 54 : 62) -
-        attackProgress * 34 -
-        boxCrash -
-        mentalityShift -
-        counterBoost * 0.6,
-      13,
-      72
-    );
+    let attY: number;
+    if (isCam) {
+      // CAM plays in the hole: connects closely with the ball rather than sprinting into the net
+      if (localBallY > 60) {
+        // Deep build-up: CAM drops toward center circle (48-54) to link play
+        attY = clamp(localBallY - 12 - mentalityShift * 0.6, 44, 65);
+      } else if (localBallY > 30) {
+        // Midfield progression
+        attY = clamp(localBallY - 8 - mentalityShift * 0.8 - counterBoost * 0.5, 20, 50);
+      } else {
+        // Final third: arrives at the edge of the penalty box
+        attY = clamp(18 - mentalityShift * 0.5, 14, 26);
+      }
+    } else {
+      // CM: supports level or slightly behind for recycling, or makes late box arrivals
+      const isBoxToBox = slot.x < 50;
+      if (isBoxToBox && (attackProgress > 0.65 || playPhase === "counter")) {
+        attY = clamp(localBallY - 8 - mentalityShift * 0.6, 18, 60);
+      } else {
+        attY = clamp(localBallY + 3 - mentalityShift * 0.5, 26, 75);
+      }
+    }
     const flankX = clamp(baseX * 0.68 + localBallX * 0.32, 18, 82);
     return { x: flankX, y: attY };
   }
 
   if (isWingerSlot(label)) {
-    const attY = clamp(
-      52 -
-        attackProgress * 38 -
-        mentalityShift * 0.8 -
-        counterBoost -
-        (playPhase === "final_third" ? 4 : 0),
-      9,
-      65
-    );
+    let attY: number;
+    if (localBallY > 60) {
+      // Deep build-up: wingers drop to offer diagonal passing outlets, NOT at the opponent box!
+      attY = clamp(localBallY - 12 - mentalityShift * 0.6, 38, 65);
+    } else if (localBallY > 35) {
+      // Progression: stay 8 to 12 units ahead of ball
+      attY = clamp(localBallY - 10 - mentalityShift * 0.8 - counterBoost, 18, 48);
+    } else {
+      // Final third: attack the box or stay on byline
+      attY = clamp(localBallY - 6 - (playPhase === "final_third" ? 4 : 0), 10, 28);
+    }
+
     // Ball-side winger stretches wide; weak-side winger cuts inside towards the far post
-    const cutInFactor = !ballOnMyFlank && attackProgress > 0.52 ? 0.45 : 0.08;
+    const cutInFactor = !ballOnMyFlank && attackProgress > 0.45 ? 0.45 : 0.08;
     const stretchX = ballOnMyFlank ? sideSign * 4 : 0;
     const flankX = clamp(baseX * (1 - cutInFactor) + 50 * cutInFactor + stretchX, 8, 92);
     return { x: flankX, y: attY };
   }
 
-  // Striker (ST / CF): stretch backline in depth and dart across the box
-  const linkDrop = tactics.passingStyle === "Short" && localBallY > 56 ? 9 : 0;
-  const attY = clamp(
-    45 -
-      attackProgress * 34 -
-      mentalityShift * 0.6 -
-      counterBoost +
-      linkDrop -
-      (playPhase === "final_third" ? 4 : 0),
-    8,
-    58
-  );
-  const channelShift = (localBallX - 50) * 0.28;
+  // Striker (ST / CF):
+  // CONNECTED TO BALL: No longer isolated 30m ahead! Drops as target man in build-up, leads line in attack
+  let attY: number;
+  if (localBallY > 65) {
+    // Team in defensive third: ST drops towards halfway line (48-56) as pivot / target man
+    attY = clamp(localBallY - 16 + (tactics.passingStyle === "Short" ? 4 : 0), 46, 60);
+  } else if (localBallY > 40) {
+    // Midfield: ST stays 10 to 14 units ahead on the shoulder of CBs
+    const lead = tactics.passingStyle === "Direct" ? 14 : tactics.passingStyle === "Short" ? 9 : 12;
+    attY = clamp(localBallY - lead - mentalityShift * 0.6 - counterBoost * 0.6, 22, 46);
+  } else if (localBallY > 22) {
+    // Final third: ST works between the CBs (6 to 9 units ahead)
+    attY = clamp(localBallY - 7 - mentalityShift * 0.5, 12, 26);
+  } else {
+    // Very deep in opponent area (winger at byline): ST drops to penalty spot for cutback!
+    attY = clamp(localBallY + 2, 10, 18);
+  }
+
+  const channelShift = (localBallX - 50) * 0.25;
   const flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
   return { x: flankX, y: attY };
 }
@@ -568,6 +678,66 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const [showKits, setShowKits] = useState(true);
 
   const [ballPos, setBallPos] = useState<Coord>({ x: 50, y: 50 });
+  const [ballVisual, setBallVisual] = useState<BallVisualState>({
+    x: 50,
+    y: 50,
+    altitude: 0,
+    isAerial: false,
+  });
+  const [cardHighlight, setCardHighlight] = useState<ActiveCardHighlight | null>(null);
+  const flightRafRef = useRef<number | null>(null);
+
+  const triggerBallFlight = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    cx: number,
+    cy: number,
+    isAerial: boolean,
+    maxAltitude: number,
+    durationMs: number
+  ) => {
+    if (flightRafRef.current !== null) {
+      cancelAnimationFrame(flightRafRef.current);
+      flightRafRef.current = null;
+    }
+
+    const startTime = performance.now();
+
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = clamp(elapsed / durationMs, 0, 1);
+
+      // Quadratic Bézier curve formula: B(t) = (1-t)^2 * P0 + 2*(1-t)*t * P1 + t^2 * P2
+      const t = progress;
+      const u = 1 - t;
+      const bx = u * u * x1 + 2 * u * t * cx + t * t * x2;
+      const by = u * u * y1 + 2 * u * t * cy + t * t * y2;
+      const alt = isAerial ? Math.sin(t * Math.PI) * maxAltitude : 0;
+
+      setBallVisual({ x: bx, y: by, altitude: alt, isAerial });
+
+      if (progress < 1) {
+        flightRafRef.current = requestAnimationFrame(step);
+      } else {
+        flightRafRef.current = null;
+        setBallVisual({ x: x2, y: y2, altitude: 0, isAerial: false });
+      }
+    };
+
+    flightRafRef.current = requestAnimationFrame(step);
+  };
+
+  // Clean up flight animation on unmount
+  useEffect(() => {
+    return () => {
+      if (flightRafRef.current !== null) {
+        cancelAnimationFrame(flightRafRef.current);
+      }
+    };
+  }, []);
+
   const [carrierId, setCarrierId] = useState<number | null>(null);
   const [carrierClubId, setCarrierClubId] = useState<number>(homeClub.id);
   const [playPhase, setPlayPhase] = useState<PlayPhase>("build_up");
@@ -828,6 +998,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const scorer = playerMap.get(latest.playerId);
       const assister = latest.assistPlayerId ? playerMap.get(latest.assistPlayerId) : undefined;
 
+      const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
+        shooterCoord.x,
+        shooterCoord.y,
+        goalX,
+        goalY,
+        true,
+        "goal"
+      );
+
       setPlayPhase("final_third");
       setCarrierId(latest.playerId);
       setCarrierClubId(latest.clubId);
@@ -837,8 +1016,23 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         x2: goalX,
         y2: goalY,
         kind: "goal",
+        isAerial,
+        maxAltitude,
+        curveX,
+        curveY,
       });
       setBallPos({ x: goalX, y: goalY });
+      triggerBallFlight(
+        shooterCoord.x,
+        shooterCoord.y,
+        goalX,
+        goalY,
+        curveX,
+        curveY,
+        true,
+        maxAltitude,
+        500
+      );
       setBanner({
         text: "GOOOOL!",
         tone: "goal",
@@ -872,6 +1066,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         keeperTarget
       );
 
+      const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
+        shooterCoord.x,
+        shooterCoord.y,
+        keeperTarget.x,
+        keeperTarget.y,
+        true,
+        "shot"
+      );
+
       setPlayPhase("final_third");
       setCarrierId(latest.playerId);
       setCarrierClubId(latest.clubId);
@@ -881,8 +1084,23 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         x2: keeperTarget.x,
         y2: keeperTarget.y,
         kind: "shot",
+        isAerial,
+        maxAltitude,
+        curveX,
+        curveY,
       });
       setBallPos(keeperTarget);
+      triggerBallFlight(
+        shooterCoord.x,
+        shooterCoord.y,
+        keeperTarget.x,
+        keeperTarget.y,
+        curveX,
+        curveY,
+        true,
+        maxAltitude,
+        420
+      );
       setBanner({
         text: `DEFESAÇA! ${latest.playerName} (${latest.minute}')`,
         tone: "save",
@@ -893,6 +1111,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const missY = isHomeEvent ? 1.5 : 98.5;
       const { shooterCoord } = choreographBoxAction(isHomeEvent, latest.playerId);
 
+      const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
+        shooterCoord.x,
+        shooterCoord.y,
+        missX,
+        missY,
+        true,
+        "shot"
+      );
+
       setPlayPhase("final_third");
       setCarrierId(latest.playerId);
       setCarrierClubId(latest.clubId);
@@ -902,24 +1129,67 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         x2: missX,
         y2: missY,
         kind: "shot",
+        isAerial,
+        maxAltitude,
+        curveX,
+        curveY,
       });
       setBallPos({ x: missX, y: missY });
+      triggerBallFlight(
+        shooterCoord.x,
+        shooterCoord.y,
+        missX,
+        missY,
+        curveX,
+        curveY,
+        true,
+        maxAltitude,
+        440
+      );
       setBanner({
         text: `QUASE! ${latest.playerName} (${latest.minute}')`,
         tone: "chance",
       });
       setHighlightPause(1100);
-    } else if (latest.type === "yellow_card" || latest.type === "red_card" || latest.type === "injury") {
+    } else if (latest.type === "yellow_card") {
       setBanner({
-        text:
-          latest.type === "red_card"
-            ? `EXPULSO! ${latest.playerName} (${latest.minute}')`
-            : latest.type === "injury"
-            ? `LESÃO! ${latest.playerName} (${latest.minute}')`
-            : `AMARELO: ${latest.playerName} (${latest.minute}')`,
-        tone: "card",
+        text: `CARTÃO AMARELO • ${latest.playerName} (${latest.minute}')`,
+        tone: "yellow_card",
+        minute: latest.minute,
       });
-      setHighlightPause(1100);
+      setCardHighlight({
+        playerId: latest.playerId,
+        playerName: latest.playerName,
+        type: "yellow_card",
+        minute: latest.minute,
+      });
+      setHighlightPause(1800, 1200);
+    } else if (latest.type === "red_card") {
+      setBanner({
+        text: `EXPULSO! ${latest.playerName} (${latest.minute}')`,
+        tone: "red_card",
+        minute: latest.minute,
+      });
+      setCardHighlight({
+        playerId: latest.playerId,
+        playerName: latest.playerName,
+        type: "red_card",
+        minute: latest.minute,
+      });
+      setHighlightPause(2200, 1400);
+    } else if (latest.type === "injury") {
+      setBanner({
+        text: `LESÃO! ${latest.playerName} (${latest.minute}')`,
+        tone: "injury",
+        minute: latest.minute,
+      });
+      setCardHighlight({
+        playerId: latest.playerId,
+        playerName: latest.playerName,
+        type: "injury",
+        minute: latest.minute,
+      });
+      setHighlightPause(1800, 1200);
     } else if (latest.type === "offside") {
       const attackingHome = isHomeEvent;
       const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
@@ -945,6 +1215,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const updatedCoords = { ...curCoords, [latest.playerId]: offenderCoord };
       setLiveCoords(updatedCoords);
 
+      const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
+        passerCoord.x,
+        passerCoord.y,
+        offenderCoord.x,
+        offenderCoord.y,
+        false,
+        "pass"
+      );
+
       setOffsideMark({
         lineY,
         offenderId: latest.playerId,
@@ -960,8 +1239,23 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         x2: offenderCoord.x,
         y2: offenderCoord.y,
         kind: "pass",
+        isAerial,
+        maxAltitude,
+        curveX,
+        curveY,
       });
       setBallPos(offenderCoord);
+      triggerBallFlight(
+        passerCoord.x,
+        passerCoord.y,
+        offenderCoord.x,
+        offenderCoord.y,
+        curveX,
+        curveY,
+        false,
+        0,
+        380
+      );
       setBanner({
         text: latest.disallowedGoal
           ? `GOL ANULADO! Impedimento de ${latest.playerName} (${latest.minute}')`
@@ -983,6 +1277,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           setCarrierId(takerId);
           setCarrierClubId(defendingHome ? homeClub.id : awayClub.id);
           setBallPos(takerCoord);
+          setBallVisual({ x: takerCoord.x, y: takerCoord.y, altitude: 0, isAerial: false });
           setPlayPhase("build_up");
           setTrail(null);
         }
@@ -1007,6 +1302,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     const t = window.setTimeout(() => setOffsideMark(null), offsideMark.disallowedGoal ? 3000 : 2200);
     return () => window.clearTimeout(t);
   }, [offsideMark]);
+
+  // Clear card highlight after duration
+  useEffect(() => {
+    if (!cardHighlight) return;
+    const t = window.setTimeout(() => setCardHighlight(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [cardHighlight]);
 
   // Sub-tick continuous tactical movement, active runs, dribbling & progressive passing (220ms)
   useEffect(() => {
@@ -1064,6 +1366,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             x: clamp(nextBallPos.x + (50 - nextBallPos.x) * 0.02, 8, 92),
             y: clamp(nextBallPos.y + driftDir * 0.55, 6, 94),
           };
+          if (flightRafRef.current === null) {
+            setBallVisual({ x: nextBallPos.x, y: nextBallPos.y, altitude: 0, isAerial: false });
+          }
         }
       } else if (keepSameTeam && currentCarrierId !== null) {
         const carrierPlayer = cur.playerMap.get(currentCarrierId);
@@ -1090,6 +1395,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           };
           curCoords[currentCarrierId] = nextBallPos;
           setTrail(null);
+          if (flightRafRef.current === null) {
+            setBallVisual({ x: nextBallPos.x, y: nextBallPos.y, altitude: 0, isAerial: false });
+          }
         } else {
           // Tactical progressive pass
           const receiverId = selectPassTarget(
@@ -1112,13 +1420,50 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             y: clamp(receiverCoord.y + leadY, 6, 94),
           };
 
+          const passDist = Math.hypot(targetBall.x - nextBallPos.x, targetBall.y - nextBallPos.y);
+          const isCross =
+            Math.abs(nextBallPos.x - 50) > 20 &&
+            Math.abs(targetBall.x - 50) < 22 &&
+            (prevIsHome ? targetBall.y < 32 : targetBall.y > 68);
+          const isLongSwitch = passDist > 25;
+          const forceAerial =
+            isCross ||
+            isLongSwitch ||
+            (currentTactics.passingStyle === "Direct" && passDist > 18 && Math.random() < 0.65);
+
+          const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
+            nextBallPos.x,
+            nextBallPos.y,
+            targetBall.x,
+            targetBall.y,
+            forceAerial,
+            isCross ? "cross" : "pass"
+          );
+
           setTrail({
             x1: nextBallPos.x,
             y1: nextBallPos.y,
             x2: targetBall.x,
             y2: targetBall.y,
-            kind: "pass",
+            kind: isCross ? "cross" : "pass",
+            isAerial,
+            maxAltitude,
+            curveX,
+            curveY,
           });
+
+          triggerBallFlight(
+            nextBallPos.x,
+            nextBallPos.y,
+            targetBall.x,
+            targetBall.y,
+            curveX,
+            curveY,
+            isAerial,
+            maxAltitude,
+            Math.max(220, Math.min(520, passDist * 14))
+          );
+
           nextBallPos = targetBall;
           nextCarrierId = receiverId;
         }
@@ -1156,6 +1501,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         nextBallPos = meetBall;
         nextCarrierId = bestInterceptor;
         setTrail(null);
+        if (flightRafRef.current === null) {
+          setBallVisual({ x: meetBall.x, y: meetBall.y, altitude: 0, isAerial: false });
+        }
 
         const newProgress = nextIsHome
           ? (92 - nextBallPos.y) / 84
@@ -1217,9 +1565,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             vx = runType === "cut_inside" ? (50 - runnerCoord.x) * 0.35 : 0;
             vy = attDirY * (9 + Math.random() * 8);
           } else if (slot.roleCategory === "ATT") {
-            runType = "in_behind";
-            vx = Math.random() * 12 - 6;
-            vy = attDirY * (10 + Math.random() * 9);
+            const dropsToFeet = Math.random() < 0.45 && currentProgress < 0.75;
+            if (dropsToFeet) {
+              runType = "support";
+              vx = (nextBallPos.x - runnerCoord.x) * 0.3;
+              vy = attDirY * (-6 - Math.random() * 4); // Drops toward the ball to offer a passing option!
+            } else {
+              runType = "in_behind";
+              vx = Math.random() * 10 - 5;
+              vy = attDirY * (8 + Math.random() * 7);
+            }
           } else if (slot.label === "CM" || slot.label === "CAM") {
             runType = nextPhase === "final_third" || nextPhase === "counter" ? "box_crash" : "support";
             vx = (nextBallPos.x - runnerCoord.x) * 0.2;
@@ -1554,24 +1909,55 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             </>
           )}
 
-          {/* Pass / Shot Trajectory */}
+          {/* Pass / Shot Trajectory with Curves and Aerial Shadow */}
           {!session.finished && trail && (
-            <line
-              x1={trail.x1}
-              y1={trail.y1}
-              x2={trail.x2}
-              y2={trail.y2}
-              stroke={
-                trail.kind === "goal"
-                  ? "#fbbf24"
-                  : trail.kind === "shot"
-                  ? "#fb7185"
-                  : "rgba(255,255,255,0.55)"
-              }
-              strokeWidth={trail.kind === "pass" ? 1.6 : 2.6}
-              strokeDasharray={trail.kind === "pass" ? "5 4" : undefined}
-              vectorEffect="non-scaling-stroke"
-            />
+            <g>
+              {trail.isAerial && (
+                <path
+                  d={`M ${trail.x1} ${trail.y1} Q ${trail.curveX} ${trail.curveY} ${trail.x2} ${trail.y2}`}
+                  fill="none"
+                  stroke="rgba(0,0,0,0.35)"
+                  strokeWidth={1.8}
+                  strokeDasharray="3 3"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+              <path
+                d={`M ${trail.x1} ${trail.y1} Q ${trail.curveX} ${trail.curveY} ${trail.x2} ${trail.y2}`}
+                fill="none"
+                stroke={
+                  trail.kind === "goal"
+                    ? "#fbbf24"
+                    : trail.kind === "shot"
+                    ? "#fb7185"
+                    : trail.isAerial
+                    ? "#38bdf8"
+                    : "rgba(255,255,255,0.65)"
+                }
+                strokeWidth={
+                  trail.kind === "goal"
+                    ? 3.0
+                    : trail.kind === "shot"
+                    ? 2.4
+                    : trail.isAerial
+                    ? 2.2
+                    : 1.6
+                }
+                strokeDasharray={
+                  trail.kind === "pass" || trail.isAerial ? "5 4" : undefined
+                }
+                vectorEffect="non-scaling-stroke"
+              />
+              <circle
+                cx={trail.x2}
+                cy={trail.y2}
+                r={trail.isAerial ? 1.4 : 0.9}
+                fill={trail.isAerial ? "rgba(56,189,248,0.4)" : "rgba(255,255,255,0.4)"}
+                stroke={trail.isAerial ? "#38bdf8" : "rgba(255,255,255,0.8)"}
+                strokeWidth={0.8}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
           )}
         </svg>
 
@@ -1671,6 +2057,46 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               </div>
             </div>
+          ) : banner.tone === "yellow_card" ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
+              <div className="flex items-center gap-2.5 rounded-lg border-2 border-amber-300 bg-amber-400 px-4 py-2 text-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.7)] font-black">
+                <div className="flex h-5 w-3.5 items-center justify-center rounded-[2px] bg-amber-300 border border-amber-600 shadow-sm text-[10px]">
+                  🟨
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-amber-950 font-bold">
+                    Advertência Disciplinar
+                  </div>
+                  <div className="text-xs font-black">{banner.text}</div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "red_card" ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
+              <div className="flex items-center gap-2.5 rounded-lg border-2 border-rose-300 bg-rose-600 px-4 py-2 text-white shadow-[0_0_30px_rgba(244,63,94,0.8)] font-black">
+                <div className="flex h-5 w-3.5 items-center justify-center rounded-[2px] bg-rose-500 border border-white shadow-sm text-[10px]">
+                  🟥
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-rose-200 font-bold">
+                    Expulsão de Campo
+                  </div>
+                  <div className="text-xs font-black">{banner.text}</div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "injury" ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
+              <div className="flex items-center gap-2.5 rounded-lg border-2 border-rose-400 bg-slate-950 px-4 py-2 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.5)] font-black">
+                <span className="text-base">🚑</span>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-rose-500 font-bold">
+                    Atendimento Médico
+                  </div>
+                  <div className="text-xs font-black">{banner.text}</div>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
               <div
@@ -1703,6 +2129,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const isCarrier = carrierId === playerId;
           const hasYellow = session.yellowCardedIds.includes(playerId);
           const isInjured = session.injuredIds.includes(playerId);
+          const isCardTarget = cardHighlight?.playerId === playerId;
           const stamina = Math.round(session.playerStamina[playerId] ?? player.stamina);
           const rating = (session.playerRatings[playerId] ?? 6.5).toFixed(1);
           const surname = player.name.split(" ").slice(-1)[0];
@@ -1723,11 +2150,49 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 isUserPlayer && !session.finished ? "cursor-pointer hover:scale-110" : "cursor-default"
               }`}
             >
+              {/* Floating Card Highlight Notification over Player */}
+              {isCardTarget && cardHighlight && (
+                <div className="pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center animate-bounce">
+                  {cardHighlight.type === "yellow_card" ? (
+                    <>
+                      <div className="flex h-6 w-4 items-center justify-center rounded-[2px] bg-amber-400 border border-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.9)] text-[10px] font-black text-slate-950">
+                        🟨
+                      </div>
+                      <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-amber-300 ring-1 ring-amber-400/50 shadow-md">
+                        Amarelo ({cardHighlight.minute}')
+                      </span>
+                    </>
+                  ) : cardHighlight.type === "red_card" ? (
+                    <>
+                      <div className="flex h-6 w-4 items-center justify-center rounded-[2px] bg-rose-600 border border-rose-200 shadow-[0_0_18px_rgba(225,29,72,0.9)] text-[10px] font-black text-white">
+                        🟥
+                      </div>
+                      <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-300 ring-1 ring-rose-500/50 shadow-md">
+                        Expulsão ({cardHighlight.minute}')
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 border border-white shadow-[0_0_15px_rgba(225,29,72,0.8)] text-xs text-white">
+                        🚑
+                      </div>
+                      <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-300 ring-1 ring-rose-500/50 shadow-md">
+                        Lesão ({cardHighlight.minute}')
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Token: Kit SVG or Circle */}
               {showKits ? (
                 <div
                   className={`relative rounded-lg transition ${
-                    isSubSelected
+                    isCardTarget && cardHighlight?.type === "yellow_card"
+                      ? "ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-[0_0_25px_#f59e0b] scale-120 animate-pulse"
+                      : isCardTarget && cardHighlight?.type === "red_card"
+                      ? "ring-4 ring-rose-600 ring-offset-2 ring-offset-slate-950 shadow-[0_0_30px_#e11d48] scale-120 animate-pulse"
+                      : isSubSelected
                       ? "ring-2 ring-amber-400 bg-amber-400/20 scale-115"
                       : isCarrier
                       ? "ring-2 ring-white/90 bg-white/10 scale-110"
@@ -1741,7 +2206,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     number={player.shirtNumber ?? info.label.slice(0, 2)}
                   />
                   {hasYellow && (
-                    <span className="absolute -left-0.5 -top-0.5 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
+                    <span
+                      title="Jogador advertido com Cartão Amarelo"
+                      className="absolute -left-1 -top-1 z-20 flex h-3.5 w-2.5 items-center justify-center rounded-[2px] bg-amber-400 border border-amber-600 shadow-md ring-1 ring-slate-950/80"
+                    >
+                      <span className="h-2 w-1.5 rounded-[1px] bg-amber-300" />
+                    </span>
                   )}
                   {isInjured && (
                     <span className="absolute -left-1.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white ring-1 ring-white">
@@ -1763,7 +2233,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               ) : (
                 <div
                   className={`relative flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full text-[9px] font-black transition ${
-                    isSubSelected
+                    isCardTarget && cardHighlight?.type === "yellow_card"
+                      ? "ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-[0_0_25px_#f59e0b] scale-120 animate-pulse"
+                      : isCardTarget && cardHighlight?.type === "red_card"
+                      ? "ring-4 ring-rose-600 ring-offset-2 ring-offset-slate-950 shadow-[0_0_30px_#e11d48] scale-120 animate-pulse"
+                      : isSubSelected
                       ? "ring-2 ring-amber-400 scale-115"
                       : isCarrier
                       ? "ring-2 ring-white scale-110"
@@ -1779,7 +2253,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   {player.shirtNumber ?? info.label.slice(0, 2)}
 
                   {hasYellow && (
-                    <span className="absolute -left-1 -top-1 h-2.5 w-1.5 rounded-[1px] bg-amber-400 ring-1 ring-black/60" />
+                    <span
+                      title="Jogador advertido com Cartão Amarelo"
+                      className="absolute -left-1.5 -top-1 z-20 flex h-3.5 w-2.5 items-center justify-center rounded-[2px] bg-amber-400 border border-amber-600 shadow-md ring-1 ring-slate-950/80"
+                    >
+                      <span className="h-2 w-1.5 rounded-[1px] bg-amber-300" />
+                    </span>
                   )}
                   {isInjured && (
                     <span className="absolute -left-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white ring-1 ring-white">
@@ -1821,18 +2300,53 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           );
         })}
 
-        {/* Animated Ball */}
+        {/* Animated Ball with Ground Shadow, 3D Elevation & Altitude Scale */}
         {!session.finished && (
-          <div
-            style={{
-              left: `${ballPos.x}%`,
-              top: `${ballPos.y}%`,
-              transitionDuration: `${Math.min(420, pitchTickMs * 2)}ms`,
-            }}
-            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-[left,top] ease-out"
-          >
-            <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950 shadow-[0_2px_4px_rgba(0,0,0,0.55)]" />
-          </div>
+          <>
+            {/* Ground Shadow on Pitch */}
+            <div
+              className="pointer-events-none absolute z-15 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/60 transition-[opacity,transform] duration-75"
+              style={{
+                left: `${ballVisual.x}%`,
+                top: `${ballVisual.y}%`,
+                width: `${Math.max(6, 13 * (1 - ballVisual.altitude * 0.45))}px`,
+                height: `${Math.max(3.5, 7.5 * (1 - ballVisual.altitude * 0.45))}px`,
+                opacity: 0.7 - ballVisual.altitude * 0.35,
+                filter: `blur(${ballVisual.altitude * 2.8}px)`,
+                transform: `translate(-50%, -50%) translate(${ballVisual.altitude * 7}px, ${ballVisual.altitude * 5}px)`,
+              }}
+            />
+
+            {/* Ball Body in 3D Flight */}
+            <div
+              style={{
+                left: `${ballVisual.x}%`,
+                top: `${ballVisual.y}%`,
+                transform: `translate(-50%, -50%) translateY(${-ballVisual.altitude * 28}px) scale(${1 + ballVisual.altitude * 0.75})`,
+              }}
+              className="pointer-events-none absolute z-25 -translate-x-1/2 -translate-y-1/2 transition-[transform] duration-75 ease-out"
+            >
+              <div className="relative flex items-center justify-center">
+                {/* Textured Soccer Ball */}
+                <div
+                  className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full border border-slate-900 shadow-md flex items-center justify-center overflow-hidden"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 35% 35%, #ffffff 0%, #f1f5f9 55%, #94a3b8 100%)",
+                  }}
+                >
+                  <div className="h-1.5 w-1.5 rounded-full bg-slate-950/80" />
+                </div>
+
+                {/* Aerial altitude pill */}
+                {ballVisual.altitude > 0.45 && (
+                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-1 py-0.2 text-[7px] font-black tracking-wider text-sky-300 ring-1 ring-sky-400/50 shadow-sm">
+                    ✈️ Alto
+                  </span>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 

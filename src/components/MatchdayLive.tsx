@@ -632,23 +632,43 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   const badgeStyle =
                     ev.type === "goal"
                       ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                      : ev.type === "red_card" || ev.type === "injury"
+                      : ev.type === "red_card"
                       ? "border-rose-500/50 bg-rose-500/15 text-rose-200"
+                      : ev.type === "injury"
+                      ? "border-rose-400/40 bg-rose-500/10 text-rose-300"
                       : ev.type === "yellow_card"
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                      ? "border-amber-400/60 bg-amber-400/15 text-amber-200"
                       : ev.type === "substitution"
                       ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
                       : ev.type === "offside"
                       ? "border-orange-500/40 bg-orange-500/10 text-orange-200"
                       : "border-slate-800 bg-slate-950/60 text-slate-300";
 
+                  const eventIcon =
+                    ev.type === "goal"
+                      ? "⚽"
+                      : ev.type === "yellow_card"
+                      ? "🟨"
+                      : ev.type === "red_card"
+                      ? "🟥"
+                      : ev.type === "injury"
+                      ? "🚑"
+                      : ev.type === "offside"
+                      ? "🚩"
+                      : ev.type === "substitution"
+                      ? "🔄"
+                      : ev.type === "save"
+                      ? "🧤"
+                      : "•";
+
                   return (
                     <div
                       key={ev.id}
-                      className={`rounded-xl border px-3 py-2 text-xs ${badgeStyle}`}
+                      className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${badgeStyle}`}
                     >
-                      <span className="mr-2 font-black">{ev.minute}'</span>
-                      <span>{ev.text}</span>
+                      <span className="font-black text-slate-100">{ev.minute}'</span>
+                      <span className="shrink-0 text-sm leading-none">{eventIcon}</span>
+                      <span className="min-w-0 flex-1">{ev.text}</span>
                     </div>
                   );
                 })}
