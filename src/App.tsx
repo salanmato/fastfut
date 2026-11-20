@@ -18,6 +18,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import type {
+  Club,
   MatchInjury,
   MatchResult,
   NewsItem,
@@ -85,6 +86,11 @@ import {
   loanOutPlayer,
   exerciseBuyOption,
 } from "./engine/youthAndLoansEngine";
+import {
+  generateAiOffersForUser,
+  respondToTransferOffer,
+  simulateAiWorldTransfers,
+} from "./engine/transfersEngine";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
@@ -717,22 +723,85 @@ export const App: React.FC = () => {
         ]
       : [];
 
+    // Transfer Market: AI Offers & World Transfers Simulation
+    const windowStatus = getTransferWindowStatus(
+      nextDate,
+      seasonFinished,
+      save.allowTransfersOutsideWindow
+    );
+
+    let finalClubs: Club[] = nextClubs;
+    let finalPlayers: Player[] = nextPlayers;
+    let transferNews: NewsItem[] = [];
+    let nextTransferOffers = save.transferOffers ?? [];
+    let nextWorldTransfers = save.worldTransfers ?? [];
+    let offerToastMsg: string | null = null;
+
+    if (windowStatus.isOpen && !seasonFinished) {
+      // 1. AI Transfer Offers for user players
+      const { offers: generatedOffers, news: offerNews } = generateAiOffersForUser(
+        {
+          ...save,
+          clubs: finalClubs,
+          players: finalPlayers,
+          currentDate: nextDate,
+          currentMatchweek: nextMwValue,
+          transferOffers: nextTransferOffers,
+        },
+        windowStatus
+      );
+      if (generatedOffers.length > 0) {
+        nextTransferOffers = [...generatedOffers, ...nextTransferOffers];
+        transferNews = [...transferNews, ...offerNews];
+        offerToastMsg = `📩 PROPOSTA: ${generatedOffers[0].fromClubName} ofereceu ${formatMoney(
+          generatedOffers[0].offeredAmountEur
+        )} por ${generatedOffers[0].playerName}!`;
+      }
+
+      // 2. AI World Transfers Simulation
+      const {
+        nextClubs: worldClubs,
+        nextPlayers: worldPlayers,
+        transfers: simTransfers,
+        news: simNews,
+      } = simulateAiWorldTransfers(
+        {
+          ...save,
+          clubs: finalClubs,
+          players: finalPlayers,
+          currentDate: nextDate,
+          currentMatchweek: nextMwValue,
+        },
+        2
+      );
+      finalClubs = worldClubs;
+      finalPlayers = worldPlayers;
+      if (simTransfers.length > 0) {
+        nextWorldTransfers = [...simTransfers, ...nextWorldTransfers].slice(0, 100);
+        transferNews = [...transferNews, ...simNews];
+      }
+    }
+
     setSave({
       ...save,
-      clubs: nextClubs,
+      clubs: finalClubs,
       currentMatchweek: nextMwValue,
       seasonFinished,
       currentDate: nextDate,
       fixtures: nextFixtures,
-      players: nextPlayers,
+      players: finalPlayers,
       tacticsByClub: nextTacticsByClub,
       stadiumByClub: nextStadiumByClub,
       faCup: activeCup,
-      news: [...cupNews, ...milestoneNews, ...newItems, ...save.news].slice(0, 40),
+      transferOffers: nextTransferOffers,
+      worldTransfers: nextWorldTransfers,
+      news: [...cupNews, ...transferNews, ...milestoneNews, ...newItems, ...save.news].slice(0, 50),
     });
 
     setActiveTab(seasonFinished ? "season_review" : "dashboard");
-    const milestoneToast = dueCupRound
+    const milestoneToast = offerToastMsg
+      ? offerToastMsg
+      : dueCupRound
       ? `🏆 FA Cup liberada: ${dueCupRound.name}!`
       : milestoneNews[0]?.title;
     setToast(
@@ -1194,6 +1263,32 @@ export const App: React.FC = () => {
     setToast(message);
   };
 
+  const handleAcceptTransferOffer = (offerId: string) => {
+    if (!save) return;
+    const { nextSave, message } = respondToTransferOffer(save, offerId, "accept");
+    setSave(nextSave);
+    setToast(message);
+  };
+
+  const handleRejectTransferOffer = (offerId: string) => {
+    if (!save) return;
+    const { nextSave, message } = respondToTransferOffer(save, offerId, "reject");
+    setSave(nextSave);
+    setToast(message);
+  };
+
+  const handleCounterTransferOffer = (offerId: string, counterAmountEur: number) => {
+    if (!save) return;
+    const { nextSave, message } = respondToTransferOffer(
+      save,
+      offerId,
+      "counter",
+      counterAmountEur
+    );
+    setSave(nextSave);
+    setToast(message);
+  };
+
   const handleSellPlayer = (target: Player) => {
     if (!save) return;
     if (!windowStatus.isOpen) {
@@ -1423,6 +1518,9 @@ export const App: React.FC = () => {
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
+              const pendingOffersCount = (save?.transferOffers ?? []).filter(
+                (o) => o.status === "pending"
+              ).length;
               return (
                 <button
                   key={item.id}
@@ -1440,6 +1538,11 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" /> {item.label}
+                  {item.id === "market" && pendingOffersCount > 0 && (
+                    <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">
+                      {pendingOffersCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1662,11 +1765,16 @@ export const App: React.FC = () => {
             windowStatus={windowStatus}
             currentDate={currentDate}
             shortlistIds={save.shortlistIds ?? []}
+            transferOffers={save.transferOffers}
+            worldTransfers={save.worldTransfers}
             onBuyPlayer={handleBuyPlayer}
             onSellPlayer={handleSellPlayer}
             onSelectPlayer={setInspectedPlayer}
             onToggleShortlist={handleToggleShortlist}
             onOpenCalendar={() => setActiveTab("calendar")}
+            onAcceptOffer={handleAcceptTransferOffer}
+            onRejectOffer={handleRejectTransferOffer}
+            onCounterOffer={handleCounterTransferOffer}
           />
         )}
 
