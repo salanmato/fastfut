@@ -250,18 +250,20 @@ export const App: React.FC = () => {
   const leagueClubs = useMemo(() => {
     if (!save) return [];
     const uc = save.clubs.find((c) => c.id === save.userClubId);
-    const div = uc?.division ?? "Premier League";
-    const inDiv = save.clubs.filter((c) => (c.division ?? "Premier League") === div);
-    if (inDiv.length > 20 && save.fixtures.length > 0) {
+    const leagueName = uc?.league ?? uc?.division ?? "Premier League";
+    const inLeague = save.clubs.filter(
+      (c) => (c.league ?? c.division ?? "Premier League") === leagueName
+    );
+    if (inLeague.length > 20 && save.fixtures.length > 0) {
       const fxIds = new Set<number>();
       for (const fx of save.fixtures) {
         fxIds.add(fx.homeClubId);
         fxIds.add(fx.awayClubId);
       }
-      const active = inDiv.filter((c) => fxIds.has(c.id));
+      const active = inLeague.filter((c) => fxIds.has(c.id));
       if (active.length > 0) return active;
     }
-    return inDiv;
+    return inLeague.length > 0 ? inLeague : save.clubs.filter((c) => c.division === uc?.division);
   }, [save]);
 
   const standings = useMemo(
@@ -296,11 +298,13 @@ export const App: React.FC = () => {
       clubId,
       tacticsByClub[clubId]?.starters ?? []
     );
-    const chosenDivision = chosenClub.division ?? "Premier League";
+    const chosenDivision = chosenClub.league ?? chosenClub.division ?? "Premier League";
     const fixtures =
       chosenDivision !== "Premier League"
         ? generateDivisionFixtures(
-            clubs.filter((c) => (c.division ?? "Premier League") === chosenDivision),
+            clubs.filter(
+              (c) => (c.league ?? c.division ?? "Premier League") === chosenDivision
+            ),
             extractMatchweekDates(rawDb.fixtures),
             referees,
             clubId

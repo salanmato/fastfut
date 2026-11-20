@@ -26,11 +26,23 @@ export type EnglishDivision =
   | "EFL League One"
   | "EFL League Two";
 
+export interface LeagueMetadata {
+  id: number;
+  code: string;
+  name: string;
+  country: string;
+  flagEmoji: string;
+  tier: number;
+  totalClubs: number;
+}
+
 export interface Club {
   id: number;
   name: string;
   shortName: string;
-  division?: EnglishDivision;
+  country?: string;
+  league?: string;
+  division?: EnglishDivision | string;
   tier?: number; // 1..4
   primaryColor: string;
   secondaryColor: string;
@@ -276,7 +288,8 @@ export interface FACupState {
 
 export interface RawDatabase {
   season: string;
-  league: string;
+  league?: string;
+  leagues?: LeagueMetadata[];
   clubs: Club[];
   referees: Referee[];
   players: Player[];

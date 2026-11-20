@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Search, Trophy, MapPin, Banknote, Users, Sparkles, ArrowLeft } from "lucide-react";
-import type { Club, EnglishDivision, Player } from "../types/game";
+import type { Club, Player } from "../types/game";
 import { formatMoney, getOverallColor } from "../utils/format";
 import { getClubVisuals, getKitThemePalette } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
@@ -13,12 +13,21 @@ interface ClubSelectionProps {
   onBackToMenu?: () => void;
 }
 
-const DIVISION_TABS: Array<{ id: "ALL" | EnglishDivision; label: string }> = [
-  { id: "ALL", label: "Todas" },
-  { id: "Premier League", label: "Premier League" },
-  { id: "EFL Championship", label: "Championship" },
-  { id: "EFL League One", label: "League One" },
-  { id: "EFL League Two", label: "League Two" },
+const LEAGUE_TABS: Array<{ id: string; label: string; flag: string }> = [
+  { id: "ALL", label: "Todas as Ligas", flag: "🌍" },
+  { id: "Premier League", label: "Premier League", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  { id: "LALIGA EA SPORTS", label: "LaLiga", flag: "🇪🇸" },
+  { id: "Serie A Enilive", label: "Serie A", flag: "🇮🇹" },
+  { id: "Bundesliga", label: "Bundesliga", flag: "🇩🇪" },
+  { id: "Ligue 1 McDonald's", label: "Ligue 1", flag: "🇫🇷" },
+  { id: "Brasileirão Série A", label: "Brasileirão", flag: "🇧🇷" },
+  { id: "ROSHN Saudi League", label: "Saudi Pro", flag: "🇸🇦" },
+  { id: "EFL Championship", label: "Championship", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  { id: "EFL League One", label: "League One", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  { id: "EFL League Two", label: "League Two", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  { id: "Liga Portugal", label: "Liga Portugal", flag: "🇵🇹" },
+  { id: "Eredivisie", label: "Eredivisie", flag: "🇳🇱" },
+  { id: "Major League Soccer", label: "MLS", flag: "🇺🇸" },
 ];
 
 export const ClubSelection: React.FC<ClubSelectionProps> = ({
@@ -29,7 +38,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
 }) => {
   const [managerName, setManagerName] = useState("Alan Matos");
   const [search, setSearch] = useState("");
-  const [divisionFilter, setDivisionFilter] = useState<"ALL" | EnglishDivision>("ALL");
+  const [divisionFilter, setDivisionFilter] = useState<string>("ALL");
   const [selectedId, setSelectedId] = useState<number>(clubs[0]?.id ?? 1);
   const [previewKit, setPreviewKit] = useState<"home" | "away">("home");
 
@@ -37,10 +46,17 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
     const q = search.trim().toLowerCase();
     return [...clubs]
       .filter((c) => {
-        if (divisionFilter !== "ALL" && (c.division ?? "Premier League") !== divisionFilter) {
-          return false;
+        if (divisionFilter !== "ALL") {
+          const l = c.league ?? c.division ?? "Premier League";
+          if (l !== divisionFilter) return false;
         }
-        return !q || c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q);
+        return (
+          !q ||
+          c.name.toLowerCase().includes(q) ||
+          c.city.toLowerCase().includes(q) ||
+          (c.country ?? "").toLowerCase().includes(q) ||
+          (c.manager ?? "").toLowerCase().includes(q)
+        );
       })
       .sort((a, b) => (a.tier ?? 1) - (b.tier ?? 1) || b.avgOverall - a.avgOverall);
   }, [clubs, search, divisionFilter]);
@@ -79,14 +95,14 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                   </button>
                 )}
                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  <Trophy className="h-3.5 w-3.5" /> Futebol Inglês 2026/27 • {clubs.length} Clubes
+                  <Trophy className="h-3.5 w-3.5" /> Database Unificada • {clubs.length} Clubes • 13 Ligas • 10 Países
                 </div>
               </div>
               <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
                 Football Manager <span className="text-emerald-400">26/27</span>
               </h1>
               <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
-                Escolha entre {clubs.length} clubes ingleses em 4 divisões (Premier League, Championship, League One e League Two), dispute a Copa da Inglaterra e contrate no mercado global.
+                Escolha seu clube em qualquer uma das 13 ligas sincronizadas na database única (Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Brasileirão, Saudi Pro, MLS e mais).
               </p>
             </div>
 
@@ -137,22 +153,27 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {DIVISION_TABS.map((tab) => {
+            {LEAGUE_TABS.map((tab) => {
               const count =
                 tab.id === "ALL"
                   ? clubs.length
-                  : clubs.filter((c) => (c.division ?? "Premier League") === tab.id).length;
+                  : clubs.filter(
+                      (c) => (c.league ?? c.division ?? "Premier League") === tab.id
+                    ).length;
+              if (tab.id !== "ALL" && count === 0) return null;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setDivisionFilter(tab.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
                     divisionFilter === tab.id
                       ? "bg-emerald-500 text-slate-950"
                       : "border border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
-                  {tab.label} ({count})
+                  <span>{tab.flag}</span>
+                  <span>{tab.label}</span>
+                  <span className="text-[10px] opacity-70">({count})</span>
                 </button>
               );
             })}
@@ -189,15 +210,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                       {club.avgOverall}
                     </span>
                     <div className="mt-1 text-[10px] text-slate-500">
-                      {club.division === "Premier League"
-                        ? "Premier League"
-                        : club.division === "EFL Championship"
-                        ? "Championship"
-                        : club.division === "EFL League One"
-                        ? "League One"
-                        : club.division === "EFL League Two"
-                        ? "League Two"
-                        : club.status}
+                      {club.country ? `${club.country} • ` : ""}{club.league ?? club.division}
                     </div>
                   </div>
                 </button>

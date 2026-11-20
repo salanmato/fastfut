@@ -10,7 +10,7 @@ import {
   Layers,
   Users,
 } from "lucide-react";
-import type { Club, EnglishDivision, Fixture, Player, StandingRow } from "../types/game";
+import type { Club, Fixture, Player, StandingRow } from "../types/game";
 import { getTopAssisters, getTopScorers } from "../engine/standings";
 import { formatMoney, getOverallColor, getRoleBadgeClass } from "../utils/format";
 import { ClubBadge } from "./ClubBadge";
@@ -26,12 +26,6 @@ interface LeagueHubProps {
   onSelectPlayer: (player: Player) => void;
 }
 
-const ENGLISH_DIVISIONS: EnglishDivision[] = [
-  "Premier League",
-  "EFL Championship",
-  "EFL League One",
-  "EFL League Two",
-];
 
 export const LeagueHub: React.FC<LeagueHubProps> = ({
   userClubId,
@@ -44,13 +38,22 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
 }) => {
   const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
   const userClub = clubMap.get(userClubId);
-  const userDivision: EnglishDivision = userClub?.division ?? "Premier League";
+  const userDivision: string = userClub?.division ?? userClub?.league ?? "Premier League";
 
   const [subTab, setSubTab] = useState<"table" | "divisions" | "stats" | "fixtures">("table");
-  const [selectedDivision, setSelectedDivision] = useState<EnglishDivision>(userDivision);
+  const [selectedDivision, setSelectedDivision] = useState<string>(userDivision);
   const [expandedDivClubId, setExpandedDivClubId] = useState<number | null>(null);
   const [viewWeek, setViewWeek] = useState<number>(Math.min(38, currentMatchweek));
   const [expandedFixtureId, setExpandedFixtureId] = useState<number | null>(null);
+
+  const allAvailableDivisions = useMemo(() => {
+    const list: string[] = [];
+    for (const c of clubs) {
+      const d = (c.division ?? c.league ?? "Premier League") as string;
+      if (!list.includes(d)) list.push(d);
+    }
+    return list;
+  }, [clubs]);
 
   const activeLeagueClubIds = useMemo(
     () => new Set(standings.map((row) => row.club.id)),
@@ -233,13 +236,13 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
         </div>
       )}
 
-      {/* All 4 English Divisions Browser */}
+      {/* All Divisions and Leagues Browser */}
       {subTab === "divisions" && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            {ENGLISH_DIVISIONS.map((div) => {
+            {allAvailableDivisions.map((div) => {
               const cnt = clubs.filter(
-                (c) => (c.division ?? "Premier League") === div
+                (c) => (c.division ?? c.league ?? "Premier League") === div
               ).length;
               return (
                 <button
