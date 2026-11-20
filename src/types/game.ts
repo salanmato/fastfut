@@ -109,6 +109,17 @@ export interface PlayerDetailedStats {
   aggression: number;
 }
 
+export interface LoanInfo {
+  isLoan: boolean;
+  parentClubId: number;
+  parentClubName: string;
+  parentClubLeague?: string;
+  loanEndSeason: string; // e.g. "2026/27"
+  buyOptionFeeEur?: number;
+  canPlayAgainstParentClub?: boolean;
+  wagePercentagePaid?: number; // e.g. 100
+}
+
 export interface Player {
   id: number;
   eaId: number;
@@ -151,6 +162,8 @@ export interface Player {
   preferredNumbers?: number[];
   injuryMatchesLeft?: number;
   injuryType?: string;
+  squadCategory?: "first_team" | "youth";
+  loan?: LoanInfo;
 }
 
 export type MatchEventType =
@@ -312,6 +325,43 @@ export interface PastSeasonRecord {
   clubTopScorerName?: string;
 }
 
+export interface TransferOffer {
+  id: string;
+  fromClubId: number;
+  fromClubName: string;
+  fromClubLeague: string;
+  playerId: number;
+  playerName: string;
+  playerOvr: number;
+  playerPos: string;
+  offeredAmountEur: number;
+  originalValueEur: number;
+  wageOfferEur: number;
+  matchweekReceived: number;
+  dateReceived?: string;
+  status: "pending" | "accepted" | "rejected" | "countered";
+  counterAmountEur?: number;
+  buyerReason?: string;
+}
+
+export interface WorldTransfer {
+  id: string;
+  matchweek: number;
+  date: string;
+  playerId: number;
+  playerName: string;
+  playerOvr: number;
+  playerPos: string;
+  fromClubId: number;
+  fromClubName: string;
+  fromClubLeague: string;
+  toClubId: number;
+  toClubName: string;
+  toClubLeague: string;
+  feeEur: number;
+  headline: string;
+}
+
 export interface SaveState {
   version: number;
   managerName: string;
@@ -334,4 +384,6 @@ export interface SaveState {
   allowTransfersOutsideWindow?: boolean;
   faCup?: FACupState;
   news: NewsItem[];
+  transferOffers?: TransferOffer[];
+  worldTransfers?: WorldTransfer[];
 }

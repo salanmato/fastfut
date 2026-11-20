@@ -442,7 +442,8 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
           <div className="divide-y divide-slate-800/60">
             {userSquad.map((p) => {
               const sellPrice = Math.round(p.marketValueEur * 0.92);
-              const canSell = windowStatus.isOpen && userSquad.length > 16;
+              const isLoaned = Boolean(p.loan?.isLoan);
+              const canSell = windowStatus.isOpen && userSquad.length > 16 && !isLoaned;
               return (
                 <div
                   key={p.id}
@@ -470,9 +471,23 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                         >
                           {p.primaryPosition}
                         </span>
+                        {p.squadCategory === "youth" && (
+                          <span className="rounded border border-purple-500/40 bg-purple-500/20 px-1.5 py-0.2 text-[9px] font-bold text-purple-300">
+                            SUB-20
+                          </span>
+                        )}
+                        {isLoaned && (
+                          <span
+                            title={`Emprestado pelo ${p.loan?.parentClubName}`}
+                            className="rounded border border-sky-400/50 bg-sky-400/20 px-1.5 py-0.2 text-[9px] font-black text-sky-200"
+                          >
+                            EMPRÉSTIMO
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-400">
                         {p.age} anos • {p.seasonAppearances}J {p.seasonGoals}G {p.seasonAssists}A
+                        {isLoaned && ` • Pertence ao ${p.loan?.parentClubName}`}
                       </div>
                     </div>
                   </button>
@@ -496,7 +511,11 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                       onClick={() => onSellPlayer(p)}
                       className="rounded-xl bg-rose-500/90 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                     >
-                      {!windowStatus.isOpen ? "🔒 Janela Fechada" : "Vender"}
+                      {isLoaned
+                        ? "🔒 Emprestado"
+                        : !windowStatus.isOpen
+                        ? "🔒 Janela Fechada"
+                        : "Vender"}
                     </button>
                   </div>
                 </div>

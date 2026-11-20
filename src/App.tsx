@@ -15,6 +15,7 @@ import {
   Flame,
   Award,
   BarChart3,
+  GraduationCap,
 } from "lucide-react";
 import type {
   MatchInjury,
@@ -76,12 +77,21 @@ import { FACupHub } from "./components/FACupHub";
 import { PlayerProfileModal } from "./components/PlayerProfileModal";
 import { SeasonReviewDashboard } from "./components/SeasonReviewDashboard";
 import { SquadPerformanceAnalysis } from "./components/SquadPerformanceAnalysis";
+import { YouthAcademyHub } from "./components/YouthAcademyHub";
+import {
+  initializeSquadCategoriesAndLoans,
+  promoteYouthPlayer,
+  demoteToYouthSquad,
+  loanOutPlayer,
+  exerciseBuyOption,
+} from "./engine/youthAndLoansEngine";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
 type Tab =
   | "dashboard"
   | "tactics"
+  | "academy"
   | "squad_analysis"
   | "stadium"
   | "calendar"
@@ -114,7 +124,10 @@ function hydrateSave(parsed: SaveState): SaveState {
   );
   return {
     ...parsed,
-    players: ensureAllPlayersShirtNumbers(parsed.players),
+    players: initializeSquadCategoriesAndLoans(
+      ensureAllPlayersShirtNumbers(parsed.players),
+      parsed.clubs
+    ),
     stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
     kitTheme: parsed.kitTheme ?? "home",
     autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
@@ -283,12 +296,17 @@ export const App: React.FC = () => {
   ) => {
     if (!rawDb) return;
     const clubs = rawDb.clubs.map((c) => ({ ...c }));
-    const rawPlayers = ensureAllPlayersShirtNumbers(rawDb.players.map((p) => ({ ...p })));
+    const rawPlayers = initializeSquadCategoriesAndLoans(
+      ensureAllPlayersShirtNumbers(rawDb.players.map((p) => ({ ...p }))),
+      clubs
+    );
     const referees = rawDb.referees.map((r) => ({ ...r }));
 
     const tacticsByClub: Record<number, Tactics> = {};
     for (const club of clubs) {
-      const squad = rawPlayers.filter((p) => p.clubId === club.id);
+      const squad = rawPlayers.filter(
+        (p) => p.clubId === club.id && p.squadCategory !== "youth"
+      );
       tacticsByClub[club.id] = createDefaultTactics(squad, club.avgOverall);
     }
 
@@ -1062,6 +1080,120 @@ export const App: React.FC = () => {
     setToast("Numeração do elenco otimizada conforme histórico e função de cada atleta!");
   };
 
+  const handlePromoteYouth = (playerId: number) => {
+    if (!save) return;
+    const { nextPlayers, promotedPlayer } = promoteYouthPlayer(
+      save.players,
+      playerId,
+      save.userClubId
+    );
+    if (!promotedPlayer) return;
+    const numberedPlayers = ensureAllPlayersShirtNumbers(nextPlayers);
+    const userTac = save.tacticsByClub[save.userClubId];
+    const nextTacticsByClub = { ...save.tacticsByClub };
+    if (userTac && userTac.bench.length < 7) {
+      nextTacticsByClub[save.userClubId] = {
+        ...userTac,
+        bench: [...userTac.bench, playerId],
+      };
+    }
+    const newsItem: NewsItem = {
+      id: `promo-youth-${playerId}-${Date.now()}`,
+      matchweek: save.currentMatchweek,
+      category: "transfer",
+      clubId: save.userClubId,
+      title: `🌱 JOIA PROMOVIDA: ${promotedPlayer.name} sobe ao elenco principal!`,
+      body: `O técnico promoveu o jovem ${promotedPlayer.name} (${promotedPlayer.primaryPosition}, ${promotedPlayer.overall} OVR, ${promotedPlayer.potential}★) das categorias de base para treinar e jogar com os profissionais.`,
+    };
+    setSave({
+      ...save,
+      players: numberedPlayers,
+      tacticsByClub: nextTacticsByClub,
+      news: [newsItem, ...save.news].slice(0, 50),
+    });
+    setToast(`🎉 ${promotedPlayer.name} foi promovido ao Elenco Principal!`);
+  };
+
+  const handleDemoteToYouth = (playerId: number) => {
+    if (!save) return;
+    const userTac = save.tacticsByClub[save.userClubId];
+    const { nextPlayers, nextTactics, demotedPlayer } = demoteToYouthSquad(
+      save.players,
+      playerId,
+      save.userClubId,
+      userTac
+    );
+    if (!demotedPlayer) return;
+    setSave({
+      ...save,
+      players: nextPlayers,
+      tacticsByClub: { ...save.tacticsByClub, [save.userClubId]: nextTactics },
+    });
+    setToast(`${demotedPlayer.name} foi movido para a Base Sub-20.`);
+  };
+
+  const handleLoanOutYouth = (playerId: number, destinationClubId: number) => {
+    if (!save) return;
+    const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
+    const destClub = save.clubs.find((c) => c.id === destinationClubId);
+    if (!destClub) return;
+
+    const { nextPlayers, loanedPlayer } = loanOutPlayer(
+      save.players,
+      playerId,
+      userClub,
+      destClub,
+      save.season ?? "2026/27"
+    );
+    if (!loanedPlayer) return;
+
+    const newsItem: NewsItem = {
+      id: `loan-out-${playerId}-${Date.now()}`,
+      matchweek: save.currentMatchweek,
+      category: "transfer",
+      clubId: save.userClubId,
+      title: `EMPRÉSTIMO: ${loanedPlayer.name} ruma ao ${destClub.name}!`,
+      body: `O jovem atleta foi emprestado ao ${destClub.name} para ganhar rodagem na temporada. Retornará ao fim do contrato.`,
+    };
+
+    setSave({
+      ...save,
+      players: nextPlayers,
+      news: [newsItem, ...save.news].slice(0, 50),
+    });
+    setToast(`${loanedPlayer.name} emprestado ao ${destClub.name}!`);
+  };
+
+  const handleExerciseBuyOption = (playerId: number) => {
+    if (!save) return;
+    const { nextPlayers, nextClubs, success, message } = exerciseBuyOption(
+      save.players,
+      save.clubs,
+      playerId,
+      save.userClubId
+    );
+    if (!success) {
+      setToast(message);
+      return;
+    }
+    const boughtPlayer = nextPlayers.find((p) => p.id === playerId);
+    const newsItem: NewsItem = {
+      id: `loan-buy-${playerId}-${Date.now()}`,
+      matchweek: save.currentMatchweek,
+      category: "transfer",
+      clubId: save.userClubId,
+      title: `✍️ EM DEFINITIVO: ${boughtPlayer?.name} é comprado pelo ${save.clubs.find((c) => c.id === save.userClubId)?.name}!`,
+      body: message,
+    };
+    setSave({
+      ...save,
+      clubs: nextClubs,
+      players: nextPlayers,
+      news: [newsItem, ...save.news].slice(0, 50),
+    });
+    setToast(message);
+  };
+
   const handleSellPlayer = (target: Player) => {
     if (!save) return;
     if (!windowStatus.isOpen) {
@@ -1274,6 +1406,7 @@ export const App: React.FC = () => {
             {[
               { id: "dashboard" as const, label: "Visão Geral", icon: LayoutDashboard },
               { id: "tactics" as const, label: "Tática & Elenco", icon: Users },
+              { id: "academy" as const, label: "Base Sub-20", icon: GraduationCap },
               { id: "squad_analysis" as const, label: "Desempenho", icon: BarChart3 },
               { id: "calendar" as const, label: "Calendário", icon: CalendarIcon },
               { id: "stadium" as const, label: "Estádio", icon: Building2 },
@@ -1436,6 +1569,20 @@ export const App: React.FC = () => {
             onSelectPlayer={setInspectedPlayer}
             onChangeShirtNumber={handleChangeShirtNumber}
             onAutoAssignShirtNumbers={handleAutoAssignShirtNumbers}
+            onNavigateToAcademy={() => setActiveTab("academy")}
+          />
+        )}
+
+        {activeTab === "academy" && (
+          <YouthAcademyHub
+            userClub={userClub}
+            allClubs={save.clubs}
+            players={save.players}
+            onPromoteYouth={handlePromoteYouth}
+            onDemoteToYouth={handleDemoteToYouth}
+            onLoanOutYouth={handleLoanOutYouth}
+            onExerciseBuyOption={handleExerciseBuyOption}
+            onSelectPlayer={setInspectedPlayer}
           />
         )}
 
@@ -1564,6 +1711,9 @@ export const App: React.FC = () => {
         onClose={() => setInspectedPlayer(null)}
         onBuyPlayer={handleBuyPlayer}
         onSellPlayer={handleSellPlayer}
+        onPromoteYouth={handlePromoteYouth}
+        onDemoteToYouth={handleDemoteToYouth}
+        onExerciseBuyOption={handleExerciseBuyOption}
       />
 
       {/* Season Transition Report Modal */}

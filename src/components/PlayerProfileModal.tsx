@@ -37,6 +37,9 @@ interface PlayerProfileModalProps {
   onClose: () => void;
   onBuyPlayer?: (player: Player) => void;
   onSellPlayer?: (player: Player) => void;
+  onPromoteYouth?: (playerId: number) => void;
+  onDemoteToYouth?: (playerId: number) => void;
+  onExerciseBuyOption?: (playerId: number) => void;
 }
 
 export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
@@ -51,13 +54,19 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   onClose,
   onBuyPlayer,
   onSellPlayer,
+  onPromoteYouth,
+  onDemoteToYouth,
+  onExerciseBuyOption,
 }) => {
   if (!player) return null;
 
   const isOwned = player.clubId === userClubId;
+  const isLoaned = Boolean(player.loan?.isLoan);
   const canBuy = !isOwned && Boolean(onBuyPlayer);
-  const canSell = isOwned && Boolean(onSellPlayer);
+  const canSell = isOwned && Boolean(onSellPlayer) && !isLoaned;
   const canAfford = userBudgetEur >= player.marketValueEur;
+  const canAffordBuyOption =
+    Boolean(player.loan?.buyOptionFeeEur && userBudgetEur >= player.loan.buyOptionFeeEur);
   const windowClosed = Boolean(windowStatus && !windowStatus.isOpen);
   const shirtAffinity = evaluateShirtNumberAffinity(player);
 
@@ -140,6 +149,20 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                 <span className="rounded-md border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-xs font-semibold text-indigo-300">
                   POT {player.potential}
                 </span>
+                {player.squadCategory === "youth" ? (
+                  <span className="rounded-md border border-purple-500/40 bg-purple-500/15 px-2 py-0.5 text-xs font-bold text-purple-300">
+                    Base Sub-20
+                  </span>
+                ) : (
+                  <span className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-300">
+                    Elenco Principal
+                  </span>
+                )}
+                {player.loan?.isLoan && (
+                  <span className="rounded-md border border-sky-400/50 bg-sky-400/20 px-2 py-0.5 text-xs font-black text-sky-200">
+                    EMPRÉSTIMO
+                  </span>
+                )}
               </div>
               <h2 className="mt-1.5 text-2xl font-bold text-white">{player.fullName}</h2>
               <p className="text-sm text-slate-400">
@@ -167,6 +190,28 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                 {player.injuryType ?? "Lesão muscular"} • Retorno estimado em{" "}
                 <strong className="text-white">{player.injuryMatchesLeft}</strong> rodada(s).
               </div>
+            </div>
+          )}
+
+          {player.loan?.isLoan && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-500/40 bg-sky-950/40 p-4 text-xs">
+              <div>
+                <span className="rounded bg-sky-500 px-2 py-0.5 text-[10px] font-black text-slate-950">
+                  CONTRATO DE EMPRÉSTIMO
+                </span>
+                <div className="mt-1 text-slate-200">
+                  Vinculado ao <strong>{player.loan.parentClubName}</strong> ({player.loan.parentClubLeague ?? "Origem"}).
+                  Término do empréstimo: fim da temporada <strong>{player.loan.loanEndSeason}</strong>.
+                </div>
+              </div>
+              {player.loan.buyOptionFeeEur && (
+                <div className="text-right">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Opção de Compra</div>
+                  <div className="text-sm font-black text-amber-300">
+                    {formatMoney(player.loan.buyOptionFeeEur)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {/* Quick Bio & Finance */}
@@ -479,6 +524,45 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                         : "Aceitar Proposta e Vender"}
                     </button>
                   </>
+                )}
+
+                {isOwned && player.squadCategory === "youth" && onPromoteYouth && (
+                  <button
+                    onClick={() => {
+                      onPromoteYouth(player.id);
+                      onClose();
+                    }}
+                    className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400"
+                  >
+                    ⬆️ Subir ao Elenco Principal
+                  </button>
+                )}
+
+                {isOwned && player.squadCategory !== "youth" && player.age <= 22 && onDemoteToYouth && (
+                  <button
+                    onClick={() => {
+                      onDemoteToYouth(player.id);
+                      onClose();
+                    }}
+                    className="rounded-xl border border-amber-400/50 bg-amber-400/10 px-5 py-2.5 text-sm font-bold text-amber-300 transition hover:bg-amber-400/20"
+                  >
+                    ⬇️ Mover para a Base Sub-20
+                  </button>
+                )}
+
+                {isOwned && player.loan?.isLoan && player.loan.buyOptionFeeEur && onExerciseBuyOption && (
+                  <button
+                    disabled={!canAffordBuyOption}
+                    onClick={() => {
+                      onExerciseBuyOption(player.id);
+                      onClose();
+                    }}
+                    className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                  >
+                    {canAffordBuyOption
+                      ? `Exercer Compra Definitiva (${formatMoney(player.loan.buyOptionFeeEur)})`
+                      : "Sem Orçamento para Compra"}
+                  </button>
                 )}
               </div>
             </div>

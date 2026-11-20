@@ -1,5 +1,15 @@
 import React, { useMemo, useState } from "react";
-import { ArrowLeftRight, Sparkles, Info, Shield, Zap, Compass, Shirt } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Sparkles,
+  Info,
+  Shield,
+  Zap,
+  Compass,
+  Shirt,
+  GraduationCap,
+  ChevronRight,
+} from "lucide-react";
 import type {
   Club,
   Formation,
@@ -29,6 +39,7 @@ interface TacticsSquadProps {
   onSelectPlayer: (player: Player) => void;
   onChangeShirtNumber?: (playerId: number, newNumber: number) => void;
   onAutoAssignShirtNumbers?: () => void;
+  onNavigateToAcademy?: () => void;
 }
 
 const FORMATIONS: Formation[] = ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2", "5-3-2"];
@@ -41,9 +52,19 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   onSelectPlayer,
   onChangeShirtNumber,
   onAutoAssignShirtNumbers,
+  onNavigateToAcademy,
 }) => {
   const [swapId, setSwapId] = useState<number | null>(null);
   const [injuryWarning, setInjuryWarning] = useState<string | null>(null);
+
+  const firstTeamPlayers = useMemo(
+    () => players.filter((p) => p.squadCategory !== "youth"),
+    [players]
+  );
+  const youthCount = useMemo(
+    () => players.filter((p) => p.squadCategory === "youth").length,
+    [players]
+  );
 
   const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const slots = getFormationSlots(tactics.formation);
@@ -54,16 +75,14 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   const bench = tactics.bench
     .map((id) => playerMap.get(id))
     .filter((p): p is Player => Boolean(p));
-  const reserves = players
+  const reserves = firstTeamPlayers
     .filter((p) => !tactics.starters.includes(p.id) && !tactics.bench.includes(p.id))
     .sort((a, b) => b.overall - a.overall);
 
   const power = computeTeamPower(starters, tactics, true, club.capacity);
 
   const handleFormationChange = (formation: Formation) => {
-    // Keep existing starters/bench if length valid, or re-fit automatically? Re-auto-picking or keeping order:
-    // Let's offer smart auto-fit when changing formation so GK stays in slot 0 and roles align nicely!
-    const picked = autoPickLineup(players, formation);
+    const picked = autoPickLineup(firstTeamPlayers, formation);
     setSwapId(null);
     onChangeTactics({
       ...tactics,
@@ -74,7 +93,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   };
 
   const handleAutoPick = () => {
-    const picked = autoPickLineup(players, tactics.formation);
+    const picked = autoPickLineup(firstTeamPlayers, tactics.formation);
     setSwapId(null);
     onChangeTactics({
       ...tactics,
@@ -218,6 +237,14 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                     }`}
                   >
                     {affinity.bonusPctText}
+                  </span>
+                )}
+                {p.loan?.isLoan && (
+                  <span
+                    title={`Emprestado pelo ${p.loan.parentClubName}`}
+                    className="shrink-0 rounded border border-sky-400/50 bg-sky-400/20 px-1 py-0.2 text-[8px] font-black text-sky-200"
+                  >
+                    EMP
                   </span>
                 )}
                 {injLeft > 0 && (
@@ -533,6 +560,30 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
               <div className="space-y-1.5">
                 {reserves.map((p) => renderRow(p, p.primaryPosition, "SUP"))}
               </div>
+            </div>
+          )}
+
+          {youthCount > 0 && onNavigateToAcademy && (
+            <div className="flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    Categorias de Base ({youthCount} atletas no Sub-20)
+                  </div>
+                  <div className="text-xs text-slate-300">
+                    Promova jovens talentos, desenvolva promessas e controle empréstimos.
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={onNavigateToAcademy}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-400"
+              >
+                Ver Base Sub-20 <ChevronRight className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
         </div>

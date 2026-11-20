@@ -1,6 +1,7 @@
 import type {
   Club,
   EnglishDivision,
+  NewsItem,
   PastSeasonRecord,
   Player,
   SaveState,
@@ -13,6 +14,7 @@ import {
 } from "./faCup";
 import { addDaysIso, getDefaultDateForMatchweek, getSeasonStartYear } from "../utils/calendar";
 import { formatMoney } from "../utils/format";
+import { generateAnnualYouthIntake } from "./youthAndLoansEngine";
 
 export interface SeasonTransitionReport {
   previousSeason: string;
@@ -32,6 +34,8 @@ export interface SeasonTransitionReport {
   totalBudgetAddedEur: number;
   improvedPlayers: Array<{ name: string; oldOvr: number; newOvr: number }>;
   declinedPlayers: Array<{ name: string; oldOvr: number; newOvr: number }>;
+  youthIntake?: Array<{ name: string; position: string; ovr: number; pot: number }>;
+  returnedLoans?: string[];
 }
 
 export interface SeasonTransitionResult {
@@ -286,6 +290,37 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     };
   });
 
+  // 3b. Loans Expiration and Return
+  const returnedLoans: string[] = [];
+  const processedLoanPlayers = updatedPlayers.map((p) => {
+    if (p.loan?.isLoan && p.loan.loanEndSeason === currentSeason) {
+      const parentClub = clubById.get(p.loan.parentClubId);
+      if (p.clubId === save.userClubId) {
+        returnedLoans.push(`${p.name} (retornou ao ${p.loan.parentClubName})`);
+      } else if (p.loan.parentClubId === save.userClubId) {
+        returnedLoans.push(`${p.name} (retornou de empréstimo do ${p.clubName})`);
+      }
+      return {
+        ...p,
+        clubId: p.loan.parentClubId,
+        clubName: p.loan.parentClubName,
+        league: parentClub?.league ?? parentClub?.division ?? p.loan.parentClubLeague ?? "Liga",
+        loan: undefined,
+        squadCategory: "first_team" as const,
+      };
+    }
+    return p;
+  });
+
+  // 3c. Annual Youth Intake for User's Academy
+  const maxPlayerId = Math.max(0, ...processedLoanPlayers.map((p) => p.id));
+  const { newPlayers: youthIntake } = generateAnnualYouthIntake(
+    userNewClub,
+    nextSeason,
+    maxPlayerId + 1
+  );
+  const finalPlayers = [...processedLoanPlayers, ...youthIntake];
+
   // 4. Archive Season Record
   const userSquad = save.players.filter((p) => p.clubId === save.userClubId);
   const mvp = [...userSquad]
@@ -378,6 +413,17 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
       : []),
   ];
 
+  const youthNews: NewsItem = {
+    id: `youth-intake-${nextStartYear}`,
+    matchweek: 1,
+    category: "league",
+    clubId: save.userClubId,
+    title: `🌱 NOVA SAFRA DA BASE: ${youthIntake.length} promessas chegam à academia!`,
+    body: `A peneira anual da categoria de base promoveu ${youthIntake
+      .map((y) => `${y.name} (${y.primaryPosition}, ${y.potential}★)`)
+      .join(", ")} ao elenco Sub-20 do ${userNewClub.name}.`,
+  };
+
   const nextSave: SaveState = {
     ...save,
     season: nextSeason,
@@ -386,11 +432,11 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     currentMatchweek: 1,
     currentDate: initialDate,
     clubs: updatedClubs,
-    players: updatedPlayers,
+    players: finalPlayers,
     fixtures: nextFixtures,
     faCup: nextFaCup,
     seasonHistory: nextHistory,
-    news: [...welcomeNews, ...save.news].slice(0, 50),
+    news: [youthNews, ...welcomeNews, ...save.news].slice(0, 50),
   };
 
   const report: SeasonTransitionReport = {
@@ -411,6 +457,13 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     totalBudgetAddedEur: totalAdded,
     improvedPlayers,
     declinedPlayers,
+    youthIntake: youthIntake.map((y) => ({
+      name: y.name,
+      position: y.primaryPosition,
+      ovr: y.overall,
+      pot: y.potential,
+    })),
+    returnedLoans,
   };
 
   return { nextSave, report };
