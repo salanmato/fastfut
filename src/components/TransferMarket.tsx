@@ -15,10 +15,13 @@ import {
   Sparkles,
   Check,
   XCircle,
+  Building,
+  Send,
 } from "lucide-react";
 import type { Club, Player, RoleCategory, TransferOffer, WorldTransfer } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
 import { formatDatePtBr } from "../utils/calendar";
+import { evaluatePlayerInterest } from "../engine/transferNegotiationEngine";
 import {
   formatMoney,
   formatWage,
@@ -29,6 +32,7 @@ import { PlayerAvatar } from "./PlayerAvatar";
 
 interface TransferMarketProps {
   userClub: Club;
+  clubs?: Club[];
   players: Player[];
   windowStatus: TransferWindowStatus;
   currentDate: string;
@@ -36,6 +40,9 @@ interface TransferMarketProps {
   transferOffers?: TransferOffer[];
   worldTransfers?: WorldTransfer[];
   onBuyPlayer: (player: Player) => void;
+  onStartNegotiation?: (player: Player) => void;
+  onToggleTransferListed?: (playerId: number) => void;
+  onOfferPlayerToMarket?: (playerId: number) => void;
   onSellPlayer: (player: Player) => void;
   onSelectPlayer: (player: Player) => void;
   onToggleShortlist: (playerId: number) => void;
@@ -47,6 +54,7 @@ interface TransferMarketProps {
 
 export const TransferMarket: React.FC<TransferMarketProps> = ({
   userClub,
+  clubs = [],
   players,
   windowStatus,
   currentDate,
@@ -54,6 +62,9 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
   transferOffers = [],
   worldTransfers = [],
   onBuyPlayer,
+  onStartNegotiation,
+  onToggleTransferListed,
+  onOfferPlayerToMarket,
   onSellPlayer,
   onSelectPlayer,
   onToggleShortlist,
@@ -157,10 +168,12 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
   }, [players, userClub.id, roleFilter, leagueFilter, query]);
 
   const renderTargetRow = (p: Player) => {
-    const canAfford = userClub.transferBudgetEur >= p.marketValueEur;
-    const canBuyNow = windowStatus.isOpen && canAfford;
     const isShortlisted = shortlistSet.has(p.id);
     const isLoaned = Boolean(p.loan?.isLoan);
+    const sellerClub = clubs.find((c) => c.id === p.clubId);
+    const interest = evaluatePlayerInterest(userClub, sellerClub, p);
+    const canAfford = userClub.transferBudgetEur >= p.marketValueEur;
+    const canBuyNow = windowStatus.isOpen && !isLoaned;
 
     return (
       <div
@@ -187,6 +200,37 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               {isLoaned && (
                 <span className="rounded border border-sky-400/50 bg-sky-400/20 px-1 py-0.2 text-[9px] font-black text-sky-200">
                   EMP
+                </span>
+              )}
+
+              {/* Feasibility / Interest badge */}
+              <span
+                title={interest.summary}
+                className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${
+                  interest.feasibility === "very_interested"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    : interest.feasibility === "open"
+                    ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
+                    : interest.feasibility === "hard"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                    : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                }`}
+              >
+                {interest.feasibility === "very_interested"
+                  ? "Entusiasmado"
+                  : interest.feasibility === "open"
+                  ? "Receptivo"
+                  : interest.feasibility === "hard"
+                  ? "Relutante"
+                  : "Inviável"}
+              </span>
+
+              {interest.rivalryPenaltyApplied && (
+                <span
+                  title="Clube Rival Histórico"
+                  className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-300 border border-rose-500/40"
+                >
+                  🔥 Rival
                 </span>
               )}
             </div>
@@ -227,17 +271,28 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
             <Star className={`h-4 w-4 ${isShortlisted ? "fill-current" : ""}`} />
           </button>
 
-          <button
-            disabled={!canBuyNow}
-            onClick={() => onBuyPlayer(p)}
-            className="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-          >
-            {!windowStatus.isOpen
-              ? "🔒 Janela Fechada"
-              : canAfford
-              ? "Contratar"
-              : "Caro"}
-          </button>
+          {onStartNegotiation ? (
+            <button
+              disabled={!windowStatus.isOpen}
+              onClick={() => onStartNegotiation(p)}
+              className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 shadow-sm shadow-emerald-500/20"
+            >
+              <Building className="h-3.5 w-3.5" />
+              <span>{!windowStatus.isOpen ? "🔒 Fechada" : "Negociar"}</span>
+            </button>
+          ) : (
+            <button
+              disabled={!canBuyNow}
+              onClick={() => onBuyPlayer(p)}
+              className="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+            >
+              {!windowStatus.isOpen
+                ? "🔒 Janela Fechada"
+                : canAfford
+                ? "Contratar"
+                : "Caro"}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -855,7 +910,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                     </div>
                   </button>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span
                       className={`rounded border px-2 py-0.5 text-xs font-black ${getOverallColor(
                         p.overall
@@ -863,22 +918,68 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                     >
                       {p.overall}
                     </span>
-                    <div className="w-24 text-right">
+
+                    {/* Transfer Listed Status Badge */}
+                    {p.isTransferListed ? (
+                      <span className="rounded bg-amber-400/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300 border border-amber-400/40">
+                        📦 Listado
+                      </span>
+                    ) : (
+                      <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-400">
+                        Elenco
+                      </span>
+                    )}
+
+                    <div className="w-20 text-right sm:w-24">
                       <div className="text-xs font-black text-amber-300">
                         {formatMoney(sellPrice)}
                       </div>
-                      <div className="text-[10px] text-slate-500">Oferta (92%)</div>
+                      <div className="text-[10px] text-slate-500">Valor (92%)</div>
                     </div>
+
+                    {/* Toggle Transfer List Button */}
+                    {onToggleTransferListed && !isLoaned && (
+                      <button
+                        onClick={() => onToggleTransferListed(p.id)}
+                        title={
+                          p.isTransferListed
+                            ? "Retirar atleta da lista de transferências"
+                            : "Colocar na lista de transferências para atrair propostas da IA"
+                        }
+                        className={`rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                          p.isTransferListed
+                            ? "border-slate-700 bg-slate-800 text-slate-300 hover:text-white"
+                            : "border-amber-400/50 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20"
+                        }`}
+                      >
+                        {p.isTransferListed ? "Deslistar" : "Listar"}
+                      </button>
+                    )}
+
+                    {/* Offer to Market Button */}
+                    {onOfferPlayerToMarket && windowStatus.isOpen && !isLoaned && (
+                      <button
+                        onClick={() => onOfferPlayerToMarket(p.id)}
+                        title="Oferecer ao mercado global: agentes buscam propostas de compra oficiais"
+                        className="inline-flex items-center gap-1 rounded-xl border border-indigo-500/40 bg-indigo-500/20 px-2.5 py-1.5 text-xs font-bold text-indigo-200 transition hover:bg-indigo-500/30"
+                      >
+                        <Send className="h-3 w-3" />
+                        <span>Oferecer</span>
+                      </button>
+                    )}
+
+                    {/* Quick sell button */}
                     <button
                       disabled={!canSell}
                       onClick={() => onSellPlayer(p)}
-                      className="rounded-xl bg-rose-500/90 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                      title="Venda rápida direta com 8% de deságio"
+                      className="rounded-xl bg-rose-500/80 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                     >
                       {isLoaned
                         ? "🔒 Emprestado"
                         : !windowStatus.isOpen
-                        ? "🔒 Janela Fechada"
-                        : "Vender"}
+                        ? "🔒 Fechada"
+                        : "Venda Rápida"}
                     </button>
                   </div>
                 </div>

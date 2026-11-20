@@ -25,8 +25,10 @@ import type {
   Player,
   RawDatabase,
   SaveState,
+  SquadRole,
   StadiumConfig,
   Tactics,
+  WorldTransfer,
 } from "./types/game";
 import {
   autoPickLineup,
@@ -44,7 +46,7 @@ import {
   generateDivisionFixtures,
   simulateFACupRound,
 } from "./engine/faCup";
-import { formatMoney } from "./utils/format";
+import { formatMoney, formatWage } from "./utils/format";
 import { getKitThemePalette } from "./utils/clubVisuals";
 import {
   autoAssignClubShirtNumbers,
@@ -76,6 +78,7 @@ import { StadiumHub } from "./components/StadiumHub";
 import { CalendarHub } from "./components/CalendarHub";
 import { FACupHub } from "./components/FACupHub";
 import { PlayerProfileModal } from "./components/PlayerProfileModal";
+import { TransferNegotiationModal } from "./components/TransferNegotiationModal";
 import { SeasonReviewDashboard } from "./components/SeasonReviewDashboard";
 import { SquadPerformanceAnalysis } from "./components/SquadPerformanceAnalysis";
 import { YouthAcademyHub } from "./components/YouthAcademyHub";
@@ -91,6 +94,7 @@ import {
   respondToTransferOffer,
   simulateAiWorldTransfers,
 } from "./engine/transfersEngine";
+import { offerPlayerToMarket } from "./engine/transferNegotiationEngine";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
@@ -238,6 +242,7 @@ export const App: React.FC = () => {
   const [screen, setScreen] = useState<Screen>("menu");
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [inspectedPlayer, setInspectedPlayer] = useState<Player | null>(null);
+  const [negotiatingPlayer, setNegotiatingPlayer] = useState<Player | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [transitionReport, setTransitionReport] = useState<SeasonTransitionReport | null>(null);
 
@@ -1041,22 +1046,35 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleBuyPlayer = (target: Player) => {
-    if (!save) return;
+  const handleStartNegotiation = (target: Player) => {
     if (!windowStatus.isOpen) {
-      setToast("Mercado fechado! Aguarde a próxima janela ou adicione o atleta aos Alvos.");
+      setToast("Mercado fechado! Negociações só podem ser realizadas durante a janela de transferências.");
       return;
     }
-    const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
-    if (userClub.transferBudgetEur < target.marketValueEur) return;
+    setNegotiatingPlayer(target);
+  };
 
+  const handleBuyPlayer = (target: Player) => {
+    handleStartNegotiation(target);
+  };
+
+  const handleCompleteTransfer = (
+    target: Player,
+    finalFeeEur: number,
+    wageEur: number,
+    squadRole: SquadRole,
+    sellOnPct: number
+  ) => {
+    if (!save) return;
+    const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
     const sellerClubId = target.clubId;
+
     const nextClubs = save.clubs.map((c) => {
       if (c.id === userClub.id) {
-        return { ...c, transferBudgetEur: c.transferBudgetEur - target.marketValueEur };
+        return { ...c, transferBudgetEur: Math.max(0, c.transferBudgetEur - finalFeeEur) };
       }
       if (sellerClubId && c.id === sellerClubId) {
-        return { ...c, transferBudgetEur: c.transferBudgetEur + target.marketValueEur };
+        return { ...c, transferBudgetEur: c.transferBudgetEur + finalFeeEur };
       }
       return c;
     });
@@ -1067,7 +1085,10 @@ export const App: React.FC = () => {
             ...p,
             clubId: userClub.id,
             clubName: userClub.name,
-            league: userClub.division ?? "Premier League",
+            league: userClub.division ?? userClub.league ?? "Liga",
+            wageEur,
+            squadCategory: "first_team" as const,
+            isTransferListed: false,
             shirtNumber: undefined,
           }
         : p
@@ -1075,7 +1096,6 @@ export const App: React.FC = () => {
     const nextPlayers = ensureAllPlayersShirtNumbers(mappedPlayers);
 
     const nextTacticsByClub = { ...save.tacticsByClub };
-    // Remove from seller's tactics if seller is in PL
     if (sellerClubId && nextTacticsByClub[sellerClubId]) {
       const sellerSquad = nextPlayers.filter((p) => p.clubId === sellerClubId);
       const currSeller = nextTacticsByClub[sellerClubId];
@@ -1087,9 +1107,8 @@ export const App: React.FC = () => {
       };
     }
 
-    // Add to user's bench if bench < 7
     const userTac = nextTacticsByClub[userClub.id];
-    if (userTac.bench.length < 7) {
+    if (userTac && userTac.bench.length < 7) {
       nextTacticsByClub[userClub.id] = {
         ...userTac,
         bench: [...userTac.bench, target.id],
@@ -1097,25 +1116,75 @@ export const App: React.FC = () => {
     }
 
     const boughtPlayer = nextPlayers.find((p) => p.id === target.id);
+    const sellerClub = save.clubs.find((c) => c.id === sellerClubId);
+
     const newsItem: NewsItem = {
       id: `buy-${target.id}-${Date.now()}`,
       matchweek: save.currentMatchweek,
       category: "transfer",
       clubId: userClub.id,
-      title: `OFICIAL: ${target.name} assina com o ${userClub.name}!`,
-      body: `Contratação fechada junto ao ${target.clubName} por ${formatMoney(
-        target.marketValueEur
-      )}${boughtPlayer?.shirtNumber ? ` (vestirá a camisa #${boughtPlayer.shirtNumber})` : ""}.`,
+      title: `🤝 REFORÇO DE PESO: ${target.name} assina com o ${userClub.name}!`,
+      body: `Negócio fechado em definitivo por ${formatMoney(finalFeeEur)} junto ao ${
+        sellerClub?.name || target.clubName || "mercado"
+      } (salário: ${formatWage(wageEur)}, papel: ${squadRole})${sellOnPct > 0 ? ` com ${sellOnPct}% de futura venda` : ""}${
+        boughtPlayer?.shirtNumber ? ` (vestirá a camisa #${boughtPlayer.shirtNumber})` : ""
+      }.`,
     };
 
-    setSave({
+    const worldTransfer: WorldTransfer = {
+      id: `wt-buy-${target.id}-${Date.now()}`,
+      matchweek: save.currentMatchweek,
+      date: save.currentDate ?? new Date().toISOString().slice(0, 10),
+      playerId: target.id,
+      playerName: target.name,
+      playerOvr: target.overall,
+      playerPos: target.primaryPosition,
+      fromClubId: sellerClubId ?? 0,
+      fromClubName: sellerClub?.name ?? target.clubName ?? "Mercado",
+      fromClubLeague: sellerClub?.league ?? sellerClub?.division ?? target.league ?? "Liga",
+      toClubId: userClub.id,
+      toClubName: userClub.name,
+      toClubLeague: userClub.division ?? userClub.league ?? "Liga",
+      feeEur: finalFeeEur,
+      headline: `${target.name} contratado pelo ${userClub.name} por ${formatMoney(finalFeeEur)}!`,
+    };
+
+    const nextSave: SaveState = {
       ...save,
       clubs: nextClubs,
       players: nextPlayers,
       tacticsByClub: nextTacticsByClub,
-      news: [newsItem, ...save.news].slice(0, 40),
-    });
-    setToast(`${target.name} contratado por ${formatMoney(target.marketValueEur)}!`);
+      worldTransfers: [worldTransfer, ...(save.worldTransfers ?? [])].slice(0, 100),
+      news: [newsItem, ...save.news].slice(0, 50),
+    };
+
+    setSave(nextSave);
+    setToast(`🎉 Negócio concluído! ${target.name} é oficialmente do ${userClub.name}!`);
+    setNegotiatingPlayer(null);
+  };
+
+  const handleToggleTransferListed = (playerId: number) => {
+    if (!save) return;
+    const target = save.players.find((p) => p.id === playerId);
+    if (!target) return;
+    const nextStatus = !target.isTransferListed;
+    const nextPlayers = save.players.map((p) =>
+      p.id === playerId ? { ...p, isTransferListed: nextStatus } : p
+    );
+    const nextSave: SaveState = { ...save, players: nextPlayers };
+    setSave(nextSave);
+    setToast(
+      nextStatus
+        ? `📦 ${target.name} colocado na Lista de Transferências! Clubes enviarão mais propostas.`
+        : `🛡️ ${target.name} retirado da Lista de Transferências.`
+    );
+  };
+
+  const handleOfferPlayerToMarket = (playerId: number) => {
+    if (!save) return;
+    const res = offerPlayerToMarket(save, playerId);
+    setSave(res.updatedSave);
+    setToast(res.message);
   };
 
   const handleChangeShirtNumber = (playerId: number, newNumber: number) => {
@@ -1761,6 +1830,7 @@ export const App: React.FC = () => {
         {activeTab === "market" && (
           <TransferMarket
             userClub={userClub}
+            clubs={save.clubs}
             players={save.players}
             windowStatus={windowStatus}
             currentDate={currentDate}
@@ -1768,6 +1838,9 @@ export const App: React.FC = () => {
             transferOffers={save.transferOffers}
             worldTransfers={save.worldTransfers}
             onBuyPlayer={handleBuyPlayer}
+            onStartNegotiation={handleStartNegotiation}
+            onToggleTransferListed={handleToggleTransferListed}
+            onOfferPlayerToMarket={handleOfferPlayerToMarket}
             onSellPlayer={handleSellPlayer}
             onSelectPlayer={setInspectedPlayer}
             onToggleShortlist={handleToggleShortlist}
@@ -1808,6 +1881,12 @@ export const App: React.FC = () => {
             : null
         }
         userClubId={userClub.id}
+        userClub={userClub}
+        sellerClub={
+          inspectedPlayer && inspectedPlayer.clubId
+            ? save.clubs.find((c) => c.id === inspectedPlayer.clubId)
+            : undefined
+        }
         userBudgetEur={userClub.transferBudgetEur}
         userSquadSize={userSquad.length}
         windowStatus={windowStatus}
@@ -1818,11 +1897,32 @@ export const App: React.FC = () => {
         onChangeShirtNumber={handleChangeShirtNumber}
         onClose={() => setInspectedPlayer(null)}
         onBuyPlayer={handleBuyPlayer}
+        onStartNegotiation={handleStartNegotiation}
+        onToggleTransferListed={handleToggleTransferListed}
+        onOfferPlayerToMarket={handleOfferPlayerToMarket}
         onSellPlayer={handleSellPlayer}
         onPromoteYouth={handlePromoteYouth}
         onDemoteToYouth={handleDemoteToYouth}
         onExerciseBuyOption={handleExerciseBuyOption}
       />
+
+      {/* Transfer Negotiation Modal */}
+      {negotiatingPlayer && (
+        <TransferNegotiationModal
+          player={
+            save.players.find((p) => p.id === negotiatingPlayer.id) ?? negotiatingPlayer
+          }
+          userClub={userClub}
+          sellerClub={
+            negotiatingPlayer.clubId
+              ? save.clubs.find((c) => c.id === negotiatingPlayer.clubId)
+              : undefined
+          }
+          userBudgetEur={userClub.transferBudgetEur}
+          onClose={() => setNegotiatingPlayer(null)}
+          onCompleteTransfer={handleCompleteTransfer}
+        />
+      )}
 
       {/* Season Transition Report Modal */}
       {transitionReport && (

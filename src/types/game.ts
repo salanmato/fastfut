@@ -164,6 +164,8 @@ export interface Player {
   injuryType?: string;
   squadCategory?: "first_team" | "youth";
   loan?: LoanInfo;
+  isTransferListed?: boolean;
+  askingPriceEur?: number;
 }
 
 export type MatchEventType =
@@ -360,6 +362,30 @@ export interface WorldTransfer {
   toClubLeague: string;
   feeEur: number;
   headline: string;
+}
+
+export type SquadRole = "key_player" | "important" | "rotation" | "prospect";
+
+export interface PlayerInterestEvaluation {
+  interestScore: number; // 0 a 100
+  feasibility: "impossible" | "hard" | "open" | "very_interested";
+  summary: string;
+  positiveFactors: string[];
+  negativeFactors: string[];
+  minAcceptableWageEur: number;
+  expectedRole: SquadRole;
+  loyaltyPenaltyApplied?: boolean;
+  rivalryPenaltyApplied?: boolean;
+}
+
+export interface ClubValuationEvaluation {
+  askingPriceEur: number;
+  minimumAcceptableEur: number;
+  isUntouchable: boolean;
+  isRival: boolean;
+  rivalryReason?: string;
+  statusText: string;
+  suggestedSellOnPct: number;
 }
 
 export interface SaveState {

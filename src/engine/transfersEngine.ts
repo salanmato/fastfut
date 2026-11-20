@@ -39,10 +39,14 @@ export function generateAiOffersForUser(
     return { offers: [], news: [] };
   }
 
-  // Find attractive candidates
+  // Find attractive candidates (heavily favoring transfer-listed players)
   const candidates: Array<{ player: Player; targetType: "star" | "wonderkid" | "solid" }> = [];
+  const listedPlayers = userSquad.filter((p) => p.isTransferListed);
+
   for (const p of userSquad) {
-    if (p.overall >= 80 || (p.seasonGoals ?? 0) >= 4 || (p.seasonAvgRating ?? 0) >= 7.2) {
+    if (p.isTransferListed) {
+      candidates.push({ player: p, targetType: p.overall >= 80 ? "star" : "solid" });
+    } else if (p.overall >= 80 || (p.seasonGoals ?? 0) >= 4 || (p.seasonAvgRating ?? 0) >= 7.2) {
       candidates.push({ player: p, targetType: "star" });
     } else if (p.age <= 22 && p.potential >= 79) {
       candidates.push({ player: p, targetType: "wonderkid" });
@@ -55,14 +59,22 @@ export function generateAiOffersForUser(
     return { offers: [], news: [] };
   }
 
-  // Chance of receiving an offer in this matchweek (higher on deadline day or summer window)
-  const baseChance = windowStatus.isDeadlineDay ? 0.75 : 0.40;
+  // Chance of receiving an offer in this matchweek (higher on deadline day, summer window, or if players are listed)
+  let baseChance = windowStatus.isDeadlineDay ? 0.80 : 0.45;
+  if (listedPlayers.length > 0) {
+    baseChance = Math.max(baseChance, 0.75);
+  }
+
   if (Math.random() > baseChance && existingPending.length > 0) {
     return { offers: [], news: [] };
   }
 
-  // Shuffle candidates
-  const pickedCandidate = candidates[Math.floor(Math.random() * candidates.length)];
+  // Prioritize listed player if available
+  let pickedCandidate = candidates[Math.floor(Math.random() * candidates.length)];
+  if (listedPlayers.length > 0 && Math.random() < 0.65) {
+    const listed = listedPlayers[Math.floor(Math.random() * listedPlayers.length)];
+    pickedCandidate = { player: listed, targetType: listed.overall >= 80 ? "star" : "solid" };
+  }
   const target = pickedCandidate.player;
 
   // Potential buyers from all 13 leagues
