@@ -663,6 +663,11 @@ function selectPassTarget(
   const pool = candidates.filter((id) => id !== carrierId);
   if (pool.length === 0) return carrierId;
 
+  const carrier = playerMap.get(carrierId);
+  const carrierVisionBonus = ((carrier?.stats.vision ?? 70) - 70) * 0.025;
+  const carrierLongBonus = ((carrier?.stats.longPassing ?? 70) - 70) * 0.025;
+  const carrierShortBonus = ((carrier?.stats.shortPassing ?? 70) - 70) * 0.025;
+
   const ballProgress = isHome
     ? clamp((92 - ballPos.y) / 84, 0, 1)
     : clamp((ballPos.y - 8) / 84, 0, 1);
@@ -675,7 +680,12 @@ function selectPassTarget(
     const p = playerMap.get(id);
     const isGk = p?.roleCategory === "GK";
     const isForward = p?.roleCategory === "ATT" || p?.primaryPosition === "CAM";
+    const isMid = p?.roleCategory === "MID";
     const inBox = isHome ? pos.y <= 24 : pos.y >= 76;
+
+    const receiverControl = ((p?.stats.ballControl ?? 70) + (p?.stats.positioning ?? 70)) / 2;
+    const receiverSpeed = ((p?.stats.sprintSpeed ?? 70) + (p?.stats.acceleration ?? 70)) / 2;
+    const receiverAerial = ((p?.stats.headingAccuracy ?? 70) + (p?.stats.strength ?? 70)) / 2;
 
     let minOppDist = 30;
     for (const oc of oppCoords) {
@@ -688,31 +698,53 @@ function selectPassTarget(
       const localBallY = isHome ? ballPos.y : 100 - ballPos.y;
       score = localBallY > 66 ? 0.55 : 0.03;
     } else if (tactics.passingStyle === "Short") {
-      score += dist >= 7 && dist <= 25 ? 2.4 : dist < 35 ? 1.0 : 0.25;
-      score += progress > -4 ? 1.1 : 0.3;
+      // Short / Tiki-Taka: favors close support triangles (6..24m) and high ballControl/shortPassing receivers
+      score += dist >= 6 && dist <= 24 ? 2.6 + carrierShortBonus : dist < 33 ? 0.95 : 0.2;
+      score += progress > -3 ? 1.25 : 0.35;
+      score += Math.max(0, (receiverControl - 68) * 0.045);
+      if (isMid && tactics.mentality === "Balanced") score += 0.65; // Balanced+Short controls midfield rhythm
     } else if (tactics.passingStyle === "Direct") {
-      score += progress > 11 ? 3.2 : progress > 2 ? 1.4 : 0.35;
-      if (isForward) score += 1.6;
+      // Direct / Vertical: favors progressive passes (>11m forward) to fast or physically dominant targets
+      score += progress > 11 ? 3.3 + carrierLongBonus : progress > 2 ? 1.4 : 0.3;
+      if (isForward) {
+        score += 1.5 + Math.max(0, (Math.max(receiverSpeed, receiverAerial) - 68) * 0.055);
+      }
     } else {
-      score += progress > 3 ? 2.1 : progress > -4 ? 1.1 : 0.45;
-      score += dist >= 10 && dist <= 38 ? 1.2 : 0.4;
+      // Mixed / Adaptive: uses passer's vision to pick between progressive lines, flank switches, or support
+      score += progress > 3 ? 2.15 + carrierVisionBonus : progress > -4 ? 1.15 : 0.45;
+      score += dist >= 9 && dist <= 38 ? 1.25 : 0.4;
+      score += Math.max(0, (Math.max(receiverControl, receiverSpeed) - 68) * 0.038);
+      if (Math.abs(pos.x - ballPos.x) > 24 && progress > 0) {
+        score += 0.75 + Math.max(0, carrierLongBonus); // Intelligent switch of play
+      }
+    }
+
+    // Mentality influence on vertical risk-taking
+    if (tactics.mentality === "Attacking" && progress > 6) {
+      score *= 1.25;
+    } else if (tactics.mentality === "Balanced" && progress >= -2 && progress <= 16 && minOppDist > 8) {
+      score *= 1.18; // Balanced prioritizes unmarked progressive pockets
+    } else if (tactics.mentality === "Defensive" && playPhase !== "counter" && progress < 8) {
+      score *= 1.12;
     }
 
     if (playPhase === "counter" && progress > 10) {
-      score *= 1.9;
+      score *= 1.9 + Math.max(0, (receiverSpeed - 70) * 0.03);
     }
 
     // FINAL THIRD AGGRESSION:
     // Strikers and wingers in the box are prioritized for decisive finishes and crosses!
     if (isFinalThird) {
-      if (isForward) score += 4.5;
-      if (inBox) score += 4.0;
+      if (isForward) score += 4.5 + Math.max(0, ((p?.stats.positioning ?? 70) - 70) * 0.08);
+      if (inBox) score += 4.0 + Math.max(0, ((p?.stats.finishing ?? 70) - 70) * 0.06);
 
       // Crossing opportunity: Ball is on flank and target is central in the box
       const ballWide = Math.abs(ballPos.x - 50) > 17;
       const receiverCentral = Math.abs(pos.x - 50) < 22;
       if (ballWide && receiverCentral && inBox) {
-        score += 5.5; // High priority driven cross or far-post delivery
+        const crossBoost = ((carrier?.stats.crossing ?? 70) - 68) * 0.08;
+        const headerBoost = (receiverAerial - 68) * 0.07;
+        score += 5.2 + Math.max(0, crossBoost + headerBoost);
       }
 
       // Suppress backward recycling passes when in the attacking danger area
@@ -721,18 +753,20 @@ function selectPassTarget(
         if (isDefenderOrCdm) {
           score *= 0.12; // Do NOT pass backwards 30m when attacking the goal!
         } else if ((p?.primaryPosition === "CAM" || p?.primaryPosition === "CM") && dist < 18) {
-          score += 2.2; // Cutback to the edge of the box for a shot is a great option
+          const longShotSkill = ((p?.stats.longShots ?? 70) + (p?.stats.shotPower ?? 70)) / 2;
+          score += 2.0 + Math.max(0, (longShotSkill - 70) * 0.07); // Cutback to edge of box for a shooter
         } else {
           score *= 0.35;
         }
       }
     }
 
-    // In the box, attackers are naturally marked closely: do not heavily penalize them!
+    // In the box, attackers are naturally marked closely: high composure/ballControl handles tight marking better
+    const pressResistBonus = ((p?.stats.composure ?? 70) - 70) * 0.008;
     const markingMult =
       isFinalThird && isForward
-        ? clamp(0.9 + minOppDist / 30, 0.85, 1.35)
-        : clamp(0.55 + minOppDist / 18, 0.45, 1.65);
+        ? clamp(0.9 + minOppDist / 30 + pressResistBonus, 0.85, 1.4)
+        : clamp(0.55 + minOppDist / 18 + pressResistBonus, 0.45, 1.65);
     score *= markingMult;
     return { id, score };
   });
@@ -2409,19 +2443,69 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const prevActiveIds = prevIsHome ? cur.session.homeActiveIds : cur.session.awayActiveIds;
       const currentCarrierId = ensureActiveCarrier(prevActiveIds);
       const currentTactics = prevIsHome ? cur.homeTactics : cur.awayTactics;
-      const oppCoordsList = (prevIsHome ? cur.session.awayActiveIds : cur.session.homeActiveIds)
+      const oppTactics = prevIsHome ? cur.awayTactics : cur.homeTactics;
+      const oppActiveIds = prevIsHome ? cur.session.awayActiveIds : cur.session.homeActiveIds;
+      const oppCoordsList = oppActiveIds
         .map((id) => curCoords[id])
         .filter((c): c is Coord => Boolean(c));
+
+      const carrierObj = currentCarrierId !== null ? cur.playerMap.get(currentCarrierId) : undefined;
+      // Find closest defender to ball carrier for real-time 1v1 skill duel
+      let closestDef: Player | undefined;
+      let closestDefDist = 99;
+      for (const dId of oppActiveIds) {
+        const dp = cur.playerMap.get(dId);
+        if (!dp || dp.roleCategory === "GK") continue;
+        const dc = curCoords[dId];
+        if (!dc) continue;
+        const d = Math.hypot(dc.x - ballPosRef.current.x, dc.y - ballPosRef.current.y);
+        if (d < closestDefDist) {
+          closestDefDist = d;
+          closestDef = dp;
+        }
+      }
+
+      // Carrier's ball retention skill tailored to the active passingStyle & mentality
+      const carrierRetentionSkill = carrierObj
+        ? currentTactics.passingStyle === "Short"
+          ? carrierObj.stats.shortPassing * 0.38 +
+            carrierObj.stats.ballControl * 0.34 +
+            carrierObj.stats.composure * 0.28
+          : currentTactics.passingStyle === "Direct"
+          ? carrierObj.stats.longPassing * 0.38 +
+            carrierObj.stats.vision * 0.28 +
+            carrierObj.stats.strength * 0.18 +
+            carrierObj.stats.composure * 0.16
+          : carrierObj.stats.shortPassing * 0.26 +
+            carrierObj.stats.longPassing * 0.22 +
+            carrierObj.stats.ballControl * 0.26 +
+            carrierObj.stats.composure * 0.26
+        : 72;
+
+      const defPressSkill = closestDef
+        ? (closestDef.stats.interceptions * 0.38 +
+            closestDef.stats.standingTackle * 0.36 +
+            closestDef.stats.aggression * 0.26) *
+          (0.75 + 0.25 * ((cur.session.playerStamina[closestDef.id] ?? 85) / 100))
+        : 70;
 
       const homePossWeight = clamp(cur.session.homeStats.possession / 100, 0.25, 0.75);
       const teamTargetWeight = prevIsHome ? homePossWeight : 1 - homePossWeight;
       const styleKeepBonus =
         currentTactics.passingStyle === "Short"
-          ? 0.05
+          ? 0.045 + (carrierRetentionSkill - 72) * 0.0028
           : currentTactics.passingStyle === "Direct"
-          ? -0.05
-          : 0;
-      const keepProb = clamp(0.73 + (teamTargetWeight - 0.5) * 0.14 + styleKeepBonus, 0.62, 0.86);
+          ? -0.04 + (carrierRetentionSkill - 72) * 0.002
+          : 0.015 + (carrierRetentionSkill - 72) * 0.0024; // Mixed/Balanced rewards composure & ballControl
+      const pressPressurePenalty =
+        (oppTactics.pressing === "High" ? 0.032 : oppTactics.pressing === "Medium" ? 0.014 : 0) *
+        (closestDefDist < 9 ? 1.35 : 0.85) *
+        (defPressSkill / Math.max(55, carrierRetentionSkill));
+      const keepProb = clamp(
+        0.73 + (teamTargetWeight - 0.5) * 0.14 + styleKeepBonus - pressPressurePenalty,
+        0.58,
+        0.88
+      );
       const keepSameTeam = currentCarrierId !== null && Math.random() < keepProb;
 
       let nextIsHome = prevIsHome;
@@ -2457,16 +2541,30 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         const goalDistY = prevIsHome ? nextBallPos.y - 4.5 : 95.5 - nextBallPos.y;
         const isCentered = Math.abs(nextBallPos.x - 50) < 26;
 
-        // IN-THE-BOX AGGRESSION:
-        // When an attacker penetrates the final 24m, they drive into prime shooting position and flag a real shot for the engine!
-        const shootProb = isForward
-          ? isCentered ? 0.46 : 0.30
-          : carrierPlayer?.roleCategory === "MID" && isCentered
-          ? 0.24
-          : 0.06;
+        // IN-THE-BOX & EDGE-OF-BOX SHOT AGGRESSION (Skill + Strategy driven):
+        const finishConfidence =
+          (((carrierPlayer?.stats.finishing ?? 70) + (carrierPlayer?.stats.shotPower ?? 70)) / 2 - 70) *
+          0.005;
+        const longShotConfidence =
+          (((carrierPlayer?.stats.longShots ?? 70) + (carrierPlayer?.stats.shotPower ?? 70)) / 2 - 72) *
+          0.006;
+        const shootProb =
+          (isForward
+            ? isCentered
+              ? 0.45
+              : 0.29
+            : carrierPlayer?.roleCategory === "MID" && isCentered
+            ? 0.23 + Math.max(0, longShotConfidence)
+            : 0.06) +
+          finishConfidence +
+          (currentTactics.mentality === "Attacking" ? 0.05 : 0);
 
+        const minProgressForShot =
+          oppTactics.pressing === "Low" && (carrierPlayer?.stats.longShots ?? 70) >= 75
+            ? 0.66
+            : 0.72;
         const takeTickShot =
-          progressNorm >= 0.72 && goalDistY < 26 && Math.random() < shootProb;
+          progressNorm >= minProgressForShot && goalDistY < 28 && Math.random() < shootProb;
 
         if (takeTickShot) {
           // Position the ball carrier inside/at edge of the box ready for stepLiveMatchMinute to fire the official shot!
@@ -2489,13 +2587,30 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             cur.session.pitchContext.pendingVisualShot = true;
           }
         } else {
-          const dribbleRate =
-            isForward ? 0.44 : carrierPlayer?.roleCategory === "MID" ? 0.34 : 0.22;
+          // Dribble vs Pass decision driven by carrier's dribbling/agility/acceleration + passingStyle
+          const carrierDribbleSkill = carrierPlayer
+            ? carrierPlayer.stats.dribbling * 0.45 +
+              carrierPlayer.stats.agility * 0.3 +
+              carrierPlayer.stats.acceleration * 0.25
+            : 70;
+          const styleDribbleMod =
+            currentTactics.passingStyle === "Short"
+              ? -0.05 // Short passing prefers quick 1-2s unless the player is an elite dribbler
+              : currentTactics.passingStyle === "Direct"
+              ? 0.03
+              : 0;
+          const dribbleRate = clamp(
+            (isForward ? 0.42 : carrierPlayer?.roleCategory === "MID" ? 0.32 : 0.2) +
+              (carrierDribbleSkill - 70) * 0.0065 +
+              styleDribbleMod,
+            0.12,
+            0.64
+          );
 
           // Attackers drive with pace into the box right up to 0.94 progress!
           if (progressNorm < 0.94 && Math.random() < dribbleRate) {
             // Dribble progression along vertical axis: carrier drives forward or cuts inside
-            const paceBoost = ((carrierPlayer?.faceStats.dribbling ?? 72) - 65) * 0.08;
+            const paceBoost = (carrierDribbleSkill - 66) * 0.085;
             const stepY = (4.8 + Math.random() * 5.2 + Math.max(0, paceBoost)) * dirY;
             const cutCenterX =
               progressNorm > 0.6 ? (50 - nextBallPos.x) * 0.32 : Math.random() * 10 - 5;
@@ -2582,7 +2697,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           }
         }
       } else {
-        // Possession turnover: closest defender intercepts and springs build-up or counter
+        // Possession turnover: closest defender with best interception/tackle/reaction skill wins the ball
         nextIsHome = !prevIsHome;
         lastPasserIdRef.current = null;
         const newActiveIds = nextIsHome
@@ -2599,8 +2714,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const p = cur.playerMap.get(id);
           const dist = Math.hypot(c.x - nextBallPos.x, c.y - nextBallPos.y);
           const roleFactor =
-            p?.roleCategory === "DEF" ? 0.85 : p?.roleCategory === "MID" ? 0.92 : 1.05;
-          const s = dist * roleFactor;
+            p?.roleCategory === "DEF" ? 0.85 : p?.roleCategory === "MID" ? 0.9 : 1.05;
+          const interceptSkill = p
+            ? (p.stats.interceptions * 0.42 +
+                p.stats.standingTackle * 0.33 +
+                p.stats.reactions * 0.25) /
+              100
+            : 0.7;
+          const skillFactor = clamp(1.32 - interceptSkill * 0.45, 0.72, 1.15);
+          const s = dist * roleFactor * skillFactor;
           if (s < bestScore) {
             bestScore = s;
             bestInterceptor = id;

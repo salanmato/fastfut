@@ -22,7 +22,7 @@ import type {
   Pressing,
   Tactics,
 } from "../types/game";
-import { autoPickLineup, computeTeamPower } from "../engine/matchEngine";
+import { autoPickLineup, computeTeamPower, evaluateTacticalFit } from "../engine/matchEngine";
 import {
   calculateTeamSynergy,
   getOrCreateClubSynergyTracker,
@@ -107,6 +107,11 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   const synergy = useMemo(
     () => calculateTeamSynergy(starters, tactics, tracker),
     [starters, tactics, tracker]
+  );
+
+  const tacticalFit = useMemo(
+    () => evaluateTacticalFit(starters, tactics),
+    [starters, tactics]
   );
 
   const power = computeTeamPower(
@@ -476,6 +481,89 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                   <option value="Direct">Direto (Contra-Ataque)</option>
                 </select>
               </div>
+            </div>
+
+            {/* Skill-Driven Tactical Fit Card */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950/75 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Compass className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="text-[11px] font-bold text-white">
+                    {tacticalFit.styleSummary}
+                  </span>
+                </div>
+                <span
+                  className={`rounded px-2 py-0.5 text-[10px] font-black border ${
+                    tacticalFit.overallFit >= 80
+                      ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
+                      : tacticalFit.overallFit >= 70
+                      ? "border-sky-500/50 bg-sky-500/15 text-sky-300"
+                      : "border-amber-500/50 bg-amber-500/15 text-amber-300"
+                  }`}
+                >
+                  Adequação do Elenco: {tacticalFit.overallFit}%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-[10px]">
+                <div className="rounded-lg border border-slate-800/80 bg-slate-900/90 px-2.5 py-1 flex items-center justify-between">
+                  <span className="text-slate-400">Mentalidade</span>
+                  <strong
+                    className={
+                      tacticalFit.mentalityFit >= 78
+                        ? "text-emerald-300"
+                        : tacticalFit.mentalityFit >= 68
+                        ? "text-sky-300"
+                        : "text-amber-300"
+                    }
+                  >
+                    {tacticalFit.mentalityFit}%
+                  </strong>
+                </div>
+                <div className="rounded-lg border border-slate-800/80 bg-slate-900/90 px-2.5 py-1 flex items-center justify-between">
+                  <span className="text-slate-400">Pressão</span>
+                  <strong
+                    className={
+                      tacticalFit.pressingFit >= 78
+                        ? "text-emerald-300"
+                        : tacticalFit.pressingFit >= 68
+                        ? "text-sky-300"
+                        : "text-amber-300"
+                    }
+                  >
+                    {tacticalFit.pressingFit}%
+                  </strong>
+                </div>
+                <div className="rounded-lg border border-slate-800/80 bg-slate-900/90 px-2.5 py-1 flex items-center justify-between">
+                  <span className="text-slate-400">Passe</span>
+                  <strong
+                    className={
+                      tacticalFit.passingFit >= 78
+                        ? "text-emerald-300"
+                        : tacticalFit.passingFit >= 68
+                        ? "text-sky-300"
+                        : "text-amber-300"
+                    }
+                  >
+                    {tacticalFit.passingFit}%
+                  </strong>
+                </div>
+              </div>
+
+              {(tacticalFit.keyStrengths.length > 0 || tacticalFit.keyWeaknesses.length > 0) && (
+                <div className="space-y-0.5 text-[10px]">
+                  {tacticalFit.keyStrengths.slice(0, 2).map((s) => (
+                    <div key={s} className="text-emerald-300 font-semibold">
+                      ✓ {s}
+                    </div>
+                  ))}
+                  {tacticalFit.keyWeaknesses.slice(0, 1).map((w) => (
+                    <div key={w} className="text-amber-300 font-semibold">
+                      ⚠ {w}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Power bars */}

@@ -237,6 +237,505 @@ export function computeMatchStadiumMetrics(
   };
 }
 
+export interface TacticalFitReport {
+  overallFit: number; // 0..100
+  passingFit: number; // 0..100
+  mentalityFit: number; // 0..100
+  pressingFit: number; // 0..100
+  attMultiplier: number;
+  midMultiplier: number;
+  defMultiplier: number;
+  possessionBonus: number; // percentage points (-6..+6)
+  shotVolumeMult: number;
+  shotQualityMult: number;
+  pressResistance: number; // 50..99
+  counterThreat: number; // 50..99
+  longShotThreat: number; // 50..99
+  aerialThreat: number; // 50..99
+  keyStrengths: string[];
+  keyWeaknesses: string[];
+  styleSummary: string;
+}
+
+export function evaluateTacticalFit(
+  activePlayers: Player[],
+  tactics: Tactics,
+  staminaOverrides?: Record<number, number>
+): TacticalFitReport {
+  const outfield = activePlayers.filter((p) => p.roleCategory !== "GK");
+  if (outfield.length === 0) {
+    return {
+      overallFit: 75,
+      passingFit: 75,
+      mentalityFit: 75,
+      pressingFit: 75,
+      attMultiplier: 1,
+      midMultiplier: 1,
+      defMultiplier: 1,
+      possessionBonus: 0,
+      shotVolumeMult: 1,
+      shotQualityMult: 1,
+      pressResistance: 70,
+      counterThreat: 70,
+      longShotThreat: 70,
+      aerialThreat: 70,
+      keyStrengths: [],
+      keyWeaknesses: [],
+      styleSummary: "Equilíbrio padrão",
+    };
+  }
+
+  const defs = outfield.filter((p) => p.roleCategory === "DEF");
+  const mids = outfield.filter((p) => p.roleCategory === "MID");
+  const atts = outfield.filter((p) => p.roleCategory === "ATT");
+  const midAtt = [...mids, ...atts];
+  const defMid = [...defs, ...mids];
+
+  const getStam = (p: Player) => staminaOverrides?.[p.id] ?? p.stamina ?? 85;
+  const fatigueMult = (p: Player) => 0.78 + 0.22 * (Math.max(20, getStam(p)) / 100);
+
+  const avgStat = (pool: Player[], fn: (p: Player) => number): number => {
+    const list = pool.length > 0 ? pool : outfield;
+    return (
+      list.reduce((sum, p) => sum + fn(p) * fatigueMult(p), 0) / list.length
+    );
+  };
+
+  const baseOvr =
+    outfield.reduce((s, p) => s + p.overall * fatigueMult(p), 0) / outfield.length;
+
+  // Detailed skill averages across tactical groups
+  const shortPassSkill = avgStat(
+    midAtt,
+    (p) =>
+      p.stats.shortPassing * 0.38 +
+      p.stats.ballControl * 0.27 +
+      p.stats.vision * 0.2 +
+      p.stats.composure * 0.15
+  );
+  const directPassSkill =
+    avgStat(defMid, (p) => p.stats.longPassing * 0.55 + p.stats.vision * 0.25 + p.stats.crossing * 0.2) *
+      0.48 +
+    avgStat(
+      atts.length > 0 ? atts : midAtt,
+      (p) =>
+        p.stats.sprintSpeed * 0.35 +
+        p.stats.acceleration * 0.25 +
+        p.stats.positioning * 0.22 +
+        (p.stats.strength * 0.5 + p.stats.headingAccuracy * 0.5) * 0.18
+    ) *
+      0.52;
+  const mixedPassSkill = avgStat(
+    outfield,
+    (p) =>
+      p.stats.shortPassing * 0.24 +
+      p.stats.longPassing * 0.22 +
+      p.stats.vision * 0.22 +
+      p.stats.composure * 0.17 +
+      p.stats.crossing * 0.15
+  );
+
+  const attackingMentSkill = avgStat(
+    midAtt,
+    (p) =>
+      p.stats.finishing * 0.26 +
+      p.stats.positioning * 0.22 +
+      p.stats.dribbling * 0.22 +
+      p.stats.shotPower * 0.15 +
+      p.stats.acceleration * 0.15
+  );
+  const defensiveMentSkill =
+    avgStat(
+      defMid,
+      (p) =>
+        p.stats.defensiveAwareness * 0.32 +
+        p.stats.standingTackle * 0.28 +
+        p.stats.interceptions * 0.22 +
+        p.stats.strength * 0.18
+    ) *
+      0.7 +
+    avgStat(atts.length > 0 ? atts : midAtt, (p) => p.stats.sprintSpeed * 0.55 + p.stats.acceleration * 0.45) *
+      0.3;
+  const balancedMentSkill = avgStat(
+    outfield,
+    (p) =>
+      p.stats.composure * 0.25 +
+      p.stats.reactions * 0.25 +
+      p.stats.positioning * 0.2 +
+      p.stats.defensiveAwareness * 0.15 +
+      p.stats.vision * 0.15
+  );
+
+  const avgLiveStamina = outfield.reduce((s, p) => s + getStam(p), 0) / outfield.length;
+  const highPressSkill =
+    avgStat(
+      outfield,
+      (p) =>
+        p.stats.aggression * 0.25 +
+        p.stats.acceleration * 0.25 +
+        p.stats.interceptions * 0.25 +
+        p.stats.standingTackle * 0.25
+    ) *
+    (0.75 + 0.25 * (avgLiveStamina / 100));
+  const mediumPressSkill = avgStat(
+    defMid,
+    (p) =>
+      p.stats.interceptions * 0.32 +
+      p.stats.standingTackle * 0.28 +
+      p.stats.reactions * 0.22 +
+      p.stats.defensiveAwareness * 0.18
+  );
+  const lowPressSkill = avgStat(
+    defMid,
+    (p) =>
+      p.stats.defensiveAwareness * 0.38 +
+      p.stats.interceptions * 0.27 +
+      p.stats.composure * 0.2 +
+      p.stats.headingAccuracy * 0.15
+  );
+
+  // Convert a skill score to a 45..98 fit percentage combining relative squad affinity and absolute quality
+  const toFitPct = (skillVal: number, baselineOffset = 0): number => {
+    const relDiff = skillVal - (baseOvr + baselineOffset);
+    const absDiff = skillVal - 73;
+    const raw = 76 + relDiff * 2.1 + absDiff * 0.65;
+    return Math.round(Math.max(45, Math.min(98, raw)));
+  };
+
+  let passingFit = 76;
+  if (tactics.passingStyle === "Short") passingFit = toFitPct(shortPassSkill, -1.0);
+  else if (tactics.passingStyle === "Direct") passingFit = toFitPct(directPassSkill, -1.2);
+  else passingFit = toFitPct(mixedPassSkill, -1.5);
+
+  let mentalityFit = 76;
+  if (tactics.mentality === "Attacking") mentalityFit = toFitPct(attackingMentSkill, -1.2);
+  else if (tactics.mentality === "Defensive") mentalityFit = toFitPct(defensiveMentSkill, -1.5);
+  else mentalityFit = toFitPct(balancedMentSkill, -1.5);
+
+  let pressingFit = 76;
+  if (tactics.pressing === "High") pressingFit = toFitPct(highPressSkill, -2.0);
+  else if (tactics.pressing === "Medium") pressingFit = toFitPct(mediumPressSkill, -1.5);
+  else pressingFit = toFitPct(lowPressSkill, -1.5);
+
+  // Tactical coherence bonus/penalty between knobs (e.g. Short + Balanced/Attacking, Direct + Counter, Low Press + High stamina preservation)
+  let coherenceBonus = 0;
+  if (tactics.passingStyle === "Short" && tactics.mentality !== "Defensive") coherenceBonus += 3;
+  if (tactics.passingStyle === "Direct" && tactics.mentality === "Defensive") coherenceBonus += 4;
+  if (tactics.passingStyle === "Mixed" && tactics.mentality === "Balanced") coherenceBonus += 4;
+  if (tactics.pressing === "High" && tactics.mentality === "Defensive") coherenceBonus -= 4;
+  if (tactics.pressing === "Low" && tactics.mentality === "Attacking") coherenceBonus -= 3;
+
+  const overallFit = Math.round(
+    Math.max(
+      45,
+      Math.min(99, passingFit * 0.38 + mentalityFit * 0.34 + pressingFit * 0.28 + coherenceBonus)
+    )
+  );
+
+  // Convert fit scores (centered at 72) into real sector multipliers
+  const passDelta = (passingFit - 72) / 100; // -0.27 .. +0.26
+  const mentDelta = (mentalityFit - 72) / 100;
+  const pressDelta = (pressingFit - 72) / 100;
+
+  let attMod = 1.0;
+  let midMod = 1.0;
+  let defMod = 1.0;
+  let possessionBonus = 0;
+  let shotVolumeMult = 1.0;
+  let shotQualityMult = 1.0;
+
+  // 1. Passing Style Impact (strongly scaled by Passing Fit!)
+  if (tactics.passingStyle === "Short") {
+    midMod += 0.035 + passDelta * 0.16;
+    attMod += 0.015 + passDelta * 0.12;
+    possessionBonus += 4.2 + passDelta * 14;
+    shotQualityMult += 0.08 + passDelta * 0.22; // Patient triangles create cleaner box chances
+    shotVolumeMult -= 0.03;
+  } else if (tactics.passingStyle === "Direct") {
+    attMod += 0.035 + passDelta * 0.16;
+    midMod -= 0.015 - passDelta * 0.08;
+    possessionBonus -= 3.8 - passDelta * 8;
+    shotVolumeMult += 0.07 + passDelta * 0.18; // Fast verticality generates more transition attempts
+  } else {
+    // Mixed: Adaptive passing rewards Vision, Composure, Short+Long+Crossing versatility
+    midMod += 0.025 + passDelta * 0.14;
+    attMod += 0.025 + passDelta * 0.14;
+    defMod += 0.01 + passDelta * 0.06;
+    possessionBonus += 1.2 + passDelta * 9;
+    shotQualityMult += 0.04 + passDelta * 0.15;
+    shotVolumeMult += 0.03 + passDelta * 0.12;
+  }
+
+  // 2. Mentality Impact (strongly scaled by Mentality Fit!)
+  if (tactics.mentality === "Attacking") {
+    attMod += 0.06 + mentDelta * 0.18;
+    midMod += 0.02 + mentDelta * 0.08;
+    defMod -= 0.045 - mentDelta * 0.06;
+    shotVolumeMult += 0.12 + mentDelta * 0.15;
+    possessionBonus += 1.5;
+  } else if (tactics.mentality === "Defensive") {
+    defMod += 0.065 + mentDelta * 0.18;
+    midMod += 0.01 + mentDelta * 0.06;
+    attMod -= 0.045 - mentDelta * 0.1;
+    shotVolumeMult -= 0.1;
+    shotQualityMult += 0.07 + mentDelta * 0.16; // Clinical counter-attacks
+    possessionBonus -= 2.5;
+  } else {
+    // Balanced: Tactical discipline & fluid transitions across all 3 sectors!
+    attMod += 0.025 + mentDelta * 0.13;
+    midMod += 0.03 + mentDelta * 0.15;
+    defMod += 0.028 + mentDelta * 0.13;
+    shotQualityMult += 0.05 + mentDelta * 0.14;
+    possessionBonus += 1.0 + mentDelta * 6;
+  }
+
+  // 3. Pressing Impact (strongly scaled by Pressing Fit & live Stamina!)
+  if (tactics.pressing === "High") {
+    midMod += 0.035 + pressDelta * 0.15;
+    attMod += 0.025 + pressDelta * 0.12;
+    // If stamina drops low in High Press, defense is exposed!
+    const fatigueVulnerability = avgLiveStamina < 62 ? (62 - avgLiveStamina) * 0.0022 : 0;
+    defMod += pressDelta * 0.1 - fatigueVulnerability;
+    possessionBonus += 2.6 + pressDelta * 10;
+    shotVolumeMult += 0.06;
+  } else if (tactics.pressing === "Low") {
+    defMod += 0.04 + pressDelta * 0.15;
+    midMod -= 0.01 - pressDelta * 0.06;
+    possessionBonus -= 2.8;
+  } else {
+    // Medium Press: Coordinated midfield trap without exposing the backline
+    midMod += 0.028 + pressDelta * 0.14;
+    defMod += 0.022 + pressDelta * 0.12;
+    attMod += 0.012 + pressDelta * 0.08;
+    possessionBonus += 0.8 + pressDelta * 7;
+  }
+
+  const pressResistance = Math.round(
+    avgStat(defMid, (p) => p.stats.composure * 0.35 + p.stats.ballControl * 0.35 + p.stats.shortPassing * 0.3)
+  );
+  const counterThreat = Math.round(
+    avgStat(
+      atts.length > 0 ? atts : midAtt,
+      (p) => p.stats.sprintSpeed * 0.4 + p.stats.acceleration * 0.35 + p.stats.finishing * 0.25
+    )
+  );
+  const longShotThreat = Math.round(
+    avgStat(midAtt, (p) => p.stats.longShots * 0.55 + p.stats.shotPower * 0.45)
+  );
+  const aerialThreat = Math.round(
+    avgStat(
+      midAtt,
+      (p) => p.stats.headingAccuracy * 0.4 + p.stats.jumping * 0.3 + p.stats.crossing * 0.3
+    )
+  );
+
+  const keyStrengths: string[] = [];
+  const keyWeaknesses: string[] = [];
+
+  if (passingFit >= 80) {
+    keyStrengths.push(
+      tactics.passingStyle === "Short"
+        ? "Toque curto e controle de bola refinados"
+        : tactics.passingStyle === "Direct"
+        ? "Lançamentos longos e velocidade em profundidade"
+        : "Visão de jogo e repertório misto de passes"
+    );
+  } else if (passingFit <= 64) {
+    keyWeaknesses.push(
+      tactics.passingStyle === "Short"
+        ? "Falta técnica/controle para toque curto sob pressão"
+        : tactics.passingStyle === "Direct"
+        ? "Baixa precisão longa ou falta de explosão no ataque"
+        : "Tomada de decisão irregular na distribuição"
+    );
+  }
+
+  if (mentalityFit >= 80) {
+    keyStrengths.push(
+      tactics.mentality === "Attacking"
+        ? "Poder de finalização e infiltração ofensiva"
+        : tactics.mentality === "Defensive"
+        ? "Solidez de marcação e bote rápido no contra-golpe"
+        : "Leitura tática, frieza e compactação entre setores"
+    );
+  } else if (mentalityFit <= 64) {
+    keyWeaknesses.push(
+      tactics.mentality === "Attacking"
+        ? "Zaga exposta para sustentar linha tão ofensiva"
+        : tactics.mentality === "Defensive"
+        ? "Baixa consciência defensiva para retranca"
+        : "Falta de posicionamento/reação para transição equilibrada"
+    );
+  }
+
+  if (pressingFit >= 80) {
+    keyStrengths.push(
+      tactics.pressing === "High"
+        ? "Fôlego e agressividade ideais p/ pressão alta"
+        : tactics.pressing === "Medium"
+        ? "Interceptação forte no meio-campo"
+        : "Posicionamento zonal sólido no bloco baixo"
+    );
+  } else if (pressingFit <= 64) {
+    keyWeaknesses.push(
+      tactics.pressing === "High"
+        ? "Fadiga/lentidão compromete a pressão alta"
+        : "Desarmes e interceptações abaixo do exigido"
+    );
+  }
+
+  const styleSummary =
+    tactics.mentality === "Balanced" && tactics.passingStyle === "Short"
+      ? "Controle Posicional & Triangulações (Tiki-Taka Equilibrado)"
+      : tactics.mentality === "Attacking" && tactics.passingStyle === "Short"
+      ? "Domínio Ofensivo & Infiltração Curta"
+      : tactics.mentality === "Defensive" && tactics.passingStyle === "Direct"
+      ? "Bloco Baixo & Contra-Ataque Vertical Fulminante"
+      : tactics.mentality === "Attacking" && tactics.passingStyle === "Direct"
+      ? "Blitz Vertical & Bolas Diretas na Área"
+      : tactics.mentality === "Balanced" && tactics.passingStyle === "Mixed"
+      ? "Organização Fluida & Adaptação Tática"
+      : `${
+          tactics.mentality === "Attacking"
+            ? "Ofensivo"
+            : tactics.mentality === "Defensive"
+            ? "Retranca"
+            : "Equilibrado"
+        } • Passe ${
+          tactics.passingStyle === "Short"
+            ? "Curto"
+            : tactics.passingStyle === "Direct"
+            ? "Direto"
+            : "Misto"
+        }`;
+
+  return {
+    overallFit,
+    passingFit,
+    mentalityFit,
+    pressingFit,
+    attMultiplier: Math.max(0.86, Math.min(1.18, attMod)),
+    midMultiplier: Math.max(0.86, Math.min(1.18, midMod)),
+    defMultiplier: Math.max(0.86, Math.min(1.18, defMod)),
+    possessionBonus,
+    shotVolumeMult: Math.max(0.82, Math.min(1.25, shotVolumeMult)),
+    shotQualityMult: Math.max(0.85, Math.min(1.25, shotQualityMult)),
+    pressResistance,
+    counterThreat,
+    longShotThreat,
+    aerialThreat,
+    keyStrengths,
+    keyWeaknesses,
+    styleSummary,
+  };
+}
+
+/**
+ * Evaluates tactical head-to-head matchup between two teams' active strategies and player skills.
+ */
+export function computeTacticalMatchup(
+  myTactics: Tactics,
+  oppTactics: Tactics,
+  myFit: TacticalFitReport,
+  oppFit: TacticalFitReport
+): {
+  chanceVolumeMod: number;
+  shotQualityMod: number;
+  possessionMod: number;
+  turnoverResistMod: number;
+  matchupNote: string;
+} {
+  let chanceVolumeMod = 1.0;
+  let shotQualityMod = 1.0;
+  let possessionMod = 0;
+  let turnoverResistMod = 0;
+  let matchupNote = "Duelo tático equilibrado";
+
+  // 1. Short Passing vs High Press: Press Resistance vs Gegenpressing
+  if (myTactics.passingStyle === "Short" && oppTactics.pressing === "High") {
+    const technicalEdge = myFit.pressResistance - oppFit.pressingFit;
+    if (technicalEdge >= 3) {
+      // Press-resistant team breaks the high press and finds open space!
+      shotQualityMod += 0.12;
+      chanceVolumeMod += 0.07;
+      turnoverResistMod += 0.04;
+      matchupNote = "Toque curto saindo da pressão alta com superioridade técnica";
+    } else if (technicalEdge <= -4) {
+      // Suffocated by opponent's high press!
+      chanceVolumeMod -= 0.08;
+      possessionMod -= 3.5;
+      turnoverResistMod -= 0.05;
+      matchupNote = "Saída curta sufocada pela pressão alta adversária";
+    }
+  }
+
+  // 2. Short Passing vs Low Press / Defensive Block: Patient Penetration
+  if (
+    myTactics.passingStyle === "Short" &&
+    (oppTactics.pressing === "Low" || oppTactics.mentality === "Defensive")
+  ) {
+    if (myFit.passingFit >= 73) {
+      shotQualityMod += 0.1;
+      possessionMod += 3.5;
+      matchupNote = "Paciência no passe curto abrindo espaços na retranca baixa";
+    }
+  }
+
+  // 3. Direct Passing vs High Press / Attacking Line: Balls in Behind
+  if (
+    myTactics.passingStyle === "Direct" &&
+    (oppTactics.pressing === "High" || oppTactics.mentality === "Attacking")
+  ) {
+    const speedEdge = myFit.counterThreat - 70;
+    shotQualityMod += 0.11 + Math.max(0, speedEdge * 0.004);
+    chanceVolumeMod += 0.09;
+    matchupNote = "Bolas longas explorando as costas da linha alta adversária";
+  }
+
+  // 4. Direct Passing vs Low Press + Defensive Block: Space Denied in Behind
+  if (
+    myTactics.passingStyle === "Direct" &&
+    oppTactics.pressing === "Low" &&
+    oppTactics.mentality === "Defensive"
+  ) {
+    if (myFit.aerialThreat < 75) {
+      shotQualityMod -= 0.09;
+      chanceVolumeMod -= 0.06;
+      matchupNote = "Lançamentos diretos neutralizados pelo bloco baixo adversário";
+    } else {
+      shotQualityMod += 0.05;
+      matchupNote = "Jogo aéreo forte disputando bolas diretas contra a retranca";
+    }
+  }
+
+  // 5. Balanced + Short / Mixed vs Over-aggressive Attacking
+  if (myTactics.mentality === "Balanced" && oppTactics.mentality === "Attacking") {
+    if (myFit.mentalityFit >= 73) {
+      shotQualityMod += 0.08;
+      turnoverResistMod += 0.03;
+      if (matchupNote === "Duelo tático equilibrado") {
+        matchupNote = "Postura equilibrada punindo os espaços deixados pelo ataque total adversário";
+      }
+    }
+  }
+
+  // 6. Defensive Counter vs Attacking Mentality
+  if (myTactics.mentality === "Defensive" && oppTactics.mentality === "Attacking") {
+    shotQualityMod += 0.12;
+    if (matchupNote === "Duelo tático equilibrado") {
+      matchupNote = "Bloco defensivo absorvendo a blitz e saindo em contra-golpe letal";
+    }
+  }
+
+  return {
+    chanceVolumeMod,
+    shotQualityMod,
+    possessionMod,
+    turnoverResistMod,
+    matchupNote,
+  };
+}
+
 export function computeTeamPower(
   activePlayers: Player[],
   tactics: Tactics,
@@ -278,75 +777,100 @@ export function computeTeamPower(
 
   const gkScore = gks.length
     ? avg(
-        gks.map((p) => getEff(p, p.overall * 0.55 + p.faceStats.reflexes * 0.45)),
+        gks.map((p) =>
+          getEff(
+            p,
+            p.overall * 0.45 +
+              p.faceStats.reflexes * 0.35 +
+              p.stats.reactions * 0.12 +
+              p.stats.composure * 0.08
+          )
+        ),
         72
       )
     : 52;
 
   const defList = defs.length ? defs : activePlayers.filter((p) => p.roleCategory !== "GK");
   const defScore = avg(
-    defList.map((p) =>
-      getEff(
-        p,
-        p.faceStats.defending * 0.55 + p.faceStats.physicality * 0.25 + p.overall * 0.2
-      )
-    ),
+    defList.map((p) => {
+      const baseDef =
+        p.stats.defensiveAwareness * 0.24 +
+        p.stats.standingTackle * 0.22 +
+        p.stats.interceptions * 0.16 +
+        p.stats.strength * 0.12 +
+        p.stats.headingAccuracy * 0.08 +
+        p.overall * 0.18;
+      // High line / High press demands acceleration & sprintSpeed from defenders; Low block rewards heading & strength
+      const styleDef =
+        tactics.pressing === "High" || tactics.mentality === "Attacking"
+          ? (p.stats.sprintSpeed * 0.5 + p.stats.acceleration * 0.5 - 70) * 0.12
+          : tactics.pressing === "Low" || tactics.mentality === "Defensive"
+          ? (p.stats.headingAccuracy * 0.5 + p.stats.strength * 0.5 - 70) * 0.12
+          : (p.stats.reactions * 0.5 + p.stats.composure * 0.5 - 70) * 0.1;
+      return getEff(p, baseDef + styleDef);
+    }),
     70
   );
 
   const midList = mids.length ? mids : activePlayers.filter((p) => p.roleCategory !== "GK");
   const midScore = avg(
-    midList.map((p) =>
-      getEff(
+    midList.map((p) => {
+      const stylePass =
+        tactics.passingStyle === "Short"
+          ? p.stats.shortPassing * 0.35 +
+            p.stats.ballControl * 0.25 +
+            p.stats.vision * 0.22 +
+            p.stats.composure * 0.18
+          : tactics.passingStyle === "Direct"
+          ? p.stats.longPassing * 0.35 +
+            p.stats.vision * 0.25 +
+            p.stats.crossing * 0.2 +
+            p.stats.stamina * 0.2
+          : p.stats.shortPassing * 0.25 +
+            p.stats.longPassing * 0.25 +
+            p.stats.vision * 0.25 +
+            p.stats.composure * 0.25;
+      return getEff(
         p,
-        p.faceStats.passing * 0.4 + p.faceStats.dribbling * 0.3 + p.overall * 0.3
-      )
-    ),
+        stylePass * 0.52 +
+          p.stats.dribbling * 0.16 +
+          p.stats.interceptions * 0.12 +
+          p.overall * 0.2
+      );
+    }),
     72
   );
 
   const attPool = [...atts, ...mids.filter((p) => p.primaryPosition === "CAM")];
   const attList = attPool.length ? attPool : activePlayers.filter((p) => p.roleCategory !== "GK");
   const attScore = avg(
-    attList.map((p) =>
-      getEff(
-        p,
-        p.faceStats.shooting * 0.42 +
-          p.faceStats.pace * 0.23 +
-          p.faceStats.dribbling * 0.2 +
-          p.overall * 0.15
-      )
-    ),
+    attList.map((p) => {
+      const styleAtt =
+        tactics.passingStyle === "Short"
+          ? p.stats.finishing * 0.3 +
+            p.stats.positioning * 0.24 +
+            p.stats.ballControl * 0.24 +
+            p.stats.agility * 0.22
+          : tactics.passingStyle === "Direct"
+          ? p.stats.sprintSpeed * 0.28 +
+            p.stats.acceleration * 0.24 +
+            p.stats.finishing * 0.26 +
+            (p.stats.headingAccuracy * 0.5 + p.stats.strength * 0.5) * 0.22
+          : p.stats.finishing * 0.28 +
+            p.stats.positioning * 0.22 +
+            p.stats.dribbling * 0.22 +
+            p.stats.shotPower * 0.14 +
+            p.stats.composure * 0.14;
+      return getEff(p, styleAtt * 0.68 + p.faceStats.shooting * 0.16 + p.overall * 0.16);
+    }),
     72
   );
 
-  // Tactical modifiers
-  let attMod = 1.0;
-  let midMod = 1.0;
-  let defMod = 1.0;
-
-  if (tactics.mentality === "Attacking") {
-    attMod += 0.065;
-    midMod += 0.02;
-    defMod -= 0.05;
-  } else if (tactics.mentality === "Defensive") {
-    attMod -= 0.06;
-    defMod += 0.065;
-  }
-
-  if (tactics.pressing === "High") {
-    midMod += 0.04;
-    attMod += 0.02;
-  } else if (tactics.pressing === "Low") {
-    defMod += 0.03;
-  }
-
-  if (tactics.passingStyle === "Short") {
-    midMod += 0.035;
-  } else if (tactics.passingStyle === "Direct") {
-    attMod += 0.03;
-    midMod -= 0.02;
-  }
+  // Skill-driven tactical fit multipliers
+  const tacticalFit = evaluateTacticalFit(activePlayers, tactics, staminaOverrides);
+  let attMod = tacticalFit.attMultiplier;
+  let midMod = tacticalFit.midMultiplier;
+  let defMod = tacticalFit.defMultiplier;
 
   // Stadium pitch style synergy for home team
   if (isHome && stadiumConfig) {
@@ -356,6 +880,9 @@ export function computeTeamPower(
     } else if (stadiumConfig.pitchStyle === "Heavy" && tactics.passingStyle === "Direct") {
       attMod += 0.025;
       defMod += 0.025;
+    } else if (stadiumConfig.pitchStyle === "Balanced" && tactics.passingStyle === "Mixed") {
+      midMod += 0.02;
+      attMod += 0.02;
     }
   }
 
@@ -763,16 +1290,28 @@ export function stepLiveMatchMinute(
     maybePerformAiSub(session, false, playerMap);
   }
 
-  // Possession tick
+  const homeFit = evaluateTacticalFit(homeActive, homeTactics, session.playerStamina);
+  const awayFit = evaluateTacticalFit(awayActive, awayTactics, session.playerStamina);
+  const homeMatchup = computeTacticalMatchup(homeTactics, awayTactics, homeFit, awayFit);
+  const awayMatchup = computeTacticalMatchup(awayTactics, homeTactics, awayFit, homeFit);
+
+  // Possession tick: driven by midfield power + tactical passing style fit + head-to-head matchup
   const midDiff = homePower.midfield - awayPower.midfield;
-  const targetHomePoss = Math.max(26, Math.min(74, 50 + midDiff * 1.45 + (Math.random() * 6 - 3)));
+  const tacticalPossShift =
+    homeFit.possessionBonus +
+    homeMatchup.possessionMod -
+    (awayFit.possessionBonus + awayMatchup.possessionMod);
+  const targetHomePoss = Math.max(
+    24,
+    Math.min(76, 50 + midDiff * 1.35 + tacticalPossShift * 0.85 + (Math.random() * 5 - 2.5))
+  );
   session.possessionAccumulatorHome += targetHomePoss;
   session.possessionTicks += 1;
   const homePoss = Math.round(session.possessionAccumulatorHome / session.possessionTicks);
   session.homeStats.possession = homePoss;
   session.awayStats.possession = 100 - homePoss;
 
-  // Causal Fouls & Cards: triggered by a defender's tackle on the ball carrier
+  // Causal Fouls & Cards: triggered by a defender's tackle on the ball carrier (skill-driven duel)
   const refFactor = session.referee.avgCardsPerGame / 4.2;
   const checkFoul = (
     isDefendingHome: boolean,
@@ -783,8 +1322,55 @@ export function stepLiveMatchMinute(
     preferredVictim?: Player,
     probMult = 1.0
   ): { fouled: boolean; cardIssued: boolean; offender?: Player; victim?: Player } => {
-    const pressBonus = defTactics.pressing === "High" ? 0.025 : defTactics.pressing === "Low" ? -0.012 : 0;
-    if (Math.random() >= (0.11 + pressBonus) * (0.85 + refFactor * 0.15) * probMult) {
+    const defOutfield = defActive.filter((p) => p.roleCategory !== "GK");
+    if (defOutfield.length === 0) return { fouled: false, cardIssued: false };
+    const offender =
+      preferredOffender && preferredOffender.roleCategory !== "GK"
+        ? preferredOffender
+        : weightedPick(defOutfield, (p) => {
+            const roleW = p.roleCategory === "DEF" ? 1.75 : p.roleCategory === "MID" ? 1.35 : 0.7;
+            const aggFactor = 0.7 + (p.stats.aggression / 100) * 0.65;
+            return roleW * aggFactor;
+          });
+
+    const attOutfield = attActive.filter((p) => p.roleCategory !== "GK");
+    const victim =
+      preferredVictim && preferredVictim.roleCategory !== "GK"
+        ? preferredVictim
+        : attOutfield.length > 0
+        ? weightedPick(attOutfield, (p) => {
+            const roleW = p.roleCategory === "ATT" ? 1.7 : p.roleCategory === "MID" ? 1.4 : 0.6;
+            const elusiveW = 0.7 + ((p.stats.dribbling + p.stats.agility) / 200) * 0.65;
+            return roleW * elusiveW;
+          })
+        : undefined;
+
+    // Tackle quality vs Attacker agility/dribbling + Defender aggression & fatigue
+    const tacklerCleanSkill =
+      offender.stats.standingTackle * 0.45 +
+      offender.stats.defensiveAwareness * 0.35 +
+      offender.stats.composure * 0.2;
+    const victimElusiveness = victim
+      ? victim.stats.agility * 0.38 +
+        victim.stats.dribbling * 0.37 +
+        victim.stats.acceleration * 0.25
+      : 72;
+    const offenderStam = session.playerStamina[offender.id] ?? 85;
+    const fatigueFoulPenalty = offenderStam < 60 ? (60 - offenderStam) * 0.0009 : 0;
+    const aggressionRisk = (offender.stats.aggression - 70) * 0.0008;
+    const duelMismatch = (victimElusiveness - tacklerCleanSkill) * 0.0012;
+    const pressBonus =
+      defTactics.pressing === "High" ? 0.024 : defTactics.pressing === "Low" ? -0.014 : 0.004;
+
+    const foulProb =
+      Math.max(
+        0.04,
+        0.105 + pressBonus + aggressionRisk + duelMismatch + fatigueFoulPenalty
+      ) *
+      (0.85 + refFactor * 0.15) *
+      probMult;
+
+    if (Math.random() >= foulProb) {
       return { fouled: false, cardIssued: false };
     }
 
@@ -793,26 +1379,11 @@ export function stepLiveMatchMinute(
     const defClubName = isDefendingHome ? homeClub.shortName : awayClub.shortName;
     stats.fouls += 1;
 
-    const defOutfield = defActive.filter((p) => p.roleCategory !== "GK");
-    if (defOutfield.length === 0) return { fouled: true, cardIssued: false };
-    const offender =
-      preferredOffender && preferredOffender.roleCategory !== "GK"
-        ? preferredOffender
-        : weightedPick(defOutfield, (p) =>
-            p.roleCategory === "DEF" ? 1.8 : p.roleCategory === "MID" ? 1.3 : 0.7
-          );
+    const cardProb =
+      (0.155 + Math.max(0, (offender.stats.aggression - tacklerCleanSkill) * 0.0015)) *
+      refFactor;
 
-    const attOutfield = attActive.filter((p) => p.roleCategory !== "GK");
-    const victim =
-      preferredVictim && preferredVictim.roleCategory !== "GK"
-        ? preferredVictim
-        : attOutfield.length > 0
-        ? weightedPick(attOutfield, (p) =>
-            p.roleCategory === "ATT" ? 1.7 : p.roleCategory === "MID" ? 1.4 : 0.6
-          )
-        : undefined;
-
-    if (Math.random() < 0.165 * refFactor) {
+    if (Math.random() < cardProb) {
       const alreadyYellow = session.yellowCardedIds.includes(offender.id);
       if (alreadyYellow || Math.random() < 0.03) {
         // Red card
@@ -1112,16 +1683,25 @@ export function stepLiveMatchMinute(
   ): boolean => {
     const clubId = isHome ? session.homeClubId : session.awayClubId;
     const stats = isHome ? session.homeStats : session.awayStats;
+    const attFit = isHome ? homeFit : awayFit;
+    const attMatchup = isHome ? homeMatchup : awayMatchup;
+    const defTacticsActive = isHome ? awayTactics : homeTactics;
 
-    // Average ~13.5 shots per team over ~93 minutes, with attacking mentality & synergy impact
+    // Average ~13.5 shots per team over ~93 minutes, scaled by tactical fit, mentality & head-to-head matchup
     const mentalityBonus =
-      attTactics.mentality === "Attacking" ? 0.024 : attTactics.mentality === "Defensive" ? -0.018 : 0;
+      attTactics.mentality === "Attacking"
+        ? 0.024
+        : attTactics.mentality === "Defensive"
+        ? -0.018
+        : 0.006; // Balanced posture maintains steady progressive chance creation
+    const tacticalVolumeMult = attFit.shotVolumeMult * attMatchup.chanceVolumeMod;
     const baseChanceProb =
-      0.136 +
-      (attPower.attack - defPower.defense) * 0.0024 +
-      (attPower.midfield - defPower.midfield) * 0.0014 +
-      mentalityBonus;
-    const clampedProb = Math.max(0.06, Math.min(0.65, baseChanceProb * probMultiplier));
+      (0.134 +
+        (attPower.attack - defPower.defense) * 0.0024 +
+        (attPower.midfield - defPower.midfield) * 0.0014 +
+        mentalityBonus) *
+      tacticalVolumeMult;
+    const clampedProb = Math.max(0.05, Math.min(0.68, baseChanceProb * probMultiplier));
     if (!forceTrigger && Math.random() > clampedProb) return false;
 
     const attackers = attTeam.filter((p) => p.roleCategory !== "GK");
@@ -1146,24 +1726,44 @@ export function stepLiveMatchMinute(
               roleMult = 2.15 + (isAttackingMentality ? 0.35 : 0);
             } else if (p.roleCategory === "MID") {
               roleMult = p.primaryPosition === "CM" ? 1.35 + (isAttackingMentality ? 0.25 : 0) : 0.9;
+              // Against a Low Press block or in Mixed passing, midfielders with elite longShots step up
+              if (defTacticsActive.pressing === "Low" || attTactics.passingStyle === "Mixed") {
+                roleMult += Math.max(0, (p.stats.longShots - 72) * 0.025);
+              }
             } else if (isWingBack) {
               roleMult = 0.58 + (isAttackingMentality ? 0.28 : 0);
             }
 
             const stam = session.playerStamina[p.id] ?? p.stamina;
             const staminaReadiness = 0.85 + 0.15 * (Math.max(20, stam) / 100);
-            const finishingBlend =
-              0.4 +
-              (p.stats.finishing * 0.55 +
-                p.faceStats.dribbling * 0.25 +
-                p.faceStats.pace * (attTactics.passingStyle === "Direct" ? 0.32 : 0.2)) /
-                100;
+            // Style-specific shooter attribute weighting
+            const styleFinishSkill =
+              attTactics.passingStyle === "Short"
+                ? p.stats.finishing * 0.4 +
+                  p.stats.positioning * 0.25 +
+                  p.stats.ballControl * 0.2 +
+                  p.stats.composure * 0.15
+                : attTactics.passingStyle === "Direct"
+                ? p.stats.finishing * 0.32 +
+                  p.stats.sprintSpeed * 0.25 +
+                  p.stats.acceleration * 0.18 +
+                  (p.stats.headingAccuracy * 0.5 + p.stats.strength * 0.5) * 0.25
+                : p.stats.finishing * 0.35 +
+                  p.stats.positioning * 0.2 +
+                  p.stats.longShots * 0.15 +
+                  p.stats.shotPower * 0.15 +
+                  p.stats.dribbling * 0.15;
+            const finishingBlend = 0.38 + styleFinishSkill / 100;
             return roleMult * finishingBlend * staminaReadiness * evaluateShirtNumberAffinity(p).multiplier;
           });
 
     const possibleAssisters = attackers.filter((p) => p.id !== shooter.id);
     const assistProb =
-      attTactics.passingStyle === "Short" ? 0.78 : attTactics.passingStyle === "Direct" ? 0.68 : 0.73;
+      attTactics.passingStyle === "Short"
+        ? 0.81
+        : attTactics.passingStyle === "Direct"
+        ? 0.69
+        : 0.75;
     const assister =
       preferredAssister &&
       preferredAssister.id !== shooter.id &&
@@ -1176,23 +1776,32 @@ export function stepLiveMatchMinute(
             const isFullback = ["LB", "RB", "LWB", "RWB"].includes(p.primaryPosition);
             let roleMult = 0.35;
             if (isCreator) {
-              roleMult = (p.primaryPosition === "CAM" ? 2.65 : 2.1) + (attTactics.passingStyle === "Short" ? 0.35 : 0);
+              roleMult = (p.primaryPosition === "CAM" ? 2.65 : 2.1) + (attTactics.passingStyle === "Short" ? 0.4 : 0.15);
             } else if (isWinger) {
-              roleMult = 2.25;
+              roleMult = 2.25 + (attTactics.passingStyle === "Mixed" ? 0.25 : 0);
             } else if (isFullback) {
-              roleMult = 1.35 + (attTactics.mentality === "Attacking" ? 0.35 : 0);
+              roleMult = 1.35 + (attTactics.mentality === "Attacking" ? 0.38 : 0);
             } else if (p.roleCategory === "ATT") {
-              roleMult = 1.5 + (attTactics.passingStyle === "Short" ? 0.25 : 0);
+              roleMult = 1.5 + (attTactics.passingStyle === "Short" ? 0.3 : 0);
             } else if (p.roleCategory === "MID") {
-              roleMult = 1.45 + (attTactics.passingStyle === "Direct" ? 0.35 : 0);
+              roleMult = 1.45 + (attTactics.passingStyle === "Direct" ? 0.38 : 0.15);
             }
 
-            const playmakeBlend =
-              0.4 +
-              (p.faceStats.passing * 0.55 +
-                p.faceStats.dribbling * 0.25 +
-                p.faceStats.pace * 0.2) /
-                100;
+            // Style-specific playmaking attributes
+            const stylePassSkill =
+              attTactics.passingStyle === "Short"
+                ? p.stats.shortPassing * 0.42 +
+                  p.stats.vision * 0.33 +
+                  p.stats.ballControl * 0.25
+                : attTactics.passingStyle === "Direct"
+                ? p.stats.longPassing * 0.45 +
+                  p.stats.crossing * 0.3 +
+                  p.stats.vision * 0.25
+                : p.stats.shortPassing * 0.28 +
+                  p.stats.longPassing * 0.24 +
+                  p.stats.vision * 0.26 +
+                  p.stats.crossing * 0.22;
+            const playmakeBlend = 0.38 + stylePassSkill / 100;
             return roleMult * playmakeBlend * evaluateShirtNumberAffinity(p).multiplier;
           })
         : undefined;
@@ -1200,17 +1809,62 @@ export function stepLiveMatchMinute(
     const keeper = defTeam.find((p) => p.roleCategory === "GK");
     const shooterShirtMult = evaluateShirtNumberAffinity(shooter).multiplier;
 
+    // Determine shot archetype from tactics + player skills:
+    // 1) Aerial Cross / Direct Header, 2) Distance / Edge-of-Box Shot, or 3) Worked Box Shot
+    const isAerialAttempt =
+      Boolean(assister) &&
+      (attTactics.passingStyle === "Direct" ? Math.random() < 0.34 : Math.random() < 0.18) &&
+      (assister?.stats.crossing ?? 65) >= 66;
+    const isLongShotAttempt =
+      !isAerialAttempt &&
+      ((defTacticsActive.pressing === "Low" && Math.random() < 0.32) ||
+        (shooter.roleCategory === "MID" && shooter.stats.longShots >= 74 && Math.random() < 0.38));
+
+    const shooterEffectiveSkill = isAerialAttempt
+      ? (shooter.stats.headingAccuracy * 0.48 +
+          shooter.stats.jumping * 0.28 +
+          shooter.stats.strength * 0.24) *
+        shooterShirtMult
+      : isLongShotAttempt
+      ? (shooter.stats.longShots * 0.48 +
+          shooter.stats.shotPower * 0.34 +
+          shooter.stats.composure * 0.18) *
+        shooterShirtMult
+      : (shooter.stats.finishing * 0.48 +
+          shooter.stats.positioning * 0.22 +
+          shooter.stats.composure * 0.18 +
+          shooter.stats.shotPower * 0.12) *
+        shooterShirtMult;
+
+    const assisterDeliveryBonus = assister
+      ? isAerialAttempt
+        ? (assister.stats.crossing * 0.65 + assister.stats.vision * 0.35 - 70) * 0.0018
+        : attTactics.passingStyle === "Short"
+        ? (assister.stats.shortPassing * 0.55 + assister.stats.vision * 0.45 - 70) * 0.0018
+        : (assister.stats.longPassing * 0.5 + assister.stats.vision * 0.5 - 70) * 0.0018
+      : 0;
+
+    const tacticalQualityMult = attFit.shotQualityMult * attMatchup.shotQualityMod;
+
     stats.shots += 1;
-    const shotQuality =
-      0.08 +
-      Math.max(0, (shooter.stats.finishing * shooterShirtMult - defPower.defense) * 0.0032) +
-      Math.random() * 0.22;
-    const xg = Math.round(Math.min(0.55, Math.max(0.04, shotQuality)) * 100) / 100;
+    const rawShotQuality =
+      (0.085 +
+        Math.max(0, (shooterEffectiveSkill - defPower.defense) * 0.0034) +
+        assisterDeliveryBonus +
+        Math.random() * 0.2) *
+      tacticalQualityMult;
+    const xg = Math.round(Math.min(0.58, Math.max(0.04, rawShotQuality)) * 100) / 100;
     stats.xg = Math.round((stats.xg + xg) * 100) / 100;
 
     const onTargetProb = Math.max(
-      0.28,
-      Math.min(0.62, 0.38 + (shooter.faceStats.shooting * shooterShirtMult - 72) * 0.004)
+      0.27,
+      Math.min(
+        0.65,
+        0.37 +
+          (shooterEffectiveSkill - 72) * 0.0042 +
+          (shooter.stats.composure - 70) * 0.0015 +
+          (tacticalQualityMult - 1) * 0.18
+      )
     );
     if (Math.random() > onTargetProb) {
       const woodworkProb = 0.085 + Math.max(0, (shooter.stats.finishing - 70) * 0.0012);

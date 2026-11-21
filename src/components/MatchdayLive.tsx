@@ -34,6 +34,8 @@ import type {
   Tactics,
 } from "../types/game";
 import {
+  computeTacticalMatchup,
+  evaluateTacticalFit,
   finalizeMatchResult,
   initLiveMatchSession,
   performLiveSubstitution,
@@ -504,6 +506,28 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const awayBench = userSession.awayBenchIds
     .map((id) => playerMap.get(id))
     .filter(Boolean) as Player[];
+
+  const oppClubId = isUserHome ? awayClub.id : homeClub.id;
+  const oppTactics = liveTacticsByClub[oppClubId];
+  const userActivePlayers = isUserHome ? homeStarters : awayStarters;
+  const oppActivePlayers = isUserHome ? awayStarters : homeStarters;
+
+  const userTacticalFit = evaluateTacticalFit(
+    userActivePlayers,
+    userTactics,
+    userSession.playerStamina
+  );
+  const oppTacticalFit = evaluateTacticalFit(
+    oppActivePlayers,
+    oppTactics,
+    userSession.playerStamina
+  );
+  const userTacticalMatchup = computeTacticalMatchup(
+    userTactics,
+    oppTactics,
+    userTacticalFit,
+    oppTacticalFit
+  );
 
   const homeAvgOvr =
     homeStarters.length > 0
@@ -1651,6 +1675,86 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   <option value="Mixed">Misto</option>
                   <option value="Direct">Direto</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Real-time Skill-Driven Tactical Fit & Head-to-Head Matchup Feedback */}
+            <div className="rounded-xl border border-slate-800/90 bg-slate-950/75 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-slate-300 truncate">
+                  {userTacticalFit.styleSummary}
+                </span>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black border ${
+                    userTacticalFit.overallFit >= 80
+                      ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
+                      : userTacticalFit.overallFit >= 70
+                      ? "border-sky-500/50 bg-sky-500/15 text-sky-300"
+                      : "border-amber-500/50 bg-amber-500/15 text-amber-300"
+                  }`}
+                  title="O quanto as habilidades detalhadas (passe curto/longo, visão, controle, frieza, velocidade, fôlego e desarme) dos seus 11 titulares em campo combinam com esta estratégia"
+                >
+                  Adequação: {userTacticalFit.overallFit}%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                <div className="rounded-lg bg-slate-900/90 px-2 py-1 border border-slate-800/80 flex items-center justify-between">
+                  <span className="text-slate-400">Mentalidade</span>
+                  <strong
+                    className={
+                      userTacticalFit.mentalityFit >= 78
+                        ? "text-emerald-300"
+                        : userTacticalFit.mentalityFit >= 68
+                        ? "text-sky-300"
+                        : "text-amber-300"
+                    }
+                  >
+                    {userTacticalFit.mentalityFit}%
+                  </strong>
+                </div>
+                <div className="rounded-lg bg-slate-900/90 px-2 py-1 border border-slate-800/80 flex items-center justify-between">
+                  <span className="text-slate-400">Pressão</span>
+                  <strong
+                    className={
+                      userTacticalFit.pressingFit >= 78
+                        ? "text-emerald-300"
+                        : userTacticalFit.pressingFit >= 68
+                        ? "text-sky-300"
+                        : "text-amber-300"
+                    }
+                  >
+                    {userTacticalFit.pressingFit}%
+                  </strong>
+                </div>
+                <div className="rounded-lg bg-slate-900/90 px-2 py-1 border border-slate-800/80 flex items-center justify-between">
+                  <span className="text-slate-400">Passe</span>
+                  <strong
+                    className={
+                      userTacticalFit.passingFit >= 78
+                        ? "text-emerald-300"
+                        : userTacticalFit.passingFit >= 68
+                        ? "text-sky-300"
+                        : "text-amber-300"
+                    }
+                  >
+                    {userTacticalFit.passingFit}%
+                  </strong>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-slate-400 leading-snug">
+                {userTacticalFit.keyStrengths[0] ? (
+                  <span className="text-emerald-300 font-semibold">
+                    ✓ {userTacticalFit.keyStrengths[0]}
+                  </span>
+                ) : userTacticalFit.keyWeaknesses[0] ? (
+                  <span className="text-amber-300 font-semibold">
+                    ⚠ {userTacticalFit.keyWeaknesses[0]}
+                  </span>
+                ) : (
+                  <span>• {userTacticalMatchup.matchupNote}</span>
+                )}
               </div>
             </div>
 
