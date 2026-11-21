@@ -772,9 +772,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
 
   // --- LIVE MATCHDAY DASHBOARD (OPTIMIZED VIEWPORT HEIGHT - FIT TO SCREEN) ---
   return (
-    <div className="flex flex-col gap-2.5 h-[calc(100vh-5.5rem)] min-h-[580px] max-h-[calc(100vh-5.5rem)] overflow-hidden">
+    <div className="flex flex-col gap-1.5 h-full min-h-0 flex-1 overflow-hidden">
       {/* 1. Integrated Compact Broadcast Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/95 px-4 py-2 shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/95 px-3.5 py-1.5 shrink-0">
         {/* Left: Scoreboard */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -920,15 +920,15 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         </div>
       </div>
 
-      {/* Halftime Quick Banner */}
+      {/* Halftime Quick Banner - Compact & sleek */}
       {isHalftime && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 shrink-0">
-          <div className="text-xs text-amber-200">
-            <strong>Intervalo ({userSession.homeGoals} x {userSession.awayGoals})</strong> — Ajuste sua equipe na aba de Substituições e clique para retomar.
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 shrink-0">
+          <div className="text-xs text-amber-200 truncate">
+            <strong>Intervalo ({userSession.homeGoals} x {userSession.awayGoals})</strong> — Ajuste a equipe na aba Tática e retome quando quiser.
           </div>
           <button
             onClick={() => setIsPlaying(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-1 text-xs font-black text-slate-950 hover:bg-amber-300 transition"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1 text-xs font-black text-slate-950 hover:bg-amber-300 transition shadow-sm shrink-0"
           >
             <Play className="h-3.5 w-3.5 fill-current" /> Iniciar 2º Tempo
           </button>
@@ -936,7 +936,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       )}
 
       {/* 2. Main Arena: 2D Pitch on Left, Integrated Tabs on Right */}
-      <div className={`flex-1 min-h-0 grid gap-2.5 overflow-hidden ${pitchSize === "full" ? "grid-cols-1" : "lg:grid-cols-12"}`}>
+      <div className={`flex-1 min-h-0 grid gap-2 overflow-hidden ${pitchSize === "full" ? "grid-cols-1" : "lg:grid-cols-12"}`}>
         {/* Left Column: 2D Live Pitch & Ball Action */}
         <div className={`flex flex-col min-h-0 overflow-hidden ${pitchSize === "full" ? "w-full" : "lg:col-span-7 xl:col-span-8"}`}>
           <LivePitch2D

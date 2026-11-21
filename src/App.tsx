@@ -1527,15 +1527,19 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className="club-theme-root min-h-screen text-slate-100"
+      className={`club-theme-root text-slate-100 ${
+        activeTab === "matchday"
+          ? "h-screen max-h-screen overflow-hidden flex flex-col"
+          : "min-h-screen"
+      }`}
       style={{ ...palette.pageBackgroundStyle, ...palette.cssVars }}
     >
       {/* Top Navbar */}
       <header
-        className="sticky top-0 z-30 border-b transition-colors duration-300"
+        className="sticky top-0 z-30 border-b transition-colors duration-300 shrink-0"
         style={palette.headerStyle}
       >
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className={`mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 ${activeTab === "matchday" ? "max-w-full py-2" : "max-w-7xl py-3"}`}>
           <div className="flex items-center gap-3">
             <ClubBadge club={userClub} size="md" />
             <div>
@@ -1579,83 +1583,89 @@ export const App: React.FC = () => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex flex-wrap items-center gap-1.5">
-            {[
-              { id: "dashboard" as const, label: "Visão Geral", icon: LayoutDashboard },
-              { id: "tactics" as const, label: "Tática & Elenco", icon: Users },
-              { id: "academy" as const, label: "Base Sub-20", icon: GraduationCap },
-              { id: "squad_analysis" as const, label: "Desempenho", icon: BarChart3 },
-              { id: "calendar" as const, label: "Calendário", icon: CalendarIcon },
-              { id: "stadium" as const, label: "Estádio", icon: Building2 },
-              {
-                id: "league" as const,
-                label:
-                  !userClub.division || userClub.division === "Premier League"
-                    ? "Premier League"
-                    : "Liga & Divisões",
-                icon: Trophy,
-              },
-              { id: "facup" as const, label: "FA Cup", icon: Award },
-              { id: "market" as const, label: "Mercado", icon: ShoppingBag },
-            ].map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              const pendingOffersCount = (save?.transferOffers ?? []).filter(
-                (o) => o.status === "pending"
-              ).length;
-              return (
+          {activeTab === "matchday" ? (
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-3.5 py-1.5 text-xs font-bold text-emerald-300 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Transmissão Ao Vivo • Rodada {save.currentMatchweek}</span>
+            </div>
+          ) : (
+            <nav className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: "dashboard" as const, label: "Visão Geral", icon: LayoutDashboard },
+                { id: "tactics" as const, label: "Tática & Elenco", icon: Users },
+                { id: "academy" as const, label: "Base Sub-20", icon: GraduationCap },
+                { id: "squad_analysis" as const, label: "Desempenho", icon: BarChart3 },
+                { id: "calendar" as const, label: "Calendário", icon: CalendarIcon },
+                { id: "stadium" as const, label: "Estádio", icon: Building2 },
+                {
+                  id: "league" as const,
+                  label:
+                    !userClub.division || userClub.division === "Premier League"
+                      ? "Premier League"
+                      : "Liga & Divisões",
+                  icon: Trophy,
+                },
+                { id: "facup" as const, label: "FA Cup", icon: Award },
+                { id: "market" as const, label: "Mercado", icon: ShoppingBag },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                const pendingOffersCount = (save?.transferOffers ?? []).filter(
+                  (o) => o.status === "pending"
+                ).length;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    style={
+                      isActive
+                        ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
+                        : undefined
+                    }
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition ${
+                      isActive
+                        ? "ring-0"
+                        : "text-slate-200 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {item.label}
+                    {item.id === "market" && pendingOffersCount > 0 && (
+                      <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">
+                        {pendingOffersCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {!save.seasonFinished && (
                 <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  disabled={activeTab === "matchday"}
+                  onClick={() => setActiveTab("matchday")}
+                  className="ml-1 inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-amber-300"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" /> Dia de Jogo
+                </button>
+              )}
+
+              {save.seasonFinished && (
+                <button
+                  onClick={() => setActiveTab("season_review")}
                   style={
-                    isActive
+                    activeTab === "season_review"
                       ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
                       : undefined
                   }
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition ${
-                    isActive
-                      ? "ring-0"
-                      : "text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                  className={`ml-1 inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black transition ${
+                    activeTab === "season_review"
+                      ? ""
+                      : "border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5" /> {item.label}
-                  {item.id === "market" && pendingOffersCount > 0 && (
-                    <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">
-                      {pendingOffersCount}
-                    </span>
-                  )}
+                  <Trophy className="h-3.5 w-3.5 fill-current" /> Review da Temporada
                 </button>
-              );
-            })}
-
-            {!save.seasonFinished && activeTab !== "matchday" && (
-              <button
-                onClick={() => setActiveTab("matchday")}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-amber-300"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" /> Dia de Jogo
-              </button>
-            )}
-
-            {save.seasonFinished && (
-              <button
-                onClick={() => setActiveTab("season_review")}
-                style={
-                  activeTab === "season_review"
-                    ? { backgroundColor: palette.accentPrimary, color: palette.accentText }
-                    : undefined
-                }
-                className={`ml-1 inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black transition ${
-                  activeTab === "season_review"
-                    ? ""
-                    : "border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
-                }`}
-              >
-                <Trophy className="h-3.5 w-3.5 fill-current" /> Review da Temporada
-              </button>
-            )}
-          </nav>
+              )}
+            </nav>
+          )}
 
           {/* Utility Buttons + Uniform Theme Switcher */}
           <div className="flex items-center gap-1.5">
@@ -1698,8 +1708,10 @@ export const App: React.FC = () => {
 
       {/* Main Content */}
       <main
-        className={`mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 ${
-          activeTab === "matchday" ? "py-2 sm:py-3" : "py-6"
+        className={`${
+          activeTab === "matchday"
+            ? "flex-1 min-h-0 w-full max-w-full px-2 sm:px-4 py-1.5 flex flex-col overflow-hidden"
+            : "mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 py-6"
         }`}
       >
         {activeTab === "dashboard" && (

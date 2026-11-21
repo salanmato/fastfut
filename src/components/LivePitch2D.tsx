@@ -10,6 +10,9 @@ import {
   Activity,
   ArrowUp,
   Plus,
+  Users,
+  Coins,
+  Sparkles,
 } from "lucide-react";
 import type { Club, MatchEvent, Player, Tactics } from "../types/game";
 import type { LiveMatchSession } from "../engine/matchEngine";
@@ -762,7 +765,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const [showOffsideLine, setShowOffsideLine] = useState(true);
   const [offsideMark, setOffsideMark] = useState<OffsideMark | null>(null);
   const [showNames, setShowNames] = useState(true);
-  const [showRatings, setShowRatings] = useState(true);
+  const [showRatings, setShowRatings] = useState(false);
   const [showKits, setShowKits] = useState(true);
 
   const [ballPos, setBallPos] = useState<Coord>({ x: 50, y: 50 });
@@ -1925,34 +1928,35 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       : null;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3 sm:p-3.5 flex flex-col h-full min-h-0 justify-between">
-      {/* Pitch Header Controls */}
-      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 font-bold text-white">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-2.5 sm:p-3 flex flex-col h-full min-h-0 justify-between">
+      {/* Pitch Header Controls - Sleek, single-line TV Broadcast Toolbar */}
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm shrink-0">
             <span
-              className="h-3 w-3 rounded-full ring-1 ring-white/40"
+              className="h-2.5 w-2.5 rounded-full ring-1 ring-white/40 shrink-0"
               style={{ backgroundColor: awayKitColors.primary }}
             />
-            ▲ {awayClub.shortName} ({awayTactics.formation})
-          </span>
-          <span className="text-slate-600">vs</span>
-          <span className="inline-flex items-center gap-1.5 font-bold text-white">
-            ▼ {homeClub.shortName} ({homeTactics.formation})
+            <span className="text-slate-200">{awayClub.shortName}</span>
+            <span className="text-[10px] text-slate-500 font-mono">({awayTactics.formation})</span>
+            <span className="text-slate-600 text-[10px]">x</span>
+            <span className="text-[10px] text-slate-500 font-mono">({homeTactics.formation})</span>
+            <span className="text-slate-200">{homeClub.shortName}</span>
             <span
-              className="h-3 w-3 rounded-full ring-1 ring-white/40"
+              className="h-2.5 w-2.5 rounded-full ring-1 ring-white/40 shrink-0"
               style={{ backgroundColor: homeKitColors.primary }}
             />
-          </span>
+          </div>
+
           {session.finished ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300">
               <Star className="h-3 w-3 text-amber-400" />
-              Fim de Jogo • Formação Inicial & Notas
+              Notas Finais
             </span>
           ) : carrierPlayer ? (
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-0.5 text-[11px] text-slate-300">
+            <div className="hidden lg:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-2 py-0.5 text-[11px] text-slate-300">
               <span
-                className="h-2 w-2 rounded-full animate-pulse"
+                className="h-2 w-2 rounded-full animate-pulse shrink-0"
                 style={{
                   backgroundColor:
                     carrierClub.id === homeClub.id
@@ -1960,10 +1964,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                       : awayKitColors.primary,
                 }}
               />
-              Posse: <strong className="text-white">{getPlayerDisplayName(carrierPlayer.name)}</strong>
+              <span className="text-slate-400">Posse:</span>
+              <strong className="text-white max-w-[90px] truncate">{getPlayerDisplayName(carrierPlayer.name)}</strong>
               <span className="text-slate-500">•</span>
               <span
-                className={`font-bold ${
+                className={`font-bold shrink-0 ${
                   playPhase === "final_third"
                     ? "text-amber-300"
                     : playPhase === "counter"
@@ -1973,109 +1978,121 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               >
                 {PLAY_PHASE_LABELS[playPhase]}
               </span>
-            </span>
+            </div>
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Pitch Size Selector */}
-          <div className="flex items-center rounded-lg border border-slate-700 bg-slate-800 p-0.5 text-[11px] font-semibold">
-            <span className="hidden sm:inline px-1.5 text-[10px] uppercase font-bold text-slate-400">
-              Campo:
-            </span>
+        {/* Unified Toolbar: Sizing & Display toggles (Guaranteed 1 line) */}
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="inline-flex items-center rounded-lg border border-slate-800 bg-slate-950 p-0.5 text-[10px] font-bold">
             <button
               onClick={() => handlePitchSizeChange("normal")}
-              className={`rounded px-2.5 py-1 text-xs transition ${
+              className={`rounded px-2 py-0.5 transition ${
                 activePitchSize === "normal"
                   ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
-              title="Tamanho Padrão (Compacto)"
+              title="Tamanho Normal"
             >
               Padrão
             </button>
             <button
               onClick={() => handlePitchSizeChange("large")}
-              className={`rounded px-2.5 py-1 text-xs transition ${
+              className={`rounded px-2 py-0.5 transition ${
                 activePitchSize === "large"
                   ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
-              title="Tamanho Grande (Recomendado - Mais Espaçoso)"
+              title="Tamanho Grande"
             >
               Grande
             </button>
             <button
               onClick={() => handlePitchSizeChange("full")}
-              className={`rounded px-2.5 py-1 text-xs transition ${
+              className={`rounded px-2 py-0.5 transition ${
                 activePitchSize === "full"
                   ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
-              title="Tamanho Expandido (Tela Cheia / Visão Panorâmica)"
+              title="Tamanho Expandido"
             >
-              Expandido
+              Cheia
             </button>
           </div>
 
           <button
             onClick={() => setShowOffsideLine((v) => !v)}
-            title="Mostra a linha do penúltimo defensor (referência para impedimento)"
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+            title="Linha de impedimento (VAR)"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition ${
               showOffsideLine
-                ? "border-orange-500/40 bg-orange-500/15 text-orange-300"
-                : "border-slate-700 bg-slate-800 text-slate-400"
+                ? "border-amber-500/40 bg-amber-500/20 text-amber-300"
+                : "border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300"
             }`}
           >
-            <Flag className="h-3 w-3" /> Impedimento
+            <Flag className="h-3 w-3" />
+            <span className="hidden xl:inline">VAR</span>
           </button>
+
           <button
             onClick={() => setShowKits((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+            title="Alternar entre Camisas e Tokens circulares"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition ${
               showKits
-                ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
-                : "border-slate-700 bg-slate-800 text-slate-400"
+                ? "border-sky-500/40 bg-sky-500/20 text-sky-300"
+                : "border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300"
             }`}
           >
-            <Shirt className="h-3 w-3" /> {showKits ? "Camisas" : "Bolinhas"}
+            <Shirt className="h-3 w-3" />
+            <span className="hidden xl:inline">{showKits ? "Camisas" : "Tokens"}</span>
           </button>
+
           <button
             onClick={() => setShowNames((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+            title="Mostrar/Ocultar nomes dos atletas"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition ${
               showNames
-                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                : "border-slate-700 bg-slate-800 text-slate-400"
+                ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
+                : "border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300"
             }`}
           >
-            {showNames ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />} Nomes
+            {showNames ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            <span className="hidden xl:inline">Nomes</span>
           </button>
+
           <button
             onClick={() => setShowRatings((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+            title="Mostrar/Ocultar notas em tempo real"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition ${
               showRatings
-                ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
-                : "border-slate-700 bg-slate-800 text-slate-400"
+                ? "border-amber-500/40 bg-amber-500/20 text-amber-300"
+                : "border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300"
             }`}
           >
-            <Star className="h-3 w-3" /> Notas
+            <Star className="h-3 w-3" />
+            <span className="hidden xl:inline">Notas</span>
           </button>
         </div>
       </div>
 
-      {/* Vertical 2D Pitch */}
-      <div
-        className={`relative mx-auto overflow-hidden rounded-2xl border-2 border-emerald-800 select-none shadow-[inset_0_0_70px_rgba(0,0,0,0.4)] transition-all duration-300 max-h-[calc(100vh-14rem)] ${
-          activePitchSize === "normal"
-            ? "w-full max-w-xl aspect-[3/4]"
-            : activePitchSize === "large"
-            ? "w-full max-w-3xl aspect-[4/5] sm:aspect-[3/4]"
-            : "w-full max-w-5xl aspect-[4/5] sm:aspect-[16/11] lg:aspect-[16/10]"
-        }`}
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(180deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",
-        }}
-      >
+      {/* Vertical 2D Pitch Arena Container - Perfectly fits inside available height without clipping */}
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden py-0.5">
+        <div
+          className={`relative overflow-hidden rounded-2xl border-2 border-emerald-900/60 select-none shadow-[inset_0_0_80px_rgba(0,0,0,0.65),0_8px_30px_rgba(0,0,0,0.5)] transition-all duration-300 ${
+            activePitchSize === "normal"
+              ? "aspect-[3/4]"
+              : activePitchSize === "large"
+              ? "aspect-[3/4] sm:aspect-[4/5]"
+              : "aspect-[3/4] sm:aspect-[4/5] lg:aspect-[1/1]"
+          }`}
+          style={{
+            height: "100%",
+            width: "auto",
+            maxHeight: "100%",
+            maxWidth: "100%",
+            backgroundImage:
+              "repeating-linear-gradient(180deg, #0d5433 0%, #0d5433 8.333%, #105e3a 8.333%, #105e3a 16.666%)",
+          }}
+        >
         {/* SVG Field Lines, Offside Line & Ball Trail */}
         <svg
           viewBox="0 0 100 100"
@@ -2135,15 +2152,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           />
 
           {/* Live offside line (second-last defender of the defending team) */}
-          {!session.finished && !offsideMark && liveOffsideLineY !== null && (
+          {!session.finished && !offsideMark && liveOffsideLineY !== null && showOffsideLine && (
             <line
               x1="4"
               y1={liveOffsideLineY}
               x2="96"
               y2={liveOffsideLineY}
-              stroke="rgba(251,191,36,0.55)"
-              strokeWidth={1.4}
-              strokeDasharray="6 5"
+              stroke="rgba(245, 158, 11, 0.65)"
+              strokeWidth={1.2}
+              strokeDasharray="4 4"
               vectorEffect="non-scaling-stroke"
             />
           )}
@@ -2239,14 +2256,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           </div>
         )}
 
-        {!offsideMark && liveOffsideLineY !== null && !session.finished && (
-          <div
-            className="pointer-events-none absolute right-1 z-10 -translate-y-1/2 rounded bg-slate-950/70 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300/80"
-            style={{ top: `${liveOffsideLineY}%` }}
-          >
-            Linha de impedimento
-          </div>
-        )}
+
 
         {/* Event Banner Overlay */}
         {banner &&
@@ -2446,15 +2456,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               {/* Token: Kit SVG or Circle */}
               {showKits ? (
                 <div
-                  className={`relative rounded-lg transition ${
+                  className={`relative rounded-lg transition-transform ${
                     isCardTarget && cardHighlight?.type === "yellow_card"
-                      ? "ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-[0_0_25px_#f59e0b] scale-120 animate-pulse"
+                      ? "ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-120 animate-pulse"
                       : isCardTarget && cardHighlight?.type === "red_card"
-                      ? "ring-4 ring-rose-600 ring-offset-2 ring-offset-slate-950 shadow-[0_0_30px_#e11d48] scale-120 animate-pulse"
+                      ? "ring-4 ring-rose-600 shadow-[0_0_25px_#e11d48] scale-120 animate-pulse"
                       : isSubSelected
-                      ? "ring-2 ring-amber-400 bg-amber-400/20 scale-115"
+                      ? "ring-2 ring-amber-400 bg-amber-400/30 scale-115"
                       : isCarrier
-                      ? "ring-2 ring-white/90 bg-white/10 scale-110"
+                      ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-950 scale-110 shadow-lg"
                       : ""
                   }`}
                 >
@@ -2466,23 +2476,21 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   />
                   {hasYellow && (
                     <span
-                      title="Jogador advertido com Cartão Amarelo"
-                      className="absolute -left-1 -top-1 z-20 flex h-3.5 w-2.5 items-center justify-center rounded-[2px] bg-amber-400 border border-amber-600 shadow-md ring-1 ring-slate-950/80"
-                    >
-                      <span className="h-2 w-1.5 rounded-[1px] bg-amber-300" />
-                    </span>
+                      title="Cartão Amarelo"
+                      className="absolute -left-1 -top-1 z-20 flex h-3 w-2 items-center justify-center rounded-[1px] bg-amber-400 border border-amber-600 shadow"
+                    />
                   )}
                   {isInjured && (
-                    <span className="absolute -left-1.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white ring-1 ring-white">
+                    <span className="absolute -left-1 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white ring-1 ring-white">
                       +
                     </span>
                   )}
                   {(showRatings || session.finished) && (
                     <span
-                      className={`absolute -right-1.5 -top-1 rounded px-1 text-[8px] font-black ${
+                      className={`absolute -right-1.5 -top-1 rounded-full px-1 py-0.2 text-[8px] font-black leading-none shadow-sm ${
                         session.finished
-                          ? "bg-amber-400 text-slate-950 ring-1 ring-black/60"
-                          : "bg-slate-950/95 text-amber-300 ring-1 ring-white/15"
+                          ? "bg-amber-400 text-slate-950"
+                          : "bg-slate-950/90 text-amber-300 ring-1 ring-amber-400/40"
                       }`}
                     >
                       {rating}
@@ -2491,52 +2499,50 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               ) : (
                 <div
-                  className={`relative flex items-center justify-center rounded-full font-black transition ${
+                  className={`relative flex items-center justify-center rounded-full font-black shadow-md transition-transform ${
                     activePitchSize === "full"
                       ? "h-8 w-8 text-[11px]"
                       : activePitchSize === "large"
-                      ? "h-7 w-7 sm:h-8 sm:w-8 text-[10px]"
-                      : "h-6 w-6 sm:h-7 sm:w-7 text-[9px]"
+                      ? "h-7 w-7 text-[10px]"
+                      : "h-6 w-6 text-[9px]"
                   } ${
                     isCardTarget && cardHighlight?.type === "yellow_card"
-                      ? "ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-[0_0_25px_#f59e0b] scale-120 animate-pulse"
+                      ? "ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-120 animate-pulse"
                       : isCardTarget && cardHighlight?.type === "red_card"
-                      ? "ring-4 ring-rose-600 ring-offset-2 ring-offset-slate-950 shadow-[0_0_30px_#e11d48] scale-120 animate-pulse"
+                      ? "ring-4 ring-rose-600 shadow-[0_0_25px_#e11d48] scale-120 animate-pulse"
                       : isSubSelected
                       ? "ring-2 ring-amber-400 scale-115"
                       : isCarrier
-                      ? "ring-2 ring-white scale-110"
-                      : "ring-1 ring-black/50"
+                      ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-950 scale-110"
+                      : "ring-1 ring-black/60"
                   }`}
                   style={{
                     backgroundColor: kitColors.primary,
                     color: textColor,
                     borderColor: kitColors.secondary,
-                    borderWidth: "1.5px",
+                    borderWidth: "2px",
                   }}
                 >
                   {player.shirtNumber ?? info.label.slice(0, 2)}
 
                   {hasYellow && (
                     <span
-                      title="Jogador advertido com Cartão Amarelo"
-                      className="absolute -left-1.5 -top-1 z-20 flex h-3.5 w-2.5 items-center justify-center rounded-[2px] bg-amber-400 border border-amber-600 shadow-md ring-1 ring-slate-950/80"
-                    >
-                      <span className="h-2 w-1.5 rounded-[1px] bg-amber-300" />
-                    </span>
+                      title="Cartão Amarelo"
+                      className="absolute -left-1 -top-1 z-20 flex h-3 w-2 items-center justify-center rounded-[1px] bg-amber-400 border border-amber-600 shadow"
+                    />
                   )}
                   {isInjured && (
-                    <span className="absolute -left-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white ring-1 ring-white">
+                    <span className="absolute -left-1 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white ring-1 ring-white">
                       +
                     </span>
                   )}
 
                   {(showRatings || session.finished) && (
                     <span
-                      className={`absolute -right-2 -top-1.5 rounded px-1 text-[8px] font-black ${
+                      className={`absolute -right-1.5 -top-1 rounded-full px-1 py-0.2 text-[8px] font-black leading-none shadow-sm ${
                         session.finished
-                          ? "bg-amber-400 text-slate-950 ring-1 ring-black/60"
-                          : "bg-slate-950/90 text-amber-300 ring-1 ring-white/15"
+                          ? "bg-amber-400 text-slate-950"
+                          : "bg-slate-950/90 text-amber-300 ring-1 ring-amber-400/40"
                       }`}
                     >
                       {rating}
@@ -2545,30 +2551,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               )}
 
-              {/* Name & Stamina pill */}
+              {/* Clean Player Surname Capsule - Drop-shadow, sleek, no clutter */}
               {showNames && (
-                <div className="mt-0.5 flex flex-col items-center">
+                <div className="mt-0.5 flex flex-col items-center pointer-events-none">
                   <span
-                    className={`truncate rounded bg-slate-950/90 px-1.5 text-[9px] font-semibold leading-tight text-white ${
-                      activePitchSize === "full"
-                        ? "max-w-[100px] text-[10px]"
-                        : activePitchSize === "large"
-                        ? "max-w-[85px] sm:max-w-[95px]"
-                        : "max-w-[66px]"
-                    }`}
+                    className="max-w-[68px] truncate rounded bg-slate-950/75 backdrop-blur-[2px] px-1 py-0.2 text-[9px] font-bold leading-tight text-white tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
                   >
                     {surname}
                   </span>
                   {!session.finished && (
-                    <div
-                      className={`mt-0.5 h-0.5 overflow-hidden rounded-full bg-slate-900 ${
-                        activePitchSize === "full"
-                          ? "w-8"
-                          : activePitchSize === "large"
-                          ? "w-7"
-                          : "w-6"
-                      }`}
-                    >
+                    <div className="mt-0.5 h-0.5 w-5 overflow-hidden rounded-full bg-slate-950/80">
                       <div
                         className={`h-full ${getStaminaColor(stamina)}`}
                         style={{ width: `${stamina}%` }}
@@ -2636,30 +2628,30 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             </div>
           </>
         )}
+        </div>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
-        <div className="flex flex-wrap items-center gap-3">
-          <span>
-            Público:{" "}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <Users className="h-3 w-3 text-slate-400" />
             <strong className="text-white">
-              {session.attendance.toLocaleString("pt-BR")} /{" "}
-              {session.stadiumCapacity.toLocaleString("pt-BR")}
+              {session.attendance.toLocaleString("pt-BR")}
             </strong>{" "}
             ({Math.round((session.attendance / Math.max(1, session.stadiumCapacity)) * 100)}%)
           </span>
-          <span>
-            Renda:{" "}
+          <span className="flex items-center gap-1">
+            <Coins className="h-3 w-3 text-emerald-400" />
             <strong className="text-emerald-400">{formatMoney(session.gateRevenueEur)}</strong>
           </span>
-          <span>
-            Fator Estádio:{" "}
-            <strong className="text-amber-300">+{session.homeAdvantagePct.toFixed(1)}%</strong>
+          <span className="flex items-center gap-1">
+            <Sparkles className="h-3 w-3 text-amber-300" />
+            <strong className="text-amber-300">+{session.homeAdvantagePct.toFixed(1)}% Casa</strong>
           </span>
         </div>
         {!session.finished && (
-          <span className="text-slate-500">
-            Clique em um atleta do <strong className="text-slate-300">{userClubId === homeClub.id ? homeClub.shortName : awayClub.shortName}</strong> para substituir
+          <span className="text-slate-500 text-[10px]">
+            Toque em um atleta do <strong className="text-slate-300">{userClubId === homeClub.id ? homeClub.shortName : awayClub.shortName}</strong> para substituir
           </span>
         )}
       </div>
