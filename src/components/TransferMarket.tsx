@@ -19,6 +19,9 @@ import {
   Send,
   Package,
   MessageSquare,
+  SlidersHorizontal,
+  RotateCcw,
+  ArrowUpDown,
 } from "lucide-react";
 import type { Club, Player, RoleCategory, TransferOffer, WorldTransfer } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
@@ -54,6 +57,39 @@ interface TransferMarketProps {
   onCounterOffer?: (offerId: string, counterAmountEur: number) => void;
 }
 
+const SPECIFIC_POSITIONS: { code: string; label: string; role: RoleCategory }[] = [
+  { code: "GK", label: "GK — Goleiro", role: "GK" },
+  { code: "CB", label: "CB — Zagueiro", role: "DEF" },
+  { code: "LB", label: "LB — Lateral Esquerdo", role: "DEF" },
+  { code: "RB", label: "RB — Lateral Direito", role: "DEF" },
+  { code: "LWB", label: "LWB — Ala Esquerdo", role: "DEF" },
+  { code: "RWB", label: "RWB — Ala Direito", role: "DEF" },
+  { code: "CDM", label: "CDM — Volante", role: "MID" },
+  { code: "CM", label: "CM — Meia Central", role: "MID" },
+  { code: "CAM", label: "CAM — Meia Ofensivo", role: "MID" },
+  { code: "LM", label: "LM — Meia Esquerda", role: "MID" },
+  { code: "RM", label: "RM — Meia Direita", role: "MID" },
+  { code: "LW", label: "LW — Ponta Esquerda", role: "ATT" },
+  { code: "RW", label: "RW — Ponta Direita", role: "ATT" },
+  { code: "CF", label: "CF — Segundo Atacante", role: "ATT" },
+  { code: "ST", label: "ST — Centroavante", role: "ATT" },
+];
+
+type MarketSortBy =
+  | "ovr_desc"
+  | "pot_desc"
+  | "growth_desc"
+  | "val_asc"
+  | "val_desc"
+  | "wage_asc"
+  | "age_asc";
+
+type AvailabilityFilter =
+  | "ALL"
+  | "affordable"
+  | "available_now"
+  | "transfer_listed";
+
 export const TransferMarket: React.FC<TransferMarketProps> = ({
   userClub,
   clubs = [],
@@ -78,10 +114,18 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
   const [mode, setMode] = useState<"buy" | "wonderkids" | "offers" | "world" | "shortlist" | "sell">("buy");
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | RoleCategory>("ALL");
+  const [positionFilter, setPositionFilter] = useState<string>("ALL");
+  const [includeSecondaryPos, setIncludeSecondaryPos] = useState<boolean>(true);
+  const [nationalityFilter, setNationalityFilter] = useState<string>("ALL");
   const [leagueFilter, setLeagueFilter] = useState<string>("ALL");
-  const [minOvr, setMinOvr] = useState<number>(70);
+  const [clubFilter, setClubFilter] = useState<string>("ALL");
+  const [footFilter, setFootFilter] = useState<"ALL" | "Right" | "Left">("ALL");
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("ALL");
+  const [minOvr, setMinOvr] = useState<number>(68);
+  const [minPot, setMinPot] = useState<number>(65);
   const [maxAge, setMaxAge] = useState<number>(36);
   const [maxPriceM, setMaxPriceM] = useState<number>(250);
+  const [sortBy, setSortBy] = useState<MarketSortBy>("ovr_desc");
   const [visibleCount, setVisibleCount] = useState<number>(40);
 
   // Counter offer state for a specific offer
@@ -89,6 +133,55 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
   const [counterValueM, setCounterValueM] = useState<number>(10);
 
   const shortlistSet = useMemo(() => new Set(shortlistIds), [shortlistIds]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (query.trim()) count++;
+    if (roleFilter !== "ALL") count++;
+    if (positionFilter !== "ALL") count++;
+    if (nationalityFilter !== "ALL") count++;
+    if (leagueFilter !== "ALL") count++;
+    if (clubFilter !== "ALL") count++;
+    if (footFilter !== "ALL") count++;
+    if (availabilityFilter !== "ALL") count++;
+    if (mode === "buy" && minOvr !== 68) count++;
+    if (mode === "buy" && minPot !== 65) count++;
+    if (mode === "buy" && maxAge !== 36) count++;
+    if (maxPriceM !== 250) count++;
+    return count;
+  }, [
+    query,
+    roleFilter,
+    positionFilter,
+    nationalityFilter,
+    leagueFilter,
+    clubFilter,
+    footFilter,
+    availabilityFilter,
+    mode,
+    minOvr,
+    minPot,
+    maxAge,
+    maxPriceM,
+  ]);
+
+  const resetAllFilters = () => {
+    setQuery("");
+    setRoleFilter("ALL");
+    setPositionFilter("ALL");
+    setIncludeSecondaryPos(true);
+    setNationalityFilter("ALL");
+    setLeagueFilter("ALL");
+    setClubFilter("ALL");
+    setFootFilter("ALL");
+    setAvailabilityFilter("ALL");
+    setMinOvr(mode === "wonderkids" ? 55 : 68);
+    setMinPot(mode === "wonderkids" ? 78 : 65);
+    setMaxAge(mode === "wonderkids" ? 21 : 36);
+    setMaxPriceM(250);
+    setSortBy(mode === "wonderkids" ? "pot_desc" : "ovr_desc");
+    setVisibleCount(40);
+  };
 
   const pendingOffers = useMemo(
     () => transferOffers.filter((o) => o.status === "pending"),
@@ -124,50 +217,148 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
     return ["ALL", ...Array.from(set).sort()];
   }, [players, userClub.id]);
 
+  const nationalities = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of players) {
+      if (p.clubId !== userClub.id && p.nationality) {
+        counts.set(p.nationality, (counts.get(p.nationality) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }));
+  }, [players, userClub.id]);
+
+  const availableClubs = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of players) {
+      if (p.clubId === userClub.id || !p.clubName) continue;
+      if (leagueFilter !== "ALL" && p.league !== leagueFilter) continue;
+      counts.set(p.clubName, (counts.get(p.clubName) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }));
+  }, [players, userClub.id, leagueFilter]);
+
+  const matchesCommonFilters = (p: Player, q: string) => {
+    if (p.clubId === userClub.id) return false;
+    if (p.marketValueEur > maxPriceM * 1_000_000) return false;
+    if (roleFilter !== "ALL" && p.roleCategory !== roleFilter) return false;
+    if (positionFilter !== "ALL") {
+      if (includeSecondaryPos) {
+        const hasPos =
+          p.primaryPosition === positionFilter ||
+          (Array.isArray(p.positions) && p.positions.includes(positionFilter));
+        if (!hasPos) return false;
+      } else if (p.primaryPosition !== positionFilter) {
+        return false;
+      }
+    }
+    if (nationalityFilter !== "ALL" && p.nationality !== nationalityFilter) return false;
+    if (leagueFilter !== "ALL" && p.league !== leagueFilter) return false;
+    if (clubFilter !== "ALL" && p.clubName !== clubFilter) return false;
+    if (footFilter !== "ALL" && p.preferredFoot !== footFilter) return false;
+    if (availabilityFilter === "affordable" && p.marketValueEur > userClub.transferBudgetEur) {
+      return false;
+    }
+    if (availabilityFilter === "available_now" && Boolean(p.loan?.isLoan)) {
+      return false;
+    }
+    if (availabilityFilter === "transfer_listed" && !p.isTransferListed) {
+      return false;
+    }
+    if (
+      q &&
+      !p.name.toLowerCase().includes(q) &&
+      !p.fullName?.toLowerCase().includes(q) &&
+      !p.clubName.toLowerCase().includes(q) &&
+      !p.nationality.toLowerCase().includes(q) &&
+      !p.primaryPosition.toLowerCase().includes(q)
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const sortPlayers = (list: Player[], activeSort: MarketSortBy) => {
+    return list.sort((a, b) => {
+      switch (activeSort) {
+        case "pot_desc":
+          return b.potential - a.potential || b.overall - a.overall;
+        case "growth_desc":
+          return (
+            b.potential - b.overall - (a.potential - a.overall) ||
+            b.potential - a.potential
+          );
+        case "val_asc":
+          return a.marketValueEur - b.marketValueEur || b.overall - a.overall;
+        case "val_desc":
+          return b.marketValueEur - a.marketValueEur || b.overall - a.overall;
+        case "wage_asc":
+          return a.wageEur - b.wageEur || b.overall - a.overall;
+        case "age_asc":
+          return a.age - b.age || b.potential - a.potential;
+        case "ovr_desc":
+        default:
+          return b.overall - a.overall || b.potential - a.potential || b.marketValueEur - a.marketValueEur;
+      }
+    });
+  };
+
   const marketTargets = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return players
-      .filter((p) => {
-        if (p.clubId === userClub.id) return false;
-        if (p.overall < minOvr) return false;
-        if (p.age > maxAge) return false;
-        if (p.marketValueEur > maxPriceM * 1_000_000) return false;
-        if (roleFilter !== "ALL" && p.roleCategory !== roleFilter) return false;
-        if (leagueFilter !== "ALL" && p.league !== leagueFilter) return false;
-        if (
-          q &&
-          !p.name.toLowerCase().includes(q) &&
-          !p.clubName.toLowerCase().includes(q) &&
-          !p.nationality.toLowerCase().includes(q)
-        ) {
-          return false;
-        }
-        return true;
-      })
-      .sort((a, b) => b.overall - a.overall || b.marketValueEur - a.marketValueEur);
-  }, [players, userClub.id, minOvr, maxAge, maxPriceM, roleFilter, leagueFilter, query]);
+    const filtered = players.filter((p) => {
+      if (p.overall < minOvr) return false;
+      if (p.potential < minPot) return false;
+      if (p.age > maxAge) return false;
+      return matchesCommonFilters(p, q);
+    });
+    return sortPlayers(filtered, sortBy);
+  }, [
+    players,
+    userClub.id,
+    userClub.transferBudgetEur,
+    minOvr,
+    minPot,
+    maxAge,
+    maxPriceM,
+    roleFilter,
+    positionFilter,
+    includeSecondaryPos,
+    nationalityFilter,
+    leagueFilter,
+    clubFilter,
+    footFilter,
+    availabilityFilter,
+    query,
+    sortBy,
+  ]);
 
   const wonderkidTargets = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return players
-      .filter((p) => {
-        if (p.clubId === userClub.id) return false;
-        if (p.age > 21) return false;
-        if (p.potential < 79 && p.potential - p.overall < 5) return false;
-        if (roleFilter !== "ALL" && p.roleCategory !== roleFilter) return false;
-        if (leagueFilter !== "ALL" && p.league !== leagueFilter) return false;
-        if (
-          q &&
-          !p.name.toLowerCase().includes(q) &&
-          !p.clubName.toLowerCase().includes(q) &&
-          !p.nationality.toLowerCase().includes(q)
-        ) {
-          return false;
-        }
-        return true;
-      })
-      .sort((a, b) => b.potential - a.potential || (b.potential - b.overall) - (a.potential - a.overall));
-  }, [players, userClub.id, roleFilter, leagueFilter, query]);
+    const filtered = players.filter((p) => {
+      if (p.age > 21) return false;
+      if (p.potential < 79 && p.potential - p.overall < 5) return false;
+      return matchesCommonFilters(p, q);
+    });
+    return sortPlayers(filtered, sortBy === "ovr_desc" ? "pot_desc" : sortBy);
+  }, [
+    players,
+    userClub.id,
+    userClub.transferBudgetEur,
+    maxPriceM,
+    roleFilter,
+    positionFilter,
+    includeSecondaryPos,
+    nationalityFilter,
+    leagueFilter,
+    clubFilter,
+    footFilter,
+    availabilityFilter,
+    query,
+    sortBy,
+  ]);
 
   const renderTargetRow = (p: Player) => {
     const isShortlisted = shortlistSet.has(p.id);
@@ -176,6 +367,10 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
     const interest = evaluatePlayerInterest(userClub, sellerClub, p, players);
     const canAfford = userClub.transferBudgetEur >= p.marketValueEur;
     const canBuyNow = windowStatus.isOpen && !isLoaned;
+    const secondaryPositions = Array.isArray(p.positions)
+      ? p.positions.filter((pos) => pos !== p.primaryPosition)
+      : [];
+    const footLabel = p.preferredFoot === "Left" ? "Canhoto" : "Destro";
 
     return (
       <div
@@ -188,7 +383,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
         >
           <PlayerAvatar name={p.name} imageUrl={p.imageUrl} size="sm" />
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="truncate text-sm font-bold text-white group-hover:text-emerald-300">
                 {p.name}
               </span>
@@ -199,6 +394,14 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               >
                 {p.primaryPosition}
               </span>
+              {secondaryPositions.length > 0 && (
+                <span
+                  title={`Posições secundárias: ${secondaryPositions.join(", ")}`}
+                  className="rounded border border-slate-700/80 bg-slate-800/80 px-1.5 py-0.5 text-[9px] font-semibold text-slate-300"
+                >
+                  +{secondaryPositions.join("/")}
+                </span>
+              )}
               {isLoaned && (
                 <span className="rounded border border-sky-400/50 bg-sky-400/20 px-1 py-0.2 text-[9px] font-black text-sky-200">
                   EMP
@@ -238,7 +441,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               )}
             </div>
             <div className="truncate text-xs text-slate-400">
-              {p.clubName} ({p.league}) • {p.nationality} • {p.age} anos
+              {p.clubName} ({p.league}) • <span className="text-slate-300">{p.nationality}</span> • {p.age} anos • {footLabel}
             </div>
           </div>
         </button>
@@ -468,12 +671,58 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
         </div>
       </div>
 
-      {/* MODE 1: BUY (Scout) */}
-      {mode === "buy" && (
-        <>
-          <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="relative lg:col-span-2">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+      {/* SHARED SCOUTING FILTER PANEL FOR BUY & WONDERKIDS */}
+      {(mode === "buy" || mode === "wonderkids") && (
+        <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/75 p-4">
+          {/* Header Row with Active Filter Count & Reset */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Central Avançada de Scouting</span>
+              {activeFilterCount > 0 && (
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black text-emerald-300 border border-emerald-500/40">
+                  {activeFilterCount} filtro(s) ativo(s)
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => {
+                    setSortBy(e.target.value as MarketSortBy);
+                    setVisibleCount(40);
+                  }}
+                  className="rounded-xl border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-[11px] font-semibold text-white outline-none focus:border-emerald-500/60"
+                >
+                  <option value="ovr_desc">Ordenar: Maior Overall (OVR ↓)</option>
+                  <option value="pot_desc">Ordenar: Maior Potencial (POT ↓)</option>
+                  <option value="growth_desc">Ordenar: Maior Evolução (+POT ↓)</option>
+                  <option value="val_asc">Ordenar: Menor Preço (€ ↑)</option>
+                  <option value="val_desc">Ordenar: Maior Preço (€ ↓)</option>
+                  <option value="wage_asc">Ordenar: Menor Salário (€/sem ↑)</option>
+                  <option value="age_asc">Ordenar: Mais Jovem (Idade ↑)</option>
+                </select>
+              </div>
+
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={resetAllFilters}
+                  className="inline-flex items-center gap-1 rounded-xl border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-[11px] font-bold text-rose-300 transition hover:bg-rose-500/20"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Limpar Filtros</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 1: Search, Sector, Specific Position, Nationality, League, Club */}
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="relative sm:col-span-2 lg:col-span-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 value={query}
@@ -481,17 +730,28 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                   setQuery(e.target.value);
                   setVisibleCount(40);
                 }}
-                placeholder="Buscar jogador, clube ou país..."
-                className="w-full rounded-xl border border-slate-800 bg-slate-950 py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-emerald-500/60"
+                placeholder="Nome, clube ou país..."
+                className="w-full rounded-xl border border-slate-800 bg-slate-950 py-2 pl-8 pr-3 text-xs text-white outline-none focus:border-emerald-500/60"
               />
             </div>
 
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as "ALL" | RoleCategory)}
-              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none"
+              onChange={(e) => {
+                const nextRole = e.target.value as "ALL" | RoleCategory;
+                setRoleFilter(nextRole);
+                if (
+                  nextRole !== "ALL" &&
+                  positionFilter !== "ALL" &&
+                  SPECIFIC_POSITIONS.find((sp) => sp.code === positionFilter)?.role !== nextRole
+                ) {
+                  setPositionFilter("ALL");
+                }
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
             >
-              <option value="ALL">Todas Posições</option>
+              <option value="ALL">Todos os Setores</option>
               <option value="GK">Goleiros (GK)</option>
               <option value="DEF">Defensores (DEF)</option>
               <option value="MID">Meio-Campistas (MID)</option>
@@ -499,9 +759,54 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
             </select>
 
             <select
+              value={positionFilter}
+              onChange={(e) => {
+                const nextPos = e.target.value;
+                setPositionFilter(nextPos);
+                if (nextPos !== "ALL") {
+                  const matched = SPECIFIC_POSITIONS.find((sp) => sp.code === nextPos);
+                  if (matched && roleFilter !== "ALL" && roleFilter !== matched.role) {
+                    setRoleFilter("ALL");
+                  }
+                }
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
+            >
+              <option value="ALL">Todas Posições Específicas</option>
+              {SPECIFIC_POSITIONS.filter(
+                (sp) => roleFilter === "ALL" || sp.role === roleFilter
+              ).map((sp) => (
+                <option key={sp.code} value={sp.code}>
+                  {sp.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={nationalityFilter}
+              onChange={(e) => {
+                setNationalityFilter(e.target.value);
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
+            >
+              <option value="ALL">Todas Nacionalidades ({nationalities.length})</option>
+              {nationalities.map((nat) => (
+                <option key={nat.name} value={nat.name}>
+                  {nat.name} ({nat.count})
+                </option>
+              ))}
+            </select>
+
+            <select
               value={leagueFilter}
-              onChange={(e) => setLeagueFilter(e.target.value)}
-              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none"
+              onChange={(e) => {
+                setLeagueFilter(e.target.value);
+                setClubFilter("ALL");
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
             >
               {leagues.map((lg) => (
                 <option key={lg} value={lg}>
@@ -510,93 +815,275 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
               ))}
             </select>
 
-            <div>
-              <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                <span>OVR Mínimo</span>
-                <span className="text-emerald-400">{minOvr}</span>
-              </div>
-              <input
-                type="range"
-                min={60}
-                max={90}
-                value={minOvr}
-                onChange={(e) => setMinOvr(Number(e.target.value))}
-                className="mt-1 w-full accent-emerald-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                  <span>Idade ≤</span>
-                  <span className="text-white">{maxAge}</span>
-                </div>
-                <input
-                  type="range"
-                  min={18}
-                  max={38}
-                  value={maxAge}
-                  onChange={(e) => setMaxAge(Number(e.target.value))}
-                  className="mt-1 w-full accent-emerald-500"
-                />
-              </div>
-              <select
-                value={maxPriceM}
-                onChange={(e) => setMaxPriceM(Number(e.target.value))}
-                className="rounded-xl border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] font-semibold text-white outline-none"
-              >
-                <option value={250}>Sem teto €</option>
-                <option value={100}>≤ €100M</option>
-                <option value={60}>≤ €60M</option>
-                <option value={30}>≤ €30M</option>
-                <option value={15}>≤ €15M</option>
-              </select>
-            </div>
+            <select
+              value={clubFilter}
+              onChange={(e) => {
+                setClubFilter(e.target.value);
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
+            >
+              <option value="ALL">
+                Todos os Clubes ({availableClubs.length})
+              </option>
+              {availableClubs.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name} ({c.count})
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 text-xs text-slate-400">
-              <span>{marketTargets.length} jogadores encontrados</span>
-              <span>Clique na estrela ★ para salvar na Lista de Alvos</span>
+          {/* Row 2: Quick Specific Position Pills + Secondary Positions Toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Posição:
+              </span>
+              <button
+                onClick={() => {
+                  setPositionFilter("ALL");
+                  setVisibleCount(40);
+                }}
+                className={`rounded-lg px-2 py-0.5 text-[10px] font-black transition ${
+                  positionFilter === "ALL"
+                    ? "bg-emerald-500 text-slate-950"
+                    : "bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                TODAS
+              </button>
+              {SPECIFIC_POSITIONS.filter(
+                (sp) => roleFilter === "ALL" || sp.role === roleFilter
+              ).map((sp) => {
+                const isSelected = positionFilter === sp.code;
+                return (
+                  <button
+                    key={sp.code}
+                    title={sp.label}
+                    onClick={() => {
+                      setPositionFilter(isSelected ? "ALL" : sp.code);
+                      setVisibleCount(40);
+                    }}
+                    className={`rounded-lg border px-2 py-0.5 text-[10px] font-black transition ${
+                      isSelected
+                        ? "border-emerald-400 bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/30"
+                        : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-white"
+                    }`}
+                  >
+                    {sp.code}
+                  </button>
+                );
+              })}
             </div>
-            <div className="divide-y divide-slate-800/60">
-              {marketTargets.slice(0, visibleCount).map(renderTargetRow)}
-            </div>
-            {marketTargets.length > visibleCount && (
-              <div className="border-t border-slate-800 p-3 text-center">
-                <button
-                  onClick={() => setVisibleCount((c) => c + 40)}
-                  className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2 text-xs font-bold text-white hover:bg-slate-700"
-                >
-                  Carregar mais jogadores ({marketTargets.length - visibleCount} restantes)
-                </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIncludeSecondaryPos((v) => !v);
+                setVisibleCount(40);
+              }}
+              className={`rounded-lg border px-2.5 py-1 text-[10px] font-bold transition ${
+                includeSecondaryPos
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                  : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"
+              }`}
+              title="Incluir jogadores que atuam nessa função como posição secundária"
+            >
+              {includeSecondaryPos ? "✓ Primária + Secundárias" : "Apenas Posição Primária"}
+            </button>
+          </div>
+
+          {/* Row 3: Preferred Foot, Availability, OVR/POT/Age Sliders & Price Cap */}
+          <div className="grid gap-3 pt-1 sm:grid-cols-2 lg:grid-cols-6">
+            <select
+              value={footFilter}
+              onChange={(e) => {
+                setFootFilter(e.target.value as "ALL" | "Right" | "Left");
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
+            >
+              <option value="ALL">Qualquer Pé Preferido</option>
+              <option value="Right">Pé Direito (Destro)</option>
+              <option value="Left">Pé Esquerdo (Canhoto)</option>
+            </select>
+
+            <select
+              value={availabilityFilter}
+              onChange={(e) => {
+                setAvailabilityFilter(e.target.value as AvailabilityFilter);
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
+            >
+              <option value="ALL">Qualquer Disponibilidade</option>
+              <option value="affordable">
+                No Orçamento (≤ {formatMoney(userClub.transferBudgetEur)})
+              </option>
+              <option value="available_now">Livres de Empréstimo</option>
+              <option value="transfer_listed">Listados p/ Transferência</option>
+            </select>
+
+            <select
+              value={maxPriceM}
+              onChange={(e) => {
+                setMaxPriceM(Number(e.target.value));
+                setVisibleCount(40);
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-white outline-none focus:border-emerald-500/60"
+            >
+              <option value={250}>Valor: Sem teto €</option>
+              <option value={100}>Valor ≤ €100M</option>
+              <option value={60}>Valor ≤ €60M</option>
+              <option value={30}>Valor ≤ €30M</option>
+              <option value={15}>Valor ≤ €15M</option>
+              <option value={10}>Valor ≤ €10M</option>
+              <option value={5}>Valor ≤ €5M</option>
+              <option value={2}>Valor ≤ €2M</option>
+              <option value={1}>Valor ≤ €1M</option>
+            </select>
+
+            {mode === "buy" ? (
+              <>
+                <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-1.5">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>OVR Mínimo</span>
+                    <span className="text-emerald-400">{minOvr}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={55}
+                    max={90}
+                    value={minOvr}
+                    onChange={(e) => {
+                      setMinOvr(Number(e.target.value));
+                      setVisibleCount(40);
+                    }}
+                    className="mt-1 w-full accent-emerald-500"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-1.5">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>Potencial Mín.</span>
+                    <span className="text-amber-300">{minPot}★</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={60}
+                    max={94}
+                    value={minPot}
+                    onChange={(e) => {
+                      setMinPot(Number(e.target.value));
+                      setVisibleCount(40);
+                    }}
+                    className="mt-1 w-full accent-amber-400"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-1.5">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>Idade Máxima</span>
+                    <span className="text-white">≤ {maxAge} anos</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={17}
+                    max={40}
+                    value={maxAge}
+                    onChange={(e) => {
+                      setMaxAge(Number(e.target.value));
+                      setVisibleCount(40);
+                    }}
+                    className="mt-1 w-full accent-emerald-500"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="sm:col-span-2 lg:col-span-3 flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-200">
+                <Sparkles className="mr-2 h-4 w-4 shrink-0 text-amber-300" />
+                <span>
+                  Filtro Wonderkids ativo: Sub-21 com Potencial ≥ 80★ ou evolução projetada de +5 OVR.
+                </span>
               </div>
             )}
           </div>
-        </>
+        </div>
+      )}
+
+      {/* MODE 1: BUY (Scout) */}
+      {mode === "buy" && (
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 text-xs text-slate-400">
+            <span>
+              <strong className="text-white">{marketTargets.length}</strong> jogadores encontrados
+            </span>
+            <span>Clique na estrela ★ para salvar na Lista de Alvos</span>
+          </div>
+          {marketTargets.length === 0 ? (
+            <div className="p-10 text-center text-xs text-slate-400">
+              Nenhum jogador encontrado com esses filtros. Tente reduzir o OVR/Potencial mínimo ou clique em{" "}
+              <button
+                onClick={resetAllFilters}
+                className="font-bold text-emerald-400 underline hover:text-emerald-300"
+              >
+                Limpar Filtros
+              </button>
+              .
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800/60">
+              {marketTargets.slice(0, visibleCount).map(renderTargetRow)}
+            </div>
+          )}
+          {marketTargets.length > visibleCount && (
+            <div className="border-t border-slate-800 p-3 text-center">
+              <button
+                onClick={() => setVisibleCount((c) => c + 40)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2 text-xs font-bold text-white hover:bg-slate-700"
+              >
+                Carregar mais jogadores ({marketTargets.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* MODE 2: WONDERKIDS */}
       {mode === "wonderkids" && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300">
-              <Sparkles className="h-4 w-4" /> Radar de Jovens Promessas (Wonderkids)
-            </div>
-            <p className="mt-1 text-xs text-slate-300">
-              Jogadores com até 21 anos e potencial explosivo (≥ 80★ ou margem de evolução de +5 OVR). Contrate promessas antes que os gigantes europeus aumentem seus preços!
-            </p>
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 text-xs text-slate-400">
+            <span>
+              <strong className="text-amber-300">{wonderkidTargets.length}</strong> promessas mundiais encontradas
+            </span>
+            <span>Use os filtros acima para buscar por posição específica ou país</span>
           </div>
-
-          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 text-xs text-slate-400">
-              <span>{wonderkidTargets.length} promessas mundiais encontradas</span>
-              <span>Ordenado pelo maior potencial</span>
+          {wonderkidTargets.length === 0 ? (
+            <div className="p-10 text-center text-xs text-slate-400">
+              Nenhuma jovem promessa encontrada com esses filtros.{" "}
+              <button
+                onClick={resetAllFilters}
+                className="font-bold text-amber-300 underline hover:text-amber-200"
+              >
+                Limpar Filtros
+              </button>
             </div>
+          ) : (
             <div className="divide-y divide-slate-800/60">
               {wonderkidTargets.slice(0, visibleCount).map(renderTargetRow)}
             </div>
-          </div>
+          )}
+          {wonderkidTargets.length > visibleCount && (
+            <div className="border-t border-slate-800 p-3 text-center">
+              <button
+                onClick={() => setVisibleCount((c) => c + 40)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2 text-xs font-bold text-white hover:bg-slate-700"
+              >
+                Carregar mais promessas ({wonderkidTargets.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
