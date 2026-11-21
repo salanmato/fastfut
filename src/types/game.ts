@@ -176,7 +176,9 @@ export type MatchEventType =
   | "red_card"
   | "injury"
   | "substitution"
-  | "offside";
+  | "offside"
+  | "stoppage_time"
+  | "whistle";
 
 export interface MatchEvent {
   id: string;

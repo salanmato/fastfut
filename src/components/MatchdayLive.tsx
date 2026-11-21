@@ -16,6 +16,7 @@ import {
   BarChart3,
   Users,
   Sparkles,
+  Clock,
 } from "lucide-react";
 import type {
   Club,
@@ -193,9 +194,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const isHalftime =
     Boolean(userSession) &&
     !allFinished &&
-    !isPlaying &&
-    halftimeTriggeredRef.current &&
-    userSession!.minute === 45;
+    Boolean(userSession?.isHalftime);
 
   useEffect(() => {
     if (!isPlaying || allFinished) return;
@@ -228,7 +227,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       }
 
       // Half-time break for the user's match
-      if (uSess && !uSess.finished && uSess.minute === 45 && !halftimeTriggeredRef.current) {
+      if (uSess && !uSess.finished && uSess.isHalftime && !halftimeTriggeredRef.current) {
         halftimeTriggeredRef.current = true;
         setIsPlaying(false);
         setActivePanelTab("subs"); // Auto focus on substitutions for user to make changes
@@ -285,6 +284,27 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
     }));
   };
 
+  const handleStartSecondHalf = () => {
+    for (const session of sessionsRef.current) {
+      if (session.isHalftime) {
+        session.isHalftime = false;
+        session.secondHalfStarted = true;
+        session.minute = 45; // Próximo minuto será 46 (início da segunda etapa)
+        session.events.push({
+          id: `whistle-2nd-${session.fixtureId}`,
+          minute: 45,
+          type: "whistle",
+          clubId: session.awayClubId,
+          playerId: 0,
+          playerName: "Árbitro",
+          text: "Bola rolando para a segunda etapa! Início do 2º tempo.",
+        });
+      }
+    }
+    halftimeTriggeredRef.current = false;
+    setIsPlaying(true);
+  };
+
   const handleSimulateToEnd = () => {
     setIsPlaying(false);
     for (const session of sessionsRef.current) {
@@ -292,6 +312,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       const aClub = clubMap.get(session.awayClubId);
       if (!hClub || !aClub) continue;
       while (!session.finished) {
+        if (session.isHalftime) {
+          session.isHalftime = false;
+          session.secondHalfStarted = true;
+          session.minute = 45;
+        }
         stepLiveMatchMinute(
           session,
           playerMap,
@@ -304,6 +329,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         );
       }
     }
+    halftimeTriggeredRef.current = false;
     setTick((t) => t + 1);
   };
 
@@ -814,25 +840,50 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
 
         {/* Center: Live Minute Pill */}
         <div className="flex items-center gap-2">
-          <span
-            className={`rounded-full px-3 py-0.5 text-xs font-black tracking-wider ${
-              userSession.finished
-                ? "bg-slate-800 text-slate-300"
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`rounded-full px-3 py-0.5 text-xs font-black tracking-wider ${
+                userSession.finished
+                  ? "bg-slate-800 text-slate-300"
+                  : isHalftime
+                  ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40"
+                  : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 animate-pulse"
+              }`}
+            >
+              {userSession.finished
+                ? "FIM DE JOGO"
                 : isHalftime
-                ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40"
-                : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 animate-pulse"
-            }`}
-          >
-            {userSession.finished
-              ? "FIM DE JOGO"
-              : isHalftime
-              ? "INTERVALO"
-              : `${userSession.minute <= 45 ? "1ºT" : "2ºT"} • ${
-                  userSession.minute > 90
-                    ? `90+${userSession.minute - 90}'`
-                    : `${userSession.minute}'`
-                }`}
-          </span>
+                ? "INTERVALO"
+                : !userSession.secondHalfStarted
+                ? userSession.minute > 45
+                  ? `1ºT • 45+${userSession.minute - 45}'`
+                  : `1ºT • ${userSession.minute}'`
+                : userSession.minute > 90
+                ? `2ºT • 90+${userSession.minute - 90}'`
+                : `2ºT • ${userSession.minute}'`}
+            </span>
+
+            {/* Placa Digital do 4º Árbitro (Acréscimos) */}
+            {!userSession.finished && !isHalftime && (
+              (!userSession.secondHalfStarted && userSession.minute >= 45) ? (
+                <span
+                  title={`Tempo Adicional: +${userSession.firstHalfExtra} minuto(s) no 1º tempo`}
+                  className="inline-flex items-center gap-1 rounded bg-amber-400 border border-amber-300 px-1.5 py-0.5 text-[10px] font-black text-slate-950 font-mono shadow-sm animate-pulse"
+                >
+                  <Clock className="h-2.5 w-2.5" />
+                  +{userSession.firstHalfExtra}'
+                </span>
+              ) : (userSession.secondHalfStarted && userSession.minute >= 90) ? (
+                <span
+                  title={`Tempo Adicional: +${userSession.secondHalfExtra} minuto(s) no 2º tempo`}
+                  className="inline-flex items-center gap-1 rounded bg-amber-400 border border-amber-300 px-1.5 py-0.5 text-[10px] font-black text-slate-950 font-mono shadow-sm animate-pulse"
+                >
+                  <Clock className="h-2.5 w-2.5" />
+                  +{userSession.secondHalfExtra}'
+                </span>
+              ) : null
+            )}
+          </div>
           <span className="hidden md:inline text-[11px] text-slate-400">
             Rodada {matchweek}
           </span>
@@ -868,7 +919,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               )}
 
               <button
-                onClick={() => setIsPlaying((p) => !p)}
+                onClick={() => {
+                  if (isHalftime) {
+                    handleStartSecondHalf();
+                  } else {
+                    setIsPlaying((p) => !p);
+                  }
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700 transition"
               >
                 {isPlaying ? (
@@ -877,7 +934,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   </>
                 ) : (
                   <>
-                    <Play className="h-3.5 w-3.5 fill-current" /> <span className="hidden sm:inline">Retomar</span>
+                    <Play className="h-3.5 w-3.5 fill-current" /> <span className="hidden sm:inline">{isHalftime ? "Iniciar 2º Tempo" : "Retomar"}</span>
                   </>
                 )}
               </button>
@@ -927,7 +984,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             <strong>Intervalo ({userSession.homeGoals} x {userSession.awayGoals})</strong> — Ajuste a equipe na aba Tática e retome quando quiser.
           </div>
           <button
-            onClick={() => setIsPlaying(true)}
+            onClick={handleStartSecondHalf}
             className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1 text-xs font-black text-slate-950 hover:bg-amber-300 transition shadow-sm shrink-0"
           >
             <Play className="h-3.5 w-3.5 fill-current" /> Iniciar 2º Tempo
@@ -958,6 +1015,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             }}
             pitchSize={pitchSize}
             onPitchSizeChange={setPitchSize}
+            isHalftime={isHalftime}
           />
         </div>
 
@@ -1255,6 +1313,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       ? "border-rose-400/40 bg-rose-500/10 text-rose-300"
                       : ev.type === "yellow_card"
                       ? "border-amber-400/60 bg-amber-400/15 text-amber-200"
+                      : ev.type === "stoppage_time"
+                      ? "border-amber-400/60 bg-amber-500/15 text-amber-200 font-bold"
+                      : ev.type === "whistle"
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-bold"
                       : ev.type === "substitution"
                       ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
                       : ev.type === "offside"
@@ -1264,6 +1326,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   let eventIconNode: React.ReactNode = <span className="text-slate-500">•</span>;
                   if (ev.type === "goal") {
                     eventIconNode = <Award className="h-4 w-4 text-emerald-400" />;
+                  } else if (ev.type === "stoppage_time") {
+                    eventIconNode = <Clock className="h-4 w-4 text-amber-400" />;
+                  } else if (ev.type === "whistle") {
+                    eventIconNode = <Radio className="h-4 w-4 text-emerald-400" />;
                   } else if (ev.type === "yellow_card") {
                     eventIconNode = (
                       <span className="inline-block h-3.5 w-2.5 rounded-[1px] bg-amber-400 border border-amber-600 shadow-sm mt-0.5" />
@@ -1282,12 +1348,19 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     eventIconNode = <Shield className="h-4 w-4 text-indigo-400" />;
                   }
 
+                  let minDisplay = `${ev.minute}'`;
+                  if (!userSession.secondHalfStarted && ev.minute > 45) {
+                    minDisplay = `45+${ev.minute - 45}'`;
+                  } else if (ev.minute > 90) {
+                    minDisplay = `90+${ev.minute - 90}'`;
+                  }
+
                   return (
                     <div
                       key={ev.id}
                       className={`flex items-start gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${badgeStyle}`}
                     >
-                      <span className="font-black text-slate-100">{ev.minute}'</span>
+                      <span className="font-black text-slate-100 font-mono shrink-0">{minDisplay}</span>
                       <span className="shrink-0 flex items-center justify-center mt-0.5">{eventIconNode}</span>
                       <span className="min-w-0 flex-1">{ev.text}</span>
                     </div>

@@ -13,6 +13,8 @@ import {
   Users,
   Coins,
   Sparkles,
+  Clock,
+  Pause,
 } from "lucide-react";
 import type { Club, MatchEvent, Player, Tactics } from "../types/game";
 import type { LiveMatchSession } from "../engine/matchEngine";
@@ -44,6 +46,7 @@ interface LivePitch2DProps {
   onSelectSubOut: (playerId: number) => void;
   pitchSize?: PitchSize;
   onPitchSizeChange?: (size: PitchSize) => void;
+  isHalftime?: boolean;
 }
 
 const ACTION_EVERY = 4; // pitch ticks per ball action (pass / dribble / turnover)
@@ -129,7 +132,9 @@ interface EventBanner {
     | "yellow_card"
     | "red_card"
     | "injury"
-    | "offside";
+    | "offside"
+    | "stoppage"
+    | "halftime";
   minute?: number;
   clubName?: string;
   clubColor?: string;
@@ -743,6 +748,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   onSelectSubOut,
   pitchSize: propPitchSize,
   onPitchSizeChange,
+  isHalftime = false,
 }) => {
   const [pitchSizeState, setPitchSizeState] = useState<PitchSize>(() => {
     try {
@@ -886,24 +892,82 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     }
   }, [session.events.length, homeClub.id, homeSlots, awaySlots, homeTactics, awayTactics]);
 
-  // Reset coordinates cleanly if fixture or paused formation changes
+  // Reset coordinates cleanly at kickoff (minute 0) or Halftime break / second half restart
   useEffect(() => {
-    if (!isPlaying && session.minute === 0) {
-      setLiveCoords(
-        buildFormationSeedCoords(
-          session.homeActiveIds,
-          session.awayActiveIds,
-          homeSlots,
-          awaySlots,
-          slotIndexRef.current,
-          homeTactics,
-          awayTactics
-        )
+    if (!isPlaying && (session.minute === 0 || isHalftime)) {
+      const seed = buildFormationSeedCoords(
+        session.homeActiveIds,
+        session.awayActiveIds,
+        homeSlots,
+        awaySlots,
+        slotIndexRef.current,
+        homeTactics,
+        awayTactics
       );
+
+      // In 1st half: home striker kicks off at (50, 50.5)
+      // In 2nd half / Halftime: away striker kicks off at (50, 49.5)
+      if (isHalftime) {
+        const awayStrikerId = session.awayActiveIds[session.awayActiveIds.length - 1] ?? session.awayActiveIds[0];
+        if (awayStrikerId) {
+          seed[awayStrikerId] = { x: 50, y: 49.5 };
+        }
+        const homeStrikerId = session.homeActiveIds[session.homeActiveIds.length - 1] ?? session.homeActiveIds[0];
+        if (homeStrikerId) {
+          seed[homeStrikerId] = { x: 50, y: 52 };
+        }
+        if (awayStrikerId) {
+          setCarrierId(awayStrikerId);
+          setCarrierClubId(awayClub.id);
+        }
+      } else {
+        const homeStrikerId = session.homeActiveIds[session.homeActiveIds.length - 1] ?? session.homeActiveIds[0];
+        if (homeStrikerId) {
+          seed[homeStrikerId] = { x: 50, y: 50.5 };
+          setCarrierId(homeStrikerId);
+          setCarrierClubId(homeClub.id);
+        }
+      }
+
+      setLiveCoords(seed);
+      liveCoordsRef.current = seed;
       setBallPos({ x: 50, y: 50 });
+      ballPosRef.current = { x: 50, y: 50 };
+      setBallVisual({ x: 50, y: 50, altitude: 0, isAerial: false });
+      setTrail(null);
+      setOffsideMark(null);
       setPlayPhase("build_up");
+
+      if (isHalftime) {
+        setBanner({
+          text: "INTERVALO",
+          tone: "halftime",
+          minute: session.minute > 45 ? 45 : session.minute,
+          clubName: "Fim do 1º Tempo",
+          scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
+        });
+      }
     }
-  }, [session.fixtureId, homeTactics.formation, awayTactics.formation, isPlaying, session.minute]);
+  }, [
+    session.fixtureId,
+    homeTactics.formation,
+    awayTactics.formation,
+    isPlaying,
+    session.minute,
+    isHalftime,
+    session.homeActiveIds,
+    session.awayActiveIds,
+    homeSlots,
+    awaySlots,
+    homeTactics,
+    awayTactics,
+    homeClub.id,
+    awayClub.id,
+    homeClub.shortName,
+    awayClub.shortName,
+    session.homeGoals,
+    session.awayGoals,
+  ]);
 
   // Compute rendered positions from continuous liveCoords with smooth fallback
   // When the match is finished, return cleanly spread initial formation positions with ratings
@@ -1378,19 +1442,50 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           setTrail(null);
         }
       }, freeKickDelay);
+    } else if (latest.type === "stoppage_time") {
+      const isFirst = !session.secondHalfStarted;
+      const extraMins = isFirst ? session.firstHalfExtra : session.secondHalfExtra;
+      setBanner({
+        text: "TEMPO ADICIONAL",
+        tone: "stoppage",
+        minute: latest.minute,
+        clubName: "4º Árbitro",
+        scorerName: `+${extraMins} Minuto${extraMins > 1 ? "s" : ""} de Acréscimo`,
+      });
+      setHighlightPause(2200, 1200);
+    } else if (latest.type === "whistle") {
+      if (session.finished) {
+        setBanner({
+          text: "FIM DE JOGO",
+          tone: "halftime",
+          minute: session.minute,
+          clubName: "Apito Final",
+          scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
+        });
+      } else if (session.isHalftime) {
+        setBanner({
+          text: "INTERVALO",
+          tone: "halftime",
+          minute: session.minute > 45 ? 45 : session.minute,
+          clubName: "Fim do 1º Tempo",
+          scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
+        });
+      }
+      setHighlightPause(1800, 1000);
     }
   }, [session.events.length, homeClub.id, awayClub.id, playerMap]);
 
   // Clear banner smoothly after highlight window
   useEffect(() => {
     if (!banner) return;
-    const durationMs = banner.tone === "goal" ? 2600 : 1800;
+    if (banner.tone === "halftime" && isHalftime) return;
+    const durationMs = banner.tone === "goal" ? 2600 : banner.tone === "stoppage" ? 2400 : 1800;
     const t = window.setTimeout(() => {
       setBanner(null);
       setTrail(null);
     }, durationMs);
     return () => window.clearTimeout(t);
-  }, [banner]);
+  }, [banner, isHalftime]);
 
   // Clear offside overlay after a short while
   useEffect(() => {
@@ -1980,6 +2075,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               </span>
             </div>
           ) : null}
+
+          {/* Stoppage Time & Halftime Status Badges */}
+          {!session.finished && !isHalftime && (
+            (!session.secondHalfStarted && session.minute >= 45) ? (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-400 border border-amber-300 px-2 py-0.5 text-[10px] font-black text-slate-950 font-mono shadow-sm animate-pulse">
+                <Clock className="h-3 w-3" />
+                +{session.firstHalfExtra}' Acréscimos
+              </span>
+            ) : (session.secondHalfStarted && session.minute >= 90) ? (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-400 border border-amber-300 px-2 py-0.5 text-[10px] font-black text-slate-950 font-mono shadow-sm animate-pulse">
+                <Clock className="h-3 w-3" />
+                +{session.secondHalfExtra}' Acréscimos
+              </span>
+            ) : null
+          )}
+          {isHalftime && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-black text-amber-300">
+              <Pause className="h-2.5 w-2.5 fill-current" />
+              Intervalo
+            </span>
+          )}
         </div>
 
         {/* Unified Toolbar: Sizing & Display toggles (Guaranteed 1 line) */}
@@ -2367,6 +2483,34 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     Atendimento Médico
                   </div>
                   <div className="text-xs font-black">{banner.text}</div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "stoppage" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2">
+              <div className="flex items-center gap-3 rounded-xl border border-amber-400/60 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(251,191,36,0.4)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 shadow-md">
+                  <Clock className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-amber-300 font-bold">
+                    Tempo Adicional • 4º Árbitro
+                  </div>
+                  <div className="text-sm font-black text-white">{banner.scorerName}</div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "halftime" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2">
+              <div className="flex items-center gap-3 rounded-xl border border-amber-500/60 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(245,158,11,0.4)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-slate-950 shadow-md">
+                  <Pause className="h-4 w-4 fill-current" />
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-amber-300 font-bold">
+                    {banner.text}
+                  </div>
+                  <div className="text-xs font-bold text-slate-300">{banner.scorerName}</div>
                 </div>
               </div>
             </div>

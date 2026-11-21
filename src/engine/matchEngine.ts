@@ -43,7 +43,12 @@ export interface LiveMatchSession {
   homeClubId: number;
   awayClubId: number;
   minute: number;
+  firstHalfExtra: number;
+  firstHalfEnd: number;
+  secondHalfExtra: number;
   stoppageEnd: number;
+  isHalftime?: boolean;
+  secondHalfStarted?: boolean;
   finished: boolean;
   homeGoals: number;
   awayGoals: number;
@@ -426,12 +431,22 @@ export function initLiveMatchSession(
           homeAdvantagePct: 4.0,
         };
 
+  const firstHalfExtra = 1 + Math.floor(Math.random() * 3);
+  const secondHalfExtra = 3 + Math.floor(Math.random() * 4);
+  const firstHalfEnd = 45 + firstHalfExtra;
+  const stoppageEnd = 90 + secondHalfExtra;
+
   return {
     fixtureId: fixture.id,
     homeClubId: fixture.homeClubId,
     awayClubId: fixture.awayClubId,
     minute: 0,
-    stoppageEnd: 92 + Math.floor(Math.random() * 4),
+    firstHalfExtra,
+    firstHalfEnd,
+    secondHalfExtra,
+    stoppageEnd,
+    isHalftime: false,
+    secondHalfStarted: false,
     finished: false,
     homeGoals: 0,
     awayGoals: 0,
@@ -645,10 +660,36 @@ export function stepLiveMatchMinute(
   userClubId: number | null,
   homeStadiumConfig?: StadiumConfig
 ): void {
-  if (session.finished) return;
+  if (session.finished || session.isHalftime) return;
 
   session.minute += 1;
   const min = session.minute;
+
+  // Stoppage time announcement for 1st half
+  if (min === 45 && !session.secondHalfStarted) {
+    session.events.push({
+      id: `stoppage-1st-${session.fixtureId}-${min}`,
+      minute: 45,
+      type: "stoppage_time",
+      clubId: session.homeClubId,
+      playerId: 0,
+      playerName: "4º Árbitro",
+      text: `⏱ Placa subiu! O quarto árbitro indica +${session.firstHalfExtra} minuto(s) de acréscimo no 1º tempo.`,
+    });
+  }
+
+  // Stoppage time announcement for 2nd half
+  if (min === 90 && session.secondHalfStarted) {
+    session.events.push({
+      id: `stoppage-2nd-${session.fixtureId}-${min}`,
+      minute: 90,
+      type: "stoppage_time",
+      clubId: session.homeClubId,
+      playerId: 0,
+      playerName: "4º Árbitro",
+      text: `⏱ Placa subiu! O quarto árbitro indica +${session.secondHalfExtra} minuto(s) de acréscimo no 2º tempo.`,
+    });
+  }
 
   const homeActive = session.homeActiveIds
     .map((id) => playerMap.get(id))
@@ -1118,9 +1159,33 @@ export function stepLiveMatchMinute(
     resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
   }
 
-  // Check end of match
-  if (min >= session.stoppageEnd) {
+  // Check half-time break (end of 1st half)
+  if (!session.secondHalfStarted && min >= session.firstHalfEnd) {
+    session.isHalftime = true;
+    session.events.push({
+      id: `whistle-ht-${session.fixtureId}-${min}`,
+      minute: min,
+      type: "whistle",
+      clubId: session.homeClubId,
+      playerId: 0,
+      playerName: "Árbitro",
+      text: "Fim do primeiro tempo! O árbitro apita o intervalo de jogo.",
+    });
+    return;
+  }
+
+  // Check end of match (full time)
+  if (session.secondHalfStarted && min >= session.stoppageEnd) {
     session.finished = true;
+    session.events.push({
+      id: `whistle-ft-${session.fixtureId}-${min}`,
+      minute: min,
+      type: "whistle",
+      clubId: session.homeClubId,
+      playerId: 0,
+      playerName: "Árbitro",
+      text: "Fim de jogo! O árbitro apita o encerramento da partida.",
+    });
 
     // Clean sheet / win bonuses on ratings
     for (const id of session.homeActiveIds) {
