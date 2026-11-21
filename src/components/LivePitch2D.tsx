@@ -994,11 +994,18 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   // Track persistent slot index per player across substitutions and red cards
   const slotIndexRef = useRef<Map<number, number>>(new Map());
   const lastFixtureIdRef = useRef<number>(session.fixtureId);
+  const kickoffHandledMinute0Ref = useRef<boolean>(false);
+  const prevIsHalftimeRef = useRef<boolean>(false);
+  const prevSecondHalfStartedRef = useRef<boolean>(false);
+
   if (lastFixtureIdRef.current !== session.fixtureId || slotIndexRef.current.size === 0) {
     lastFixtureIdRef.current = session.fixtureId;
     slotIndexRef.current = new Map();
     homeTactics.starters.forEach((id, idx) => slotIndexRef.current.set(id, idx));
     awayTactics.starters.forEach((id, idx) => slotIndexRef.current.set(id, idx));
+    kickoffHandledMinute0Ref.current = false;
+    prevIsHalftimeRef.current = false;
+    prevSecondHalfStartedRef.current = false;
   }
 
   const [liveCoords, setLiveCoords] = useState<Record<number, Coord>>(() =>
@@ -1012,155 +1019,6 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       awayTactics
     )
   );
-
-  // Update slot index mapping and initialize subbed-in player position whenever substitutions occur
-  useEffect(() => {
-    for (const ev of session.events) {
-      if (ev.type === "substitution" && ev.assistPlayerId) {
-        const prevSlot = slotIndexRef.current.get(ev.assistPlayerId);
-        if (prevSlot !== undefined && !slotIndexRef.current.has(ev.playerId)) {
-          slotIndexRef.current.set(ev.playerId, prevSlot);
-          const isHomeSub = ev.clubId === homeClub.id;
-          const slots = isHomeSub ? homeSlots : awaySlots;
-          const slot = slots[Math.min(prevSlot, slots.length - 1)];
-          const tac = isHomeSub ? homeTactics : awayTactics;
-          const spawnCoord = getBaseVerticalCoord(slot.x, slot.y, isHomeSub, tac);
-          setLiveCoords((prev) =>
-            prev[ev.playerId] ? prev : { ...prev, [ev.playerId]: spawnCoord }
-          );
-        }
-      }
-    }
-  }, [session.events.length, homeClub.id, homeSlots, awaySlots, homeTactics, awayTactics]);
-
-  // Reset coordinates cleanly at kickoff (minute 0) or Halftime break / second half restart
-  useEffect(() => {
-    if (!isPlaying && (session.minute === 0 || isHalftime)) {
-      const seed = buildFormationSeedCoords(
-        session.homeActiveIds,
-        session.awayActiveIds,
-        homeSlots,
-        awaySlots,
-        slotIndexRef.current,
-        homeTactics,
-        awayTactics
-      );
-
-      // In 1st half: home striker kicks off at (50, 50.5)
-      // In 2nd half / Halftime: away striker kicks off at (50, 49.5)
-      if (isHalftime) {
-        const awayStrikerId = session.awayActiveIds[session.awayActiveIds.length - 1] ?? session.awayActiveIds[0];
-        if (awayStrikerId) {
-          seed[awayStrikerId] = { x: 50, y: 49.5 };
-        }
-        const homeStrikerId = session.homeActiveIds[session.homeActiveIds.length - 1] ?? session.homeActiveIds[0];
-        if (homeStrikerId) {
-          seed[homeStrikerId] = { x: 50, y: 52 };
-        }
-        if (awayStrikerId) {
-          setCarrierId(awayStrikerId);
-          setCarrierClubId(awayClub.id);
-        }
-      } else {
-        const homeStrikerId = session.homeActiveIds[session.homeActiveIds.length - 1] ?? session.homeActiveIds[0];
-        if (homeStrikerId) {
-          seed[homeStrikerId] = { x: 50, y: 50.5 };
-          setCarrierId(homeStrikerId);
-          setCarrierClubId(homeClub.id);
-        }
-      }
-
-      setLiveCoords(seed);
-      liveCoordsRef.current = seed;
-      setBallPos({ x: 50, y: 50 });
-      ballPosRef.current = { x: 50, y: 50 };
-      setBallVisual({ x: 50, y: 50, altitude: 0, isAerial: false });
-      setTrail(null);
-      setOffsideMark(null);
-      setPlayPhase("build_up");
-
-      if (isHalftime) {
-        setBanner({
-          text: "INTERVALO",
-          tone: "halftime",
-          minute: session.minute > 45 ? 45 : session.minute,
-          clubName: "Fim do 1º Tempo",
-          scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
-        });
-      }
-    }
-  }, [
-    session.fixtureId,
-    homeTactics.formation,
-    awayTactics.formation,
-    isPlaying,
-    session.minute,
-    isHalftime,
-    session.homeActiveIds,
-    session.awayActiveIds,
-    homeSlots,
-    awaySlots,
-    homeTactics,
-    awayTactics,
-    homeClub.id,
-    awayClub.id,
-    homeClub.shortName,
-    awayClub.shortName,
-    session.homeGoals,
-    session.awayGoals,
-  ]);
-
-  // Compute rendered positions from continuous liveCoords with smooth fallback
-  // When the match is finished, return cleanly spread initial formation positions with ratings
-  const playerPositions = useMemo(() => {
-    const posMap = new Map<number, { coord: Coord; isHome: boolean; label: string }>();
-
-    if (session.finished) {
-      const addFinishedTeam = (
-        activeIds: number[],
-        slots: FormationSlot[],
-        isHome: boolean,
-        tactics: Tactics
-      ) => {
-        activeIds.forEach((id, fallbackIdx) => {
-          const slotIdx = slotIndexRef.current.get(id) ?? fallbackIdx;
-          const slot = slots[Math.min(slotIdx, slots.length - 1)];
-          const coord = getBaseVerticalCoord(slot.x, slot.y, isHome, tactics, true);
-          posMap.set(id, { coord, isHome, label: slot.label });
-        });
-      };
-      addFinishedTeam(session.homeActiveIds, homeSlots, true, homeTactics);
-      addFinishedTeam(session.awayActiveIds, awaySlots, false, awayTactics);
-      return posMap;
-    }
-
-    const addTeam = (
-      activeIds: number[],
-      slots: FormationSlot[],
-      isHome: boolean,
-      tactics: Tactics
-    ) => {
-      activeIds.forEach((id, fallbackIdx) => {
-        const slotIdx = slotIndexRef.current.get(id) ?? fallbackIdx;
-        const slot = slots[Math.min(slotIdx, slots.length - 1)];
-        const coord =
-          liveCoords[id] ?? getBaseVerticalCoord(slot.x, slot.y, isHome, tactics);
-        posMap.set(id, { coord, isHome, label: slot.label });
-      });
-    };
-    addTeam(session.homeActiveIds, homeSlots, true, homeTactics);
-    addTeam(session.awayActiveIds, awaySlots, false, awayTactics);
-    return posMap;
-  }, [
-    session.homeActiveIds,
-    session.awayActiveIds,
-    session.finished,
-    homeSlots,
-    awaySlots,
-    homeTactics,
-    awayTactics,
-    liveCoords,
-  ]);
 
   const lastHandledEventIdRef = useRef<string | null>(null);
   const lastHandledEventCountRef = useRef<number>(0);
@@ -1276,6 +1134,132 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     setCarrierClubId(kickoffClubId);
     carrierClubIdRef.current = kickoffClubId;
   };
+
+  // Update slot index mapping and initialize subbed-in player position whenever substitutions occur
+  useEffect(() => {
+    for (const ev of session.events) {
+      if (ev.type === "substitution" && ev.assistPlayerId) {
+        const prevSlot = slotIndexRef.current.get(ev.assistPlayerId);
+        if (prevSlot !== undefined && !slotIndexRef.current.has(ev.playerId)) {
+          slotIndexRef.current.set(ev.playerId, prevSlot);
+          const isHomeSub = ev.clubId === homeClub.id;
+          const slots = isHomeSub ? homeSlots : awaySlots;
+          const slot = slots[Math.min(prevSlot, slots.length - 1)];
+          const tac = isHomeSub ? homeTactics : awayTactics;
+          const spawnCoord = getBaseVerticalCoord(slot.x, slot.y, isHomeSub, tac);
+          setLiveCoords((prev) =>
+            prev[ev.playerId] ? prev : { ...prev, [ev.playerId]: spawnCoord }
+          );
+        }
+      }
+    }
+  }, [session.events.length, homeClub.id, homeSlots, awaySlots, homeTactics, awayTactics]);
+
+  // Clean reset to center kickoff: Minute 0, Intervalo (Fim do 1ºT) e Reinício (2º Tempo)
+  useEffect(() => {
+    // 1. Kickoff at minute 0 (Início da partida - Saída do time da casa)
+    if (session.minute === 0 && !session.secondHalfStarted) {
+      if (!kickoffHandledMinute0Ref.current) {
+        kickoffHandledMinute0Ref.current = true;
+        resetToCenterKickoff(true);
+      }
+    }
+
+    // 2. Virada de tempo: Apito de Intervalo / Fim do 1º Tempo (todos voltam para as metades com bola no centro)
+    if (isHalftime || session.isHalftime) {
+      if (!prevIsHalftimeRef.current) {
+        prevIsHalftimeRef.current = true;
+        resetToCenterKickoff(false);
+        setBanner({
+          text: "INTERVALO",
+          tone: "halftime",
+          minute: session.minute > 45 ? 45 : session.minute,
+          clubName: "Fim do 1º Tempo",
+          scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
+        });
+      }
+    } else {
+      prevIsHalftimeRef.current = false;
+    }
+
+    // 3. Virada de tempo: Início do 2º Tempo (saída do time visitante no centro do campo)
+    if (session.secondHalfStarted && !prevSecondHalfStartedRef.current) {
+      prevSecondHalfStartedRef.current = true;
+      resetToCenterKickoff(false);
+      setBanner({
+        text: "2º TEMPO",
+        tone: "halftime",
+        minute: 45,
+        clubName: "Início do 2º Tempo",
+        scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
+      });
+      setHighlightPause(1800, 1000);
+    }
+  }, [
+    session.fixtureId,
+    session.minute,
+    isHalftime,
+    session.isHalftime,
+    session.secondHalfStarted,
+    homeTactics.formation,
+    awayTactics.formation,
+    homeClub.shortName,
+    awayClub.shortName,
+    session.homeGoals,
+    session.awayGoals,
+  ]);
+
+  // Compute rendered positions from continuous liveCoords with smooth fallback
+  // When the match is finished, return cleanly spread initial formation positions with ratings
+  const playerPositions = useMemo(() => {
+    const posMap = new Map<number, { coord: Coord; isHome: boolean; label: string }>();
+
+    if (session.finished) {
+      const addFinishedTeam = (
+        activeIds: number[],
+        slots: FormationSlot[],
+        isHome: boolean,
+        tactics: Tactics
+      ) => {
+        activeIds.forEach((id, fallbackIdx) => {
+          const slotIdx = slotIndexRef.current.get(id) ?? fallbackIdx;
+          const slot = slots[Math.min(slotIdx, slots.length - 1)];
+          const coord = getBaseVerticalCoord(slot.x, slot.y, isHome, tactics, true);
+          posMap.set(id, { coord, isHome, label: slot.label });
+        });
+      };
+      addFinishedTeam(session.homeActiveIds, homeSlots, true, homeTactics);
+      addFinishedTeam(session.awayActiveIds, awaySlots, false, awayTactics);
+      return posMap;
+    }
+
+    const addTeam = (
+      activeIds: number[],
+      slots: FormationSlot[],
+      isHome: boolean,
+      tactics: Tactics
+    ) => {
+      activeIds.forEach((id, fallbackIdx) => {
+        const slotIdx = slotIndexRef.current.get(id) ?? fallbackIdx;
+        const slot = slots[Math.min(slotIdx, slots.length - 1)];
+        const coord =
+          liveCoords[id] ?? getBaseVerticalCoord(slot.x, slot.y, isHome, tactics);
+        posMap.set(id, { coord, isHome, label: slot.label });
+      });
+    };
+    addTeam(session.homeActiveIds, homeSlots, true, homeTactics);
+    addTeam(session.awayActiveIds, awaySlots, false, awayTactics);
+    return posMap;
+  }, [
+    session.homeActiveIds,
+    session.awayActiveIds,
+    session.finished,
+    homeSlots,
+    awaySlots,
+    homeTactics,
+    awayTactics,
+    liveCoords,
+  ]);
 
   // React immediately to real match events (goal, save, chance, cards) with area choreography
   useEffect(() => {
@@ -2828,7 +2812,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           clubName: "Apito Final",
           scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
         });
-      } else if (session.isHalftime) {
+      } else if (session.isHalftime || latest.id.startsWith("whistle-ht")) {
+        resetToCenterKickoff(false);
         setBanner({
           text: "INTERVALO",
           tone: "halftime",
@@ -2836,8 +2821,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           clubName: "Fim do 1º Tempo",
           scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
         });
+        setHighlightPause(2200, 1400);
+      } else if (session.secondHalfStarted || latest.id.startsWith("whistle-2nd")) {
+        resetToCenterKickoff(false);
+        setBanner({
+          text: "2º TEMPO",
+          tone: "halftime",
+          minute: 45,
+          clubName: "Início do 2º Tempo",
+          scorerName: `${homeClub.shortName} ${session.homeGoals} x ${session.awayGoals} ${awayClub.shortName}`,
+        });
+        setHighlightPause(1800, 1000);
+      } else {
+        setBanner({
+          text: "PARALISAÇÃO",
+          tone: "halftime",
+          minute: latest.minute,
+          clubName: "Apito do Árbitro",
+          scorerName: latest.text || "Jogo paralisado",
+        });
+        setHighlightPause(1800, 1000);
       }
-      setHighlightPause(1800, 1000);
     }
   }, [session.events.length, homeClub.id, awayClub.id, playerMap]);
 
@@ -4193,7 +4197,10 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               {onStartSecondHalf && (
                 <button
                   type="button"
-                  onClick={onStartSecondHalf}
+                  onClick={() => {
+                    resetToCenterKickoff(false);
+                    onStartSecondHalf();
+                  }}
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-amber-300 hover:scale-105 active:scale-95 cursor-pointer"
                 >
                   <Play className="h-3.5 w-3.5 fill-current" />

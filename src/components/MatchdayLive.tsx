@@ -296,7 +296,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         session.secondHalfStarted = true;
         session.minute = 45; // Próximo minuto será 46 (início da segunda etapa)
         session.events.push({
-          id: `whistle-2nd-${session.fixtureId}`,
+          id: `whistle-2nd-${session.fixtureId}-${Date.now()}`,
           minute: 45,
           type: "whistle",
           clubId: session.awayClubId,
@@ -307,7 +307,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       }
     }
     halftimeTriggeredRef.current = false;
+    simPauseUntilRef.current = Date.now() + 1200;
     setIsPlaying(true);
+    setTick((t) => t + 1);
   };
 
   const handleSimulateToEnd = () => {
