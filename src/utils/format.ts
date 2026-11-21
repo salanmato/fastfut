@@ -56,6 +56,193 @@ export function getStaminaColor(stamina: number): string {
   return "bg-rose-500";
 }
 
+/**
+ * Known football mononyms and customary display names for players
+ * whose legal name has multiple surnames (e.g. "João Félix Sequeira" -> "João Félix")
+ */
+export const KNOWN_FOOTBALL_NAMES: Record<string, string> = {
+  // Portuguese & Brazilian Stars
+  "João Félix Sequeira": "João Félix",
+  "João Félix": "João Félix",
+  "Pedro González López": "Pedri",
+  "Rodrigo Hernández Cascante": "Rodri",
+  "Vinícius José de Oliveira Júnior": "Vini Jr.",
+  "Vinícius Júnior": "Vini Jr.",
+  "Vítor Machado Ferreira": "Vitinha",
+  "Raphael Dias Belloli": "Raphinha",
+  "Lamine Yamal Nasraoui Ebana": "Lamine Yamal",
+  "Gabriel dos S. Magalhães": "G. Magalhães",
+  "Gabriel dos Santos Magalhães": "G. Magalhães",
+  "Bruno Miguel Borges Fernandes": "Bruno Fernandes",
+  "Bruno Fernandes": "Bruno Fernandes",
+  "Virgil van Dijk": "Van Dijk",
+  "Frenkie de Jong": "De Jong",
+  "Luuk de Jong": "De Jong",
+  "Kevin De Bruyne": "De Bruyne",
+  "Alisson Ramses Becker": "Alisson",
+  "Ederson Santana de Moraes": "Ederson",
+  "Marcos Aoás Corrêa": "Marquinhos",
+  "Carlos Henrique Casimiro": "Casemiro",
+  "Gabriel Fernando de Jesus": "Gabriel Jesus",
+  "João Pedro Gonçalves Neves": "João Neves",
+  "João Pedro": "João Pedro",
+  "Bernardo Mota Veiga de Carvalho e Silva": "Bernardo Silva",
+  "Bernardo Silva": "Bernardo Silva",
+  "Richarlison de Andrade": "Richarlison",
+  "Rúben Santos Gato Alves Dias": "Rúben Dias",
+  "Diogo Meireles Costa": "Diogo Costa",
+  "Diogo José Teixeira da Silva": "Diogo Jota",
+  "Diogo Jota": "Diogo Jota",
+  "Diogo Dalot": "Diogo Dalot",
+  "Bruno Guimarães Moura": "Bruno Guimarães",
+  "Matheus Luiz Nunes": "Matheus Nunes",
+  "Nuno Alexandre Tavares Mendes": "Nuno Mendes",
+  "Aitana Bonmatí Conca": "Aitana Bonmatí",
+  "Claudia Pina Medina": "Claudia Pina",
+  "Salma Celeste Paralluelo Ayingono": "Salma Paralluelo",
+  "David Raya Martín": "David Raya",
+  "Marc Cucurella Saseta": "Cucurella",
+  "Pau Cubarsí Paredes": "Cubarsí",
+  "Pablo Martín Páez Gavira": "Gavi",
+  "Lucas Tolentino Coelho de Lima": "Paquetá",
+  "Lucas Paquetá": "Paquetá",
+  "Gleison Bremer Silva Nascimento": "Bremer",
+  "Antony Matheus dos Santos": "Antony",
+  "Gabriel Teodoro Martinelli Silva": "Martinelli",
+  "Rodrygo Silva de Goes": "Rodrygo",
+  "Éder Gabriel Militão": "Militão",
+  "Douglas Luiz Soares de Paulo": "Douglas Luiz",
+  "Danilo Luiz da Silva": "Danilo",
+  "Murillo Santiago Costa dos Santos": "Murillo",
+  "Joelinton Cássio Apolinário de Lira": "Joelinton",
+  "Alejandro Balde Martínez": "Balde",
+  "Alexis Mac Allister": "Mac Allister",
+  "Trent Alexander-Arnold": "Alexander-Arnold",
+  "Micky van de Ven": "Van de Ven",
+  "Jurriën Timber": "Timber",
+  "Quinten Timber": "Timber",
+  "Heung-min Son": "Son",
+  "Son Heung-min": "Son",
+  "Min-jae Kim": "Kim",
+  "Kim Min-jae": "Kim",
+  "Takefusa Kubo": "Kubo",
+  "Kaoru Mitoma": "Mitoma",
+  "Ferran Torres García": "Ferran Torres",
+  "Gonçalo Bernardo Inácio": "Gonçalo Inácio",
+  "Gonçalo Matias Ramos": "Gonçalo Ramos",
+  "Matheus Cunha": "Matheus Cunha",
+  "Matheus Santos Carneiro da Cunha": "Matheus Cunha",
+  "Savinho": "Savinho",
+  "Sávio Moreira de Oliveira": "Savinho",
+  "Endrick Felipe Moreira de Sousa": "Endrick",
+  "Estêvão Willian Almeida de Oliveira Gonçalves": "Estêvão",
+  "Vitor Roque": "Vitor Roque",
+  "Vitor Hugo Roque Ferreira": "Vitor Roque",
+  "João Cancelo": "Cancelo",
+  "João Palhinha": "Palhinha",
+  "João Gomes": "João Gomes",
+};
+
+const PARTICLES = new Set([
+  "van",
+  "von",
+  "de",
+  "da",
+  "do",
+  "dos",
+  "das",
+  "del",
+  "della",
+  "di",
+  "le",
+  "la",
+  "al",
+  "el",
+  "san",
+  "santa",
+  "mc",
+  "mac",
+]);
+
+const SUFFIXES = new Set([
+  "júnior",
+  "junior",
+  "jr",
+  "jr.",
+  "filho",
+  "neto",
+  "sobrinho",
+]);
+
+/**
+ * Returns the recognizable football display name of a player (e.g. for jerseys, pitch, lineups)
+ * Properly handles compound first names ("João Félix"), particles ("Van Dijk"), suffixes ("Vini Jr.")
+ */
+export function getPlayerDisplayName(fullName: string | undefined | null): string {
+  if (!fullName) return "";
+  const trimmed = fullName.trim().replace(/\s+/g, " ");
+  if (KNOWN_FOOTBALL_NAMES[trimmed]) {
+    return KNOWN_FOOTBALL_NAMES[trimmed];
+  }
+
+  const parts = trimmed.split(" ");
+  if (parts.length <= 1) return trimmed;
+
+  const firstLower = parts[0].toLowerCase();
+
+  // 1. Double first names commonly used in football (e.g., "João Félix ...", "João Pedro ...")
+  if (
+    [
+      "joão",
+      "joao",
+      "diogo",
+      "bruno",
+      "gabriel",
+      "gonçalo",
+      "goncalo",
+      "matheus",
+      "mateus",
+      "bernardo",
+      "lamine",
+    ].includes(firstLower)
+  ) {
+    if (parts.length >= 2 && !PARTICLES.has(parts[1].toLowerCase())) {
+      return `${parts[0]} ${parts[1]}`;
+    }
+  }
+
+  // 2. Check suffix (e.g. "Oliveira Júnior" -> "Vini Jr." or "X Jr.")
+  const lastLower = parts[parts.length - 1].toLowerCase().replace(/\.$/, "");
+  if (SUFFIXES.has(lastLower)) {
+    if (parts.length >= 2) {
+      return `${parts[0]} Jr.`;
+    }
+  }
+
+  // 3. Preposition / particle before last surname (e.g. "Virgil van Dijk" -> "Van Dijk", "Micky van de Ven" -> "Van de Ven")
+  if (parts.length >= 3 && PARTICLES.has(parts[parts.length - 2].toLowerCase())) {
+    const penult = parts[parts.length - 2];
+    const capPenult = penult.charAt(0).toUpperCase() + penult.slice(1).toLowerCase();
+    if (parts.length >= 4 && PARTICLES.has(parts[parts.length - 3].toLowerCase())) {
+      const ante = parts[parts.length - 3];
+      const capAnte = ante.charAt(0).toUpperCase() + ante.slice(1).toLowerCase();
+      return `${capAnte} ${penult.toLowerCase()} ${parts[parts.length - 1]}`;
+    }
+    return `${capPenult} ${parts[parts.length - 1]}`;
+  }
+
+  // 4. Default 2-word name: return 2nd word (surname) unless first is a particle
+  if (parts.length === 2) {
+    if (PARTICLES.has(parts[0].toLowerCase())) {
+      return trimmed;
+    }
+    return parts[1];
+  }
+
+  // 5. If 3 or more words and no rule matched, return the last surname
+  return parts[parts.length - 1];
+}
+
 export interface FormationSlot {
   slotIndex: number;
   label: string;

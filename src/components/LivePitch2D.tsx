@@ -16,6 +16,7 @@ import type { LiveMatchSession } from "../engine/matchEngine";
 import {
   formatMoney,
   getFormationSlots,
+  getPlayerDisplayName,
   getStaminaColor,
   type FormationSlot,
 } from "../utils/format";
@@ -1743,9 +1744,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       : null;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3 sm:p-3.5 flex flex-col h-full min-h-0 justify-between">
       {/* Pitch Header Controls */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-1.5 font-bold text-white">
             <span
@@ -1778,7 +1779,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                       : awayKitColors.primary,
                 }}
               />
-              Posse: <strong className="text-white">{carrierPlayer.name}</strong>
+              Posse: <strong className="text-white">{getPlayerDisplayName(carrierPlayer.name)}</strong>
               <span className="text-slate-500">•</span>
               <span
                 className={`font-bold ${
@@ -1882,12 +1883,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       {/* Vertical 2D Pitch */}
       <div
-        className={`relative mx-auto overflow-hidden rounded-2xl border-2 border-emerald-800 select-none shadow-[inset_0_0_70px_rgba(0,0,0,0.4)] transition-all duration-300 ${
+        className={`relative mx-auto overflow-hidden rounded-2xl border-2 border-emerald-800 select-none shadow-[inset_0_0_70px_rgba(0,0,0,0.4)] transition-all duration-300 max-h-[calc(100vh-14rem)] ${
           activePitchSize === "normal"
-            ? "w-full max-w-2xl aspect-[3/4]"
+            ? "w-full max-w-xl aspect-[3/4]"
             : activePitchSize === "large"
-            ? "w-full max-w-4xl aspect-[4/5] sm:aspect-[3/4]"
-            : "w-full max-w-6xl aspect-[4/5] sm:aspect-[16/11] lg:aspect-[16/10]"
+            ? "w-full max-w-3xl aspect-[4/5] sm:aspect-[3/4]"
+            : "w-full max-w-5xl aspect-[4/5] sm:aspect-[16/11] lg:aspect-[16/10]"
         }`}
         style={{
           backgroundImage:
@@ -2213,7 +2214,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const isCardTarget = cardHighlight?.playerId === playerId;
           const stamina = Math.round(session.playerStamina[playerId] ?? player.stamina);
           const rating = (session.playerRatings[playerId] ?? 6.5).toFixed(1);
-          const surname = player.name.split(" ").slice(-1)[0];
+          const surname = getPlayerDisplayName(player.name);
 
           return (
             <button

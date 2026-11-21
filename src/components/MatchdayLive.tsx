@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Play,
   Pause,
-  FastForward,
   SkipForward,
   CheckCircle2,
   ArrowLeftRight,
@@ -13,6 +12,10 @@ import {
   HeartPulse,
   Compass,
   Flag,
+  Radio,
+  BarChart3,
+  Users,
+  Sparkles,
 } from "lucide-react";
 import type {
   Club,
@@ -34,11 +37,11 @@ import {
   stepLiveMatchMinute,
   type LiveMatchSession,
 } from "../engine/matchEngine";
-import { formatMoney, getStaminaColor } from "../utils/format";
+import { formatMoney, getPlayerDisplayName, getStaminaColor } from "../utils/format";
 import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
 import { ClubKit } from "./ClubKit";
-import { LivePitch2D } from "./LivePitch2D";
+import { LivePitch2D, type PitchSize } from "./LivePitch2D";
 
 interface MatchdayLiveProps {
   matchweek: number;
@@ -110,15 +113,19 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
 
   const sessionsRef = useRef<LiveMatchSession[]>([]);
   const [, setTick] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+
+  // Pre-Match lineup presentation state
+  const [isPreMatch, setIsPreMatch] = useState<boolean>(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [speedMs, setSpeedMs] = useState<number>(1200);
-  const [pitchSize, setPitchSize] = useState<"normal" | "large" | "full">(() => {
+  const [pitchSize, setPitchSize] = useState<PitchSize>(() => {
     try {
-      const saved = localStorage.getItem("fm_pitch_size") as "normal" | "large" | "full";
+      const saved = localStorage.getItem("fm_pitch_size") as PitchSize;
       if (saved === "normal" || saved === "large" || saved === "full") return saved;
     } catch {}
     return "large";
   });
+  const [activePanelTab, setActivePanelTab] = useState<"subs" | "commentary" | "stats" | "other_matches">("subs");
   const simPauseUntilRef = useRef<number>(0);
   const halftimeTriggeredRef = useRef<boolean>(false);
   const [subOutId, setSubOutId] = useState<number | null>(null);
@@ -199,6 +206,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       if (uSess && !uSess.finished && uSess.minute === 45 && !halftimeTriggeredRef.current) {
         halftimeTriggeredRef.current = true;
         setIsPlaying(false);
+        setActivePanelTab("subs"); // Auto focus on substitutions for user to make changes
       }
 
       if (uSess && !uSess.finished && uSess.events.length > prevUserEventsLen) {
@@ -210,6 +218,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         );
         if (triggerEvent && autoOpenFormationOnRedCard) {
           setIsPlaying(false);
+          setActivePanelTab("subs");
           setTacticalStopReason({
             type: triggerEvent.type as "red_card" | "injury",
             playerId: triggerEvent.playerId,
@@ -327,223 +336,547 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
     ? playerMap.get(finalizedUser.motmPlayerId)
     : undefined;
 
-  return (
-    <div className="space-y-5">
-      {/* Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 px-5 py-3.5">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-            {homeClub.division ?? "Premier League"} • Rodada {matchweek} Ao Vivo
-          </div>
-          <div className="text-xs text-slate-400">
-            {homeClub.stadium} ({userSession.attendance.toLocaleString("pt-BR")} /{" "}
-            {userSession.stadiumCapacity.toLocaleString("pt-BR")}) • Renda:{" "}
-            <span className="text-emerald-400 font-semibold">
-              {formatMoney(userSession.gateRevenueEur)}
-            </span>{" "}
-            • Árbitro: {userSession.referee.name} • {userFixture.tvBroadcaster}
+  // Starters and Benches for both clubs
+  const homeStarters = userSession.homeActiveIds
+    .map((id) => playerMap.get(id))
+    .filter(Boolean) as Player[];
+  const awayStarters = userSession.awayActiveIds
+    .map((id) => playerMap.get(id))
+    .filter(Boolean) as Player[];
+
+  const homeBench = userSession.homeBenchIds
+    .map((id) => playerMap.get(id))
+    .filter(Boolean) as Player[];
+  const awayBench = userSession.awayBenchIds
+    .map((id) => playerMap.get(id))
+    .filter(Boolean) as Player[];
+
+  const homeAvgOvr =
+    homeStarters.length > 0
+      ? Math.round(homeStarters.reduce((acc, p) => acc + p.overall, 0) / homeStarters.length)
+      : homeClub.avgOverall;
+
+  const awayAvgOvr =
+    awayStarters.length > 0
+      ? Math.round(awayStarters.reduce((acc, p) => acc + p.overall, 0) / awayStarters.length)
+      : awayClub.avgOverall;
+
+  // --- PRE-MATCH / FORMATION PRESENTATION MODAL / SCREEN ---
+  if (isPreMatch) {
+    return (
+      <div className="flex flex-col gap-4 max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-1 text-slate-100">
+        {/* Stadium Atmosphere & Header Banner */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+          {getClubVisuals(homeClub).stadiumImageUrl && (
+            <img
+              src={getClubVisuals(homeClub).stadiumImageUrl}
+              alt={homeClub.stadium}
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20"
+            />
+          )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-slate-950" />
+
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
+                <Sparkles className="h-3.5 w-3.5" />
+                {homeClub.division ?? "Premier League"} • Rodada {matchweek}
+              </div>
+              <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
+                Apresentação das Equipes & Formações
+              </h2>
+              <div className="mt-1 text-xs text-slate-400">
+                {homeClub.stadium} ({userSession.attendance.toLocaleString("pt-BR")} torcedores) • Renda Estimada:{" "}
+                <span className="text-emerald-400 font-semibold">{formatMoney(userSession.gateRevenueEur)}</span> •
+                Árbitro: {userSession.referee.name} • {userFixture.tvBroadcaster}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setIsPreMatch(false);
+                  setIsPlaying(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 hover:scale-105 active:scale-95"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                {userSession.minute > 0 ? "Voltar ao Jogo Ao Vivo" : "Dar o Pontapé Inicial"}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Side-by-side Lineups & Tactical Face-off */}
+        <div className="grid gap-4 lg:grid-cols-12">
+          {/* Home Team Column */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 lg:col-span-4 flex flex-col space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <ClubBadge club={homeClub} size="lg" />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-black text-white text-base">{homeClub.name}</h3>
+                    {homeClub.id === userClubId && (
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-500/40">
+                        Seu Time
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                    <span>Mandante</span>
+                    <span>•</span>
+                    <span className="font-bold text-emerald-400">OVR Médio: {homeAvgOvr}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end">
+                <div className="rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-black text-emerald-300">
+                  {liveTacticsByClub[homeClub.id]?.formation ?? "4-3-3"}
+                </div>
+                <div className="mt-1 hidden sm:block">
+                  <ClubKit
+                    club={homeClub}
+                    variant={homeClub.id === userClubId ? userKitVariant : "home"}
+                    size="sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Home Starting XI */}
+            <div className="space-y-1.5 flex-1">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex justify-between">
+                <span>11 Titulares</span>
+                <span>OVR / Stamina</span>
+              </div>
+              <div className="space-y-1">
+                {homeStarters.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-800/80 bg-slate-950/60 px-3 py-1.5 text-xs transition hover:border-slate-700"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 text-center font-bold text-amber-300 text-[11px]">
+                        #{p.shirtNumber ?? "-"}
+                      </span>
+                      <span className="w-8 text-center rounded bg-slate-800 px-1 py-0.5 text-[10px] font-bold text-slate-300">
+                        {p.primaryPosition}
+                      </span>
+                      <span className="truncate font-semibold text-white">
+                        {getPlayerDisplayName(p.name)}
+                      </span>
+                    </div>
+                    {renderOvrStamina(p.overall, Math.round(p.stamina), "text-slate-200")}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Home Bench */}
+            <div className="pt-2 border-t border-slate-800">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Banco de Reservas ({homeBench.length})
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {homeBench.slice(0, 7).map((p) => (
+                  <span
+                    key={p.id}
+                    className="rounded bg-slate-950 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-800"
+                    title={`${p.name} (${p.primaryPosition}) - OVR ${p.overall}`}
+                  >
+                    {p.primaryPosition} {getPlayerDisplayName(p.name)} ({p.overall})
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Center Column: Tactical Adjustments & Matchup Tuning */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 lg:col-span-4 flex flex-col justify-between space-y-4">
+            <div>
+              <div className="flex items-center justify-center gap-2 text-center border-b border-slate-800 pb-3">
+                <span className="text-xl font-black text-slate-400">VS</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Confronto Tático
+                </span>
+              </div>
+
+              {/* Tactical Tuning for User Club */}
+              <div className="mt-4 space-y-3.5">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                    <Compass className="h-4 w-4" />
+                    <span>Ajustes Rápidos da sua Equipe</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Você pode alterar a formação e postura tática antes de dar o pontapé inicial.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">
+                    Formação Tática
+                  </label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {LIVE_FORMATIONS.map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => handleChangeFormationLive(f)}
+                        className={`rounded-lg py-1.5 text-xs font-black transition ${
+                          userTactics.formation === f
+                            ? "bg-emerald-500 text-slate-950 shadow-md"
+                            : "border border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700"
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Mentalidade
+                    </label>
+                    <select
+                      value={userTactics.mentality}
+                      onChange={(e) =>
+                        setLiveTacticsByClub((prev) => ({
+                          ...prev,
+                          [userClubId]: {
+                            ...prev[userClubId],
+                            mentality: e.target.value as Mentality,
+                          },
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs font-semibold text-white"
+                    >
+                      <option value="Defensive">Defensiva</option>
+                      <option value="Balanced">Equilibrada</option>
+                      <option value="Attacking">Ofensiva</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Pressão
+                    </label>
+                    <select
+                      value={userTactics.pressing}
+                      onChange={(e) =>
+                        setLiveTacticsByClub((prev) => ({
+                          ...prev,
+                          [userClubId]: {
+                            ...prev[userClubId],
+                            pressing: e.target.value as Pressing,
+                          },
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs font-semibold text-white"
+                    >
+                      <option value="Low">Baixa</option>
+                      <option value="Medium">Média</option>
+                      <option value="High">Alta</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Passe
+                    </label>
+                    <select
+                      value={userTactics.passingStyle}
+                      onChange={(e) =>
+                        setLiveTacticsByClub((prev) => ({
+                          ...prev,
+                          [userClubId]: {
+                            ...prev[userClubId],
+                            passingStyle: e.target.value as PassingStyle,
+                          },
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs font-semibold text-white"
+                    >
+                      <option value="Short">Curto</option>
+                      <option value="Mixed">Misto</option>
+                      <option value="Direct">Direto</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Big Launch Button */}
+            <div className="pt-4 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  setIsPreMatch(false);
+                  setIsPlaying(true);
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-black text-slate-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                {userSession.minute > 0 ? "Retomar Partida Ao Vivo" : "Confirmar e Rolar a Bola"}
+              </button>
+            </div>
+          </div>
+
+          {/* Away Team Column */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 lg:col-span-4 flex flex-col space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <ClubBadge club={awayClub} size="lg" />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-black text-white text-base">{awayClub.name}</h3>
+                    {awayClub.id === userClubId && (
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-500/40">
+                        Seu Time
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                    <span>Visitante</span>
+                    <span>•</span>
+                    <span className="font-bold text-sky-400">OVR Médio: {awayAvgOvr}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end">
+                <div className="rounded-lg bg-sky-500/20 border border-sky-500/40 px-2.5 py-1 text-xs font-black text-sky-300">
+                  {liveTacticsByClub[awayClub.id]?.formation ?? "4-3-3"}
+                </div>
+                <div className="mt-1 hidden sm:block">
+                  <ClubKit
+                    club={awayClub}
+                    variant={awayClub.id === userClubId ? userKitVariant : "away"}
+                    size="sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Away Starting XI */}
+            <div className="space-y-1.5 flex-1">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex justify-between">
+                <span>11 Titulares</span>
+                <span>OVR / Stamina</span>
+              </div>
+              <div className="space-y-1">
+                {awayStarters.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-800/80 bg-slate-950/60 px-3 py-1.5 text-xs transition hover:border-slate-700"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 text-center font-bold text-amber-300 text-[11px]">
+                        #{p.shirtNumber ?? "-"}
+                      </span>
+                      <span className="w-8 text-center rounded bg-slate-800 px-1 py-0.5 text-[10px] font-bold text-slate-300">
+                        {p.primaryPosition}
+                      </span>
+                      <span className="truncate font-semibold text-white">
+                        {getPlayerDisplayName(p.name)}
+                      </span>
+                    </div>
+                    {renderOvrStamina(p.overall, Math.round(p.stamina), "text-slate-200")}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Away Bench */}
+            <div className="pt-2 border-t border-slate-800">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Banco de Reservas ({awayBench.length})
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {awayBench.slice(0, 7).map((p) => (
+                  <span
+                    key={p.id}
+                    className="rounded bg-slate-950 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-800"
+                    title={`${p.name} (${p.primaryPosition}) - OVR ${p.overall}`}
+                  >
+                    {p.primaryPosition} {getPlayerDisplayName(p.name)} ({p.overall})
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- LIVE MATCHDAY DASHBOARD (OPTIMIZED VIEWPORT HEIGHT - FIT TO SCREEN) ---
+  return (
+    <div className="flex flex-col gap-2.5 h-[calc(100vh-5.5rem)] min-h-[580px] max-h-[calc(100vh-5.5rem)] overflow-hidden">
+      {/* 1. Integrated Compact Broadcast Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/95 px-4 py-2 shrink-0">
+        {/* Left: Scoreboard */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <ClubBadge club={homeClub} size="sm" />
+            <span className="font-black text-white text-sm hidden sm:inline">{homeClub.name}</span>
+            <span className="font-black text-white text-xs sm:hidden">{homeClub.shortName}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 rounded-lg bg-slate-950 px-3 py-1 font-black text-white text-base ring-1 ring-slate-800">
+            <span className="text-emerald-400">{userSession.homeGoals}</span>
+            <span className="text-slate-500">-</span>
+            <span className="text-sky-400">{userSession.awayGoals}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="font-black text-white text-xs sm:hidden">{awayClub.shortName}</span>
+            <span className="font-black text-white text-sm hidden sm:inline">{awayClub.name}</span>
+            <ClubBadge club={awayClub} size="sm" />
+          </div>
+
+          {/* Goal Scorer Ticker */}
+          <div className="hidden xl:flex items-center gap-2 text-[11px] text-slate-300 pl-2 border-l border-slate-800">
+            {homeGoalEvents.map((g) => (
+              <span key={g.id} className="text-emerald-300 flex items-center gap-1">
+                <Award className="h-3 w-3 text-emerald-400 shrink-0" />
+                {getPlayerDisplayName(g.playerName)} ({g.minute}')
+              </span>
+            ))}
+            {awayGoalEvents.map((g) => (
+              <span key={g.id} className="text-sky-300 flex items-center gap-1">
+                <Award className="h-3 w-3 text-sky-400 shrink-0" />
+                {getPlayerDisplayName(g.playerName)} ({g.minute}')
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Center: Live Minute Pill */}
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-3 py-0.5 text-xs font-black tracking-wider ${
+              userSession.finished
+                ? "bg-slate-800 text-slate-300"
+                : isHalftime
+                ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40"
+                : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 animate-pulse"
+            }`}
+          >
+            {userSession.finished
+              ? "FIM DE JOGO"
+              : isHalftime
+              ? "INTERVALO"
+              : `${userSession.minute <= 45 ? "1ºT" : "2ºT"} • ${
+                  userSession.minute > 90
+                    ? `90+${userSession.minute - 90}'`
+                    : `${userSession.minute}'`
+                }`}
+          </span>
+          <span className="hidden md:inline text-[11px] text-slate-400">
+            Rodada {matchweek}
+          </span>
+        </div>
+
+        {/* Right: Controls & Speed */}
+        <div className="flex items-center gap-1.5">
+          {/* Button to view formations */}
+          <button
+            onClick={() => setIsPreMatch(true)}
+            title="Ver Escalações e Formações Táticas de Ambos os Times"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition"
+          >
+            <Users className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Escalações</span>
+          </button>
+
           {!allFinished ? (
             <>
               {onToggleAutoFormationOnRedCard && (
                 <button
                   onClick={onToggleAutoFormationOnRedCard}
-                  title="Quando ativo, pausa o jogo e abre a formação automaticamente ao sofrer expulsão ou lesão"
-                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-bold transition ${
+                  title="Pausa automática em expulsões/lesões"
+                  className={`hidden sm:inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-bold transition ${
                     autoOpenFormationOnRedCard
                       ? "border-amber-500/40 bg-amber-500/15 text-amber-200"
-                      : "border-slate-700 bg-slate-800 text-slate-400"
+                      : "border-slate-800 bg-slate-950 text-slate-500"
                   }`}
                 >
                   <Compass className="h-3.5 w-3.5" />
-                  Auto-Formação: {autoOpenFormationOnRedCard ? "ON" : "OFF"}
+                  Auto: {autoOpenFormationOnRedCard ? "ON" : "OFF"}
                 </button>
               )}
+
               <button
                 onClick={() => setIsPlaying((p) => !p)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700 transition"
               >
                 {isPlaying ? (
                   <>
-                    <Pause className="h-3.5 w-3.5" /> Pausar
+                    <Pause className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Pausar</span>
                   </>
                 ) : (
                   <>
-                    <Play className="h-3.5 w-3.5" /> Retomar
+                    <Play className="h-3.5 w-3.5 fill-current" /> <span className="hidden sm:inline">Retomar</span>
                   </>
                 )}
               </button>
+
               {[
-                { label: "0.5x", ms: 2400 },
                 { label: "1x", ms: 1200 },
                 { label: "2x", ms: 600 },
                 { label: "4x", ms: 300 },
-                { label: "8x", ms: 150 },
               ].map((opt) => (
                 <button
                   key={opt.ms}
                   onClick={() => setSpeedMs(opt.ms)}
-                  title={`${opt.label}: ~${Math.round((opt.ms * 93) / 60000 * 10) / 10} min para os 90 minutos`}
-                  className={`inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold ${
+                  className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
                     speedMs === opt.ms
-                      ? "bg-emerald-500 text-slate-950"
+                      ? "bg-emerald-500 text-slate-950 font-black"
                       : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                   }`}
                 >
-                  {opt.ms <= 300 && <FastForward className="h-3.5 w-3.5" />} {opt.label}
+                  {opt.label}
                 </button>
               ))}
+
               <button
                 onClick={handleSimulateToEnd}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-bold text-amber-300 hover:bg-slate-700"
+                title="Simular partida até o apito final"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-slate-700 transition"
               >
-                <SkipForward className="h-3.5 w-3.5" /> Simular Fim
+                <SkipForward className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Fim</span>
               </button>
             </>
           ) : (
             <button
               onClick={handleCompleteRound}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-emerald-400"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-black text-slate-950 transition hover:bg-emerald-400"
             >
-              <CheckCircle2 className="h-4 w-4" /> Finalizar Rodada e Avançar
+              <CheckCircle2 className="h-4 w-4" /> Finalizar Rodada
             </button>
           )}
         </div>
       </div>
 
+      {/* Halftime Quick Banner */}
       {isHalftime && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-3.5">
-          <div>
-            <div className="text-xs font-black uppercase tracking-wider text-amber-300">
-              Intervalo • {userSession.homeGoals} x {userSession.awayGoals}
-            </div>
-            <div className="text-xs text-slate-300">
-              Hora de ajustar a formação, trocar jogadores e corrigir o rumo do jogo antes do 2º tempo.
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 shrink-0">
+          <div className="text-xs text-amber-200">
+            <strong>Intervalo ({userSession.homeGoals} x {userSession.awayGoals})</strong> — Ajuste sua equipe na aba de Substituições e clique para retomar.
           </div>
           <button
             onClick={() => setIsPlaying(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-5 py-2 text-xs font-black text-slate-950 hover:bg-amber-300"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-1 text-xs font-black text-slate-950 hover:bg-amber-300 transition"
           >
             <Play className="h-3.5 w-3.5 fill-current" /> Iniciar 2º Tempo
           </button>
         </div>
       )}
 
-      {/* Main Layout */}
-      <div className={`grid gap-5 transition-all ${pitchSize === "full" ? "grid-cols-1" : "lg:grid-cols-12"}`}>
-        {/* Left/Center: User Match Broadcast */}
-        <div className={`space-y-5 transition-all ${pitchSize === "full" ? "w-full" : "lg:col-span-8"}`}>
-          {/* Scoreboard with Stadium Photo Atmosphere */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-6">
-            {getClubVisuals(homeClub).stadiumImageUrl && (
-              <img
-                src={getClubVisuals(homeClub).stadiumImageUrl}
-                alt={homeClub.stadium}
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-15"
-              />
-            )}
-            <div className="pointer-events-none absolute inset-0 bg-slate-950/80" />
-
-            <div className="relative">
-              <div className="mb-3 flex justify-center">
-                <span
-                  className={`rounded-full px-3.5 py-1 text-xs font-black tracking-wider ${
-                    userSession.finished
-                      ? "bg-slate-800 text-slate-300"
-                      : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 animate-pulse"
-                  }`}
-                >
-                  {userSession.finished
-                    ? "FIM DE JOGO"
-                    : isHalftime
-                    ? "INTERVALO"
-                    : `${userSession.minute <= 45 ? "1º TEMPO" : "2º TEMPO"} • ${
-                        userSession.minute > 90
-                          ? `90+${userSession.minute - 90}'`
-                          : `${userSession.minute}'`
-                      }`}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-11 items-center gap-2">
-                <div className="col-span-4 flex flex-col items-center text-center sm:items-end sm:text-right">
-                  <div className="flex items-center gap-2.5">
-                    <span className="hidden sm:inline text-lg font-black text-white">
-                      {homeClub.name}
-                    </span>
-                    <span className="sm:hidden text-sm font-black text-white">
-                      {homeClub.shortName}
-                    </span>
-                    <div className="hidden md:block">
-                      <ClubKit
-                        club={homeClub}
-                        variant={homeClub.id === userClubId ? userKitVariant : "home"}
-                        size="sm"
-                      />
-                    </div>
-                    <ClubBadge club={homeClub} size="lg" />
-                  </div>
-                  <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
-                    {homeGoalEvents.map((g) => (
-                      <div key={g.id} className="flex items-center gap-1.5">
-                        <Award className="h-3 w-3 text-emerald-400 shrink-0" />
-                        <span>{g.playerName} ({g.minute}')</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="col-span-3 flex items-center justify-center gap-3 text-4xl font-black text-white sm:text-5xl">
-                  <span>{userSession.homeGoals}</span>
-                  <span className="text-slate-500 text-2xl">-</span>
-                  <span>{userSession.awayGoals}</span>
-                </div>
-
-                <div className="col-span-4 flex flex-col items-center text-center sm:items-start sm:text-left">
-                  <div className="flex items-center gap-2.5">
-                    <ClubBadge club={awayClub} size="lg" />
-                    <div className="hidden md:block">
-                      <ClubKit
-                        club={awayClub}
-                        variant={awayClub.id === userClubId ? userKitVariant : "away"}
-                        size="sm"
-                      />
-                    </div>
-                    <span className="hidden sm:inline text-lg font-black text-white">
-                      {awayClub.name}
-                    </span>
-                    <span className="sm:hidden text-sm font-black text-white">
-                      {awayClub.shortName}
-                    </span>
-                  </div>
-                  <div className="mt-2 space-y-0.5 text-[11px] text-emerald-300">
-                    {awayGoalEvents.map((g) => (
-                      <div key={g.id} className="flex items-center gap-1.5">
-                        <Award className="h-3 w-3 text-emerald-400 shrink-0" />
-                        <span>{g.playerName} ({g.minute}')</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {motmPlayer && finalizedUser && (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
-                  <Award className="h-4 w-4 text-amber-400" />
-                  <span>
-                    Craque da Partida: <strong className="text-white">{motmPlayer.name}</strong> (Nota{" "}
-                    {finalizedUser.playerRatings[motmPlayer.id]?.toFixed(1)})
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 2D Live Pitch Radar */}
+      {/* 2. Main Arena: 2D Pitch on Left, Integrated Tabs on Right */}
+      <div className={`flex-1 min-h-0 grid gap-2.5 overflow-hidden ${pitchSize === "full" ? "grid-cols-1" : "lg:grid-cols-12"}`}>
+        {/* Left Column: 2D Live Pitch & Ball Action */}
+        <div className={`flex flex-col min-h-0 overflow-hidden ${pitchSize === "full" ? "w-full" : "lg:col-span-7 xl:col-span-8"}`}>
           <LivePitch2D
             session={userSession}
             homeClub={homeClub}
@@ -557,84 +890,294 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             speedMs={speedMs}
             simPauseRef={simPauseUntilRef}
             subOutId={subOutId}
-            onSelectSubOut={(pid) => setSubOutId((prev) => (prev === pid ? null : pid))}
+            onSelectSubOut={(pid) => {
+              setActivePanelTab("subs");
+              setSubOutId((prev) => (prev === pid ? null : pid));
+            }}
             pitchSize={pitchSize}
             onPitchSizeChange={setPitchSize}
           />
+        </div>
 
-          {/* Match Stats */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-              Estatísticas da Partida
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                [
-                  "Posse de Bola",
-                  `${userSession.homeStats.possession}%`,
-                  `${userSession.awayStats.possession}%`,
-                  userSession.homeStats.possession,
-                  userSession.awayStats.possession,
-                ],
-                [
-                  "Gols Esperados (xG)",
-                  userSession.homeStats.xg.toFixed(2),
-                  userSession.awayStats.xg.toFixed(2),
-                  userSession.homeStats.xg,
-                  userSession.awayStats.xg,
-                ],
-                [
-                  "Finalizações (No Alvo)",
-                  `${userSession.homeStats.shots} (${userSession.homeStats.shotsOnTarget})`,
-                  `${userSession.awayStats.shots} (${userSession.awayStats.shotsOnTarget})`,
-                  userSession.homeStats.shots,
-                  userSession.awayStats.shots,
-                ],
-                [
-                  "Impedimentos",
-                  `${userSession.homeStats.offsides ?? 0}`,
-                  `${userSession.awayStats.offsides ?? 0}`,
-                  userSession.homeStats.offsides ?? 0,
-                  userSession.awayStats.offsides ?? 0,
-                ],
-                [
-                  "Escanteios / Faltas",
-                  `${userSession.homeStats.corners} / ${userSession.homeStats.fouls}`,
-                  `${userSession.awayStats.corners} / ${userSession.awayStats.fouls}`,
-                  userSession.homeStats.corners + userSession.homeStats.fouls,
-                  userSession.awayStats.corners + userSession.awayStats.fouls,
-                ],
-              ].map(([label, hText, aText, hNum, aNum]) => {
-                const total = Math.max(0.01, (hNum as number) + (aNum as number));
-                const hPct = Math.round(((hNum as number) / total) * 100);
-                return (
-                  <div key={label as string} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="font-bold text-white">{hText}</span>
-                      <span className="text-slate-400">{label}</span>
-                      <span className="font-bold text-white">{aText}</span>
-                    </div>
-                    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                      <div className="bg-emerald-500 transition-all" style={{ width: `${hPct}%` }} />
-                      <div
-                        className="bg-sky-500 transition-all"
-                        style={{ width: `${100 - hPct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        {/* Right Column: Interactive Broadcast Hub with Tabs (Subs / Narração / Estatísticas / Outros Jogos) */}
+        <div className={`flex flex-col min-h-0 rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden ${pitchSize === "full" ? "hidden" : "lg:col-span-5 xl:col-span-4"}`}>
+          {/* Top Panel Tab Headers */}
+          <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-950/60 p-1 shrink-0">
+            <button
+              onClick={() => setActivePanelTab("subs")}
+              className={`flex items-center justify-center gap-1.5 py-2 px-1 text-xs font-bold rounded-lg transition ${
+                activePanelTab === "subs"
+                  ? "bg-slate-800 text-emerald-400 shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Flame className="h-3.5 w-3.5 text-amber-400" />
+              <span>Tática</span>
+              <span className="rounded bg-slate-900 px-1 py-0.2 text-[10px] text-slate-300">
+                {userSubsUsed}/5
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActivePanelTab("commentary")}
+              className={`flex items-center justify-center gap-1.5 py-2 px-1 text-xs font-bold rounded-lg transition ${
+                activePanelTab === "commentary"
+                  ? "bg-slate-800 text-emerald-400 shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Radio className="h-3.5 w-3.5 text-sky-400" />
+              <span>Lances</span>
+            </button>
+
+            <button
+              onClick={() => setActivePanelTab("stats")}
+              className={`flex items-center justify-center gap-1.5 py-2 px-1 text-xs font-bold rounded-lg transition ${
+                activePanelTab === "stats"
+                  ? "bg-slate-800 text-emerald-400 shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-indigo-400" />
+              <span>Stats</span>
+            </button>
+
+            <button
+              onClick={() => setActivePanelTab("other_matches")}
+              className={`flex items-center justify-center gap-1.5 py-2 px-1 text-xs font-bold rounded-lg transition ${
+                activePanelTab === "other_matches"
+                  ? "bg-slate-800 text-emerald-400 shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Shield className="h-3.5 w-3.5 text-teal-400" />
+              <span>Jogos</span>
+            </button>
           </div>
 
-          {/* Live Commentary + Other Matches of the Round */}
-          <div className="grid gap-5 md:grid-cols-2">
-            {/* Commentary */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-                Narração Lance a Lance
-              </h3>
-              <div className="h-80 space-y-2 overflow-y-auto pr-1">
+          {/* Panel Tab Content (Smooth Internal Scroll) */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-3.5">
+            {/* TAB 1: Substitutions & Tactics */}
+            {activePanelTab === "subs" && (
+              <div className="space-y-3.5">
+                {/* Quick Formation selector */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase text-slate-400">
+                    <span>Formação em Campo</span>
+                    <span className="text-emerald-400 font-semibold">{userActiveIds.length} atletas</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {LIVE_FORMATIONS.map((f) => (
+                      <button
+                        key={f}
+                        disabled={userSession.finished}
+                        onClick={() => handleChangeFormationLive(f)}
+                        className={`rounded-lg py-1 text-[11px] font-bold transition ${
+                          userTactics.formation === f
+                            ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
+                            : "border border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700 disabled:opacity-50"
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tactical Knobs */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Mentalidade</label>
+                    <select
+                      disabled={userSession.finished}
+                      value={userTactics.mentality}
+                      onChange={(e) =>
+                        setLiveTacticsByClub((prev) => ({
+                          ...prev,
+                          [userClubId]: {
+                            ...prev[userClubId],
+                            mentality: e.target.value as Mentality,
+                          },
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
+                    >
+                      <option value="Defensive">Defensiva</option>
+                      <option value="Balanced">Equilibrada</option>
+                      <option value="Attacking">Ofensiva</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Pressão</label>
+                    <select
+                      disabled={userSession.finished}
+                      value={userTactics.pressing}
+                      onChange={(e) =>
+                        setLiveTacticsByClub((prev) => ({
+                          ...prev,
+                          [userClubId]: {
+                            ...prev[userClubId],
+                            pressing: e.target.value as Pressing,
+                          },
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
+                    >
+                      <option value="Low">Baixa</option>
+                      <option value="Medium">Média</option>
+                      <option value="High">Alta</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Passe</label>
+                    <select
+                      disabled={userSession.finished}
+                      value={userTactics.passingStyle}
+                      onChange={(e) =>
+                        setLiveTacticsByClub((prev) => ({
+                          ...prev,
+                          [userClubId]: {
+                            ...prev[userClubId],
+                            passingStyle: e.target.value as PassingStyle,
+                          },
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
+                    >
+                      <option value="Short">Curto</option>
+                      <option value="Mixed">Misto</option>
+                      <option value="Direct">Direto</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Sub Out banner */}
+                {subOutId !== null && (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200">
+                    <span className="truncate">
+                      Saindo: <strong className="text-white">{getPlayerDisplayName(playerMap.get(subOutId)?.name)}</strong>
+                    </span>
+                    <button
+                      onClick={() => setSubOutId(null)}
+                      className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-200 hover:bg-slate-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+
+                {/* Starters list */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <span>Em Campo ({userActiveIds.length})</span>
+                    <span>{userSubsUsed < 5 ? "Clique p/ substituir" : "Trocas esgotadas"}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {userActiveIds.map((id) => {
+                      const p = playerMap.get(id);
+                      if (!p) return null;
+                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
+                      const rating = (userSession.playerRatings[id] ?? 6.5).toFixed(1);
+                      const isSelected = subOutId === id;
+                      const isInjured = userSession.injuredIds.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          disabled={userSubsUsed >= 5}
+                          onClick={() => setSubOutId((prev) => (prev === id ? null : id))}
+                          className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
+                            isSelected
+                              ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
+                              : isInjured
+                              ? "border-rose-500/60 bg-rose-500/15"
+                              : "border-slate-800 bg-slate-950/70 hover:border-amber-500/40 disabled:opacity-60"
+                          }`}
+                        >
+                          <span className="truncate font-semibold text-white">
+                            <span className="mr-1.5 inline-block w-6 text-[10px] font-bold text-slate-400">
+                              {p.primaryPosition}
+                            </span>
+                            {getPlayerDisplayName(p.name)}
+                            {isInjured && (
+                              <span className="ml-1.5 rounded bg-rose-600 px-1 py-0.2 text-[9px] font-black text-white">
+                                +LESÃO
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] text-slate-400" title="Nota na partida">
+                              {rating}
+                            </span>
+                            {renderOvrStamina(p.overall, stam, "text-slate-200")}
+                            <ArrowLeftRight
+                              className={`h-3 w-3 ${
+                                isSelected ? "text-amber-300" : "text-slate-500"
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Bench list */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    <span>Banco de Reservas ({userBenchIds.length})</span>
+                    <span>
+                      {subOutId !== null && userSubsUsed < 5
+                        ? "Clique p/ entrar"
+                        : "Selecione quem sai"}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {userBenchIds.map((id) => {
+                      const p = playerMap.get(id);
+                      if (!p) return null;
+                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
+                      const ready = subOutId !== null && userSubsUsed < 5;
+                      return (
+                        <button
+                          key={id}
+                          disabled={!ready}
+                          onClick={() => handleLiveSub(id)}
+                          className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
+                            ready
+                              ? "border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 cursor-pointer shadow-sm"
+                              : "border-slate-800/80 bg-slate-950/40 text-slate-400 opacity-75 cursor-default"
+                          }`}
+                        >
+                          <span className="truncate font-semibold text-white">
+                            <span
+                              className={`mr-1.5 inline-block w-6 text-[10px] font-bold ${
+                                ready ? "text-emerald-300" : "text-slate-500"
+                              }`}
+                            >
+                              {p.primaryPosition}
+                            </span>
+                            {getPlayerDisplayName(p.name)}
+                          </span>
+                          {renderOvrStamina(
+                            p.overall,
+                            stam,
+                            ready ? "text-emerald-300" : "text-slate-300",
+                            ready ? "• Entrar" : undefined
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: Live Commentary */}
+            {activePanelTab === "commentary" && (
+              <div className="space-y-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Narração Lance a Lance
+                </div>
                 {userSession.events.length === 0 && (
                   <div className="py-10 text-center text-xs text-slate-500">
                     Bola rolando! Aguardando os primeiros lances de perigo...
@@ -680,7 +1223,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   return (
                     <div
                       key={ev.id}
-                      className={`flex items-start gap-2.5 rounded-xl border px-3 py-2 text-xs ${badgeStyle}`}
+                      className={`flex items-start gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${badgeStyle}`}
                     >
                       <span className="font-black text-slate-100">{ev.minute}'</span>
                       <span className="shrink-0 flex items-center justify-center mt-0.5">{eventIconNode}</span>
@@ -689,14 +1232,86 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   );
                 })}
               </div>
-            </div>
+            )}
 
-            {/* Other 9 Matches of the Round */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-                Outros Jogos da Rodada {matchweek}
-              </h3>
-              <div className="h-80 space-y-2 overflow-y-auto pr-1">
+            {/* TAB 3: Match Statistics */}
+            {activePanelTab === "stats" && (
+              <div className="space-y-3">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Estatísticas Comparativas
+                </div>
+                {[
+                  [
+                    "Posse de Bola",
+                    `${userSession.homeStats.possession}%`,
+                    `${userSession.awayStats.possession}%`,
+                    userSession.homeStats.possession,
+                    userSession.awayStats.possession,
+                  ],
+                  [
+                    "Gols Esperados (xG)",
+                    userSession.homeStats.xg.toFixed(2),
+                    userSession.awayStats.xg.toFixed(2),
+                    userSession.homeStats.xg,
+                    userSession.awayStats.xg,
+                  ],
+                  [
+                    "Finalizações (No Alvo)",
+                    `${userSession.homeStats.shots} (${userSession.homeStats.shotsOnTarget})`,
+                    `${userSession.awayStats.shots} (${userSession.awayStats.shotsOnTarget})`,
+                    userSession.homeStats.shots,
+                    userSession.awayStats.shots,
+                  ],
+                  [
+                    "Impedimentos",
+                    `${userSession.homeStats.offsides ?? 0}`,
+                    `${userSession.awayStats.offsides ?? 0}`,
+                    userSession.homeStats.offsides ?? 0,
+                    userSession.awayStats.offsides ?? 0,
+                  ],
+                  [
+                    "Escanteios / Faltas",
+                    `${userSession.homeStats.corners} / ${userSession.homeStats.fouls}`,
+                    `${userSession.awayStats.corners} / ${userSession.awayStats.fouls}`,
+                    userSession.homeStats.corners + userSession.homeStats.fouls,
+                    userSession.awayStats.corners + userSession.awayStats.fouls,
+                  ],
+                ].map(([label, hText, aText, hNum, aNum]) => {
+                  const total = Math.max(0.01, (hNum as number) + (aNum as number));
+                  const hPct = Math.round(((hNum as number) / total) * 100);
+                  return (
+                    <div key={label as string} className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-bold text-white">{hText}</span>
+                        <span className="text-slate-400 font-medium">{label}</span>
+                        <span className="font-bold text-white">{aText}</span>
+                      </div>
+                      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div className="bg-emerald-500 transition-all" style={{ width: `${hPct}%` }} />
+                        <div className="bg-sky-500 transition-all" style={{ width: `${100 - hPct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {motmPlayer && finalizedUser && (
+                  <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                    <Award className="h-4 w-4 text-amber-400" />
+                    <span>
+                      Craque da Partida: <strong className="text-white">{getPlayerDisplayName(motmPlayer.name)}</strong> (Nota{" "}
+                      {finalizedUser.playerRatings[motmPlayer.id]?.toFixed(1)})
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 4: Other Matches of the Round */}
+            {activePanelTab === "other_matches" && (
+              <div className="space-y-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Jogos Simultâneos da Rodada {matchweek}
+                </div>
                 {sessionsRef.current
                   .filter((s) => s.fixtureId !== userSession.fixtureId)
                   .map((s) => {
@@ -705,22 +1320,22 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     return (
                       <div
                         key={s.fixtureId}
-                        className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2"
+                        className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-2"
                       >
                         <div className="flex items-center justify-between text-xs">
-                          <div className="flex w-[38%] items-center gap-2">
+                          <div className="flex w-[38%] items-center gap-1.5">
                             <ClubBadge club={h} size="sm" />
                             <span className="truncate font-bold text-slate-200">{h.shortName}</span>
                           </div>
                           <div className="text-center">
-                            <div className="rounded-md bg-slate-900 px-2.5 py-0.5 font-black text-white ring-1 ring-slate-800">
+                            <div className="rounded-md bg-slate-900 px-2 py-0.5 font-black text-white ring-1 ring-slate-800">
                               {s.homeGoals} - {s.awayGoals}
                             </div>
                             <div className="mt-0.5 text-[9px] font-semibold text-slate-500">
                               {s.finished ? "FIN" : `${s.minute}'`}
                             </div>
                           </div>
-                          <div className="flex w-[38%] items-center justify-end gap-2">
+                          <div className="flex w-[38%] items-center justify-end gap-1.5">
                             <span className="truncate font-bold text-slate-200">{a.shortName}</span>
                             <ClubBadge club={a} size="sm" />
                           </div>
@@ -728,239 +1343,6 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       </div>
                     );
                   })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Substitutions & Live Coaching */}
-        <div className={`transition-all ${pitchSize === "full" ? "w-full" : "lg:col-span-4"}`}>
-          <div className="sticky top-20 rounded-2xl border border-slate-800 bg-slate-900 p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-300">
-                <Flame className="h-3.5 w-3.5 text-amber-400" /> Substituições & Tática
-              </h3>
-              <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-emerald-300">
-                Trocas: {userSubsUsed}/5
-              </span>
-            </div>
-
-            {/* Quick Formation selector */}
-            <div>
-              <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase text-slate-500">
-                <span>Formação em Campo</span>
-                <span className="text-slate-400">{userActiveIds.length} atletas</span>
-              </div>
-              <div className="grid grid-cols-5 gap-1">
-                {LIVE_FORMATIONS.map((f) => (
-                  <button
-                    key={f}
-                    disabled={userSession.finished}
-                    onClick={() => handleChangeFormationLive(f)}
-                    className={`rounded-lg py-1 text-[11px] font-bold transition ${
-                      userTactics.formation === f
-                        ? "bg-emerald-500 text-slate-950"
-                        : "border border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700 disabled:opacity-50"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick tactical knobs */}
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500">Mentalidade</label>
-                <select
-                  disabled={userSession.finished}
-                  value={userTactics.mentality}
-                  onChange={(e) =>
-                    setLiveTacticsByClub((prev) => ({
-                      ...prev,
-                      [userClubId]: {
-                        ...prev[userClubId],
-                        mentality: e.target.value as Mentality,
-                      },
-                    }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
-                >
-                  <option value="Defensive">Defensiva</option>
-                  <option value="Balanced">Equilibrada</option>
-                  <option value="Attacking">Ofensiva</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500">Pressão</label>
-                <select
-                  disabled={userSession.finished}
-                  value={userTactics.pressing}
-                  onChange={(e) =>
-                    setLiveTacticsByClub((prev) => ({
-                      ...prev,
-                      [userClubId]: {
-                        ...prev[userClubId],
-                        pressing: e.target.value as Pressing,
-                      },
-                    }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
-                >
-                  <option value="Low">Baixa</option>
-                  <option value="Medium">Média</option>
-                  <option value="High">Alta</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500">Passe</label>
-                <select
-                  disabled={userSession.finished}
-                  value={userTactics.passingStyle}
-                  onChange={(e) =>
-                    setLiveTacticsByClub((prev) => ({
-                      ...prev,
-                      [userClubId]: {
-                        ...prev[userClubId],
-                        passingStyle: e.target.value as PassingStyle,
-                      },
-                    }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
-                >
-                  <option value="Short">Curto</option>
-                  <option value="Mixed">Misto</option>
-                  <option value="Direct">Direto</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Substitutions Area */}
-            {userSession.finished ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-center text-xs text-slate-400">
-                <Shield className="mx-auto mb-1.5 h-5 w-5 text-slate-500" />
-                Partida encerrada! Clique em Finalizar Rodada acima para atualizar a tabela.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {subOutId !== null && (
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-                    <span className="truncate">
-                      Saindo: <strong className="text-white">{playerMap.get(subOutId)?.name}</strong>
-                    </span>
-                    <button
-                      onClick={() => setSubOutId(null)}
-                      className="shrink-0 rounded bg-slate-800 px-2 py-0.5 font-bold text-slate-200 hover:bg-slate-700"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                )}
-
-                {/* Em Campo (11) */}
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    <span>Em Campo ({userActiveIds.length})</span>
-                    <span>{userSubsUsed < 5 ? "Clique p/ tirar" : "Trocas esgotadas"}</span>
-                  </div>
-                  <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                    {userActiveIds.map((id) => {
-                      const p = playerMap.get(id);
-                      if (!p) return null;
-                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
-                      const rating = (userSession.playerRatings[id] ?? 6.5).toFixed(1);
-                      const isSelected = subOutId === id;
-                      const isInjured = userSession.injuredIds.includes(id);
-                      return (
-                        <button
-                          key={id}
-                          disabled={userSubsUsed >= 5}
-                          onClick={() => setSubOutId((prev) => (prev === id ? null : id))}
-                          className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
-                            isSelected
-                              ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
-                              : isInjured
-                              ? "border-rose-500/60 bg-rose-500/15"
-                              : "border-slate-800 bg-slate-950/70 hover:border-amber-500/40 disabled:opacity-60"
-                          }`}
-                        >
-                          <span className="truncate font-semibold text-white">
-                            <span className="mr-1.5 inline-block w-7 text-[10px] font-bold text-slate-400">
-                              {p.primaryPosition}
-                            </span>
-                            {p.name}
-                            {isInjured && (
-                              <span className="ml-1.5 rounded bg-rose-600 px-1 py-0.2 text-[9px] font-black text-white">
-                                +LESÃO
-                              </span>
-                            )}
-                          </span>
-                          <span className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] text-slate-400" title="Nota na partida">
-                              {rating}
-                            </span>
-                            {renderOvrStamina(p.overall, stam, "text-slate-200")}
-                            <ArrowLeftRight
-                              className={`h-3 w-3 ${
-                                isSelected ? "text-amber-300" : "text-slate-500"
-                              }`}
-                            />
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Banco de Reservas */}
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                    <span>Banco de Reservas ({userBenchIds.length})</span>
-                    <span>
-                      {subOutId !== null && userSubsUsed < 5
-                        ? "Clique p/ entrar"
-                        : "Selecione quem sai"}
-                    </span>
-                  </div>
-                  <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-                    {userBenchIds.map((id) => {
-                      const p = playerMap.get(id);
-                      if (!p) return null;
-                      const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
-                      const ready = subOutId !== null && userSubsUsed < 5;
-                      return (
-                        <button
-                          key={id}
-                          disabled={!ready}
-                          onClick={() => handleLiveSub(id)}
-                          className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
-                            ready
-                              ? "border-emerald-500/50 bg-emerald-500/12 hover:bg-emerald-500/25 cursor-pointer"
-                              : "border-slate-800/80 bg-slate-950/40 text-slate-400 opacity-75 cursor-default"
-                          }`}
-                        >
-                          <span className="truncate font-semibold text-white">
-                            <span
-                              className={`mr-1.5 inline-block w-7 text-[10px] font-bold ${
-                                ready ? "text-emerald-300" : "text-slate-500"
-                              }`}
-                            >
-                              {p.primaryPosition}
-                            </span>
-                            {p.name}
-                          </span>
-                          {renderOvrStamina(
-                            p.overall,
-                            stam,
-                            ready ? "text-emerald-300" : "text-slate-300",
-                            ready ? "• Entrar" : undefined
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -1111,7 +1493,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                             <span className="mr-1 text-[10px] text-slate-400">
                               {p.primaryPosition}
                             </span>
-                            {p.name}
+                            {getPlayerDisplayName(p.name)}
                             {isInj && (
                               <span className="ml-1 rounded bg-rose-600 px-1 text-[9px] font-black text-white">
                                 +LESÃO
@@ -1128,7 +1510,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                   <div className="mb-1.5 text-[10px] font-bold uppercase text-emerald-400">
                     {subOutId !== null
-                      ? `Entrar no lugar de ${playerMap.get(subOutId)?.name}`
+                      ? `Entrar no lugar de ${getPlayerDisplayName(playerMap.get(subOutId)?.name)}`
                       : "Banco de Reservas"}
                   </div>
                   <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
@@ -1152,7 +1534,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                             <span className="mr-1 text-[10px] text-emerald-300">
                               {p.primaryPosition}
                             </span>
-                            {p.name}
+                            {getPlayerDisplayName(p.name)}
                           </span>
                           {renderOvrStamina(
                             p.overall,

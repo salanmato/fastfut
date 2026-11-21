@@ -23,6 +23,7 @@ import { autoPickLineup, computeTeamPower } from "../engine/matchEngine";
 import {
   getFormationSlots,
   getOverallColor,
+  getPlayerDisplayName,
   getRoleBadgeClass,
   getStaminaColor,
 } from "../utils/format";
@@ -472,7 +473,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
               const p = starters[i];
               if (!p) return null;
               const isSelected = swapId === p.id;
-              const surname = p.name.split(" ").slice(-1)[0];
+              const surname = getPlayerDisplayName(p.name);
 
               return (
                 <div
@@ -508,7 +509,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                         <span className="text-amber-300">#{p.shirtNumber}</span>
                       )}
                       <span className="text-emerald-400">{slot.label}</span>
-                      <span className="max-w-[68px] truncate">{surname}</span>
+                      <span className="max-w-[84px] truncate">{surname}</span>
                     </div>
                     <div className="mt-0.5 h-1 w-10 overflow-hidden rounded-full bg-slate-900/90">
                       <div
