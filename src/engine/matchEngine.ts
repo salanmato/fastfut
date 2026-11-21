@@ -38,6 +38,18 @@ export interface MatchStadiumMetrics {
   awaySynergy?: TeamSynergyResult;
 }
 
+export interface LivePitchContext {
+  ballX: number;
+  ballY: number;
+  carrierId: number | null;
+  carrierClubId: number;
+  lastPasserId: number | null;
+  closestDefenderId: number | null;
+  playPhase: "build_up" | "progression" | "final_third" | "counter";
+  attackProgress: number;
+  pendingVisualShot?: boolean;
+}
+
 export interface LiveMatchSession {
   fixtureId: number;
   homeClubId: number;
@@ -78,6 +90,7 @@ export interface LiveMatchSession {
   homeAdvantagePct: number;
   homeSynergy?: TeamSynergyResult;
   awaySynergy?: TeamSynergyResult;
+  pitchContext?: LivePitchContext;
 }
 
 export function autoPickLineup(
@@ -757,71 +770,102 @@ export function stepLiveMatchMinute(
   session.homeStats.possession = homePoss;
   session.awayStats.possession = 100 - homePoss;
 
-  // Fouls & Cards influenced by referee strictness and pressing
+  // Causal Fouls & Cards: triggered by a defender's tackle on the ball carrier
   const refFactor = session.referee.avgCardsPerGame / 4.2;
-  const checkFoul = (isHome: boolean, active: Player[], tactics: Tactics) => {
-    const pressBonus = tactics.pressing === "High" ? 0.025 : tactics.pressing === "Low" ? -0.012 : 0;
-    if (Math.random() < (0.11 + pressBonus) * (0.85 + refFactor * 0.15)) {
-      const stats = isHome ? session.homeStats : session.awayStats;
-      const clubId = isHome ? session.homeClubId : session.awayClubId;
-      stats.fouls += 1;
+  const checkFoul = (
+    isDefendingHome: boolean,
+    defActive: Player[],
+    defTactics: Tactics,
+    attActive: Player[],
+    preferredOffender?: Player,
+    preferredVictim?: Player,
+    probMult = 1.0
+  ): { fouled: boolean; cardIssued: boolean; offender?: Player; victim?: Player } => {
+    const pressBonus = defTactics.pressing === "High" ? 0.025 : defTactics.pressing === "Low" ? -0.012 : 0;
+    if (Math.random() >= (0.11 + pressBonus) * (0.85 + refFactor * 0.15) * probMult) {
+      return { fouled: false, cardIssued: false };
+    }
 
-      const outfield = active.filter((p) => p.roleCategory !== "GK");
-      if (outfield.length === 0) return;
-      const offender = weightedPick(outfield, (p) =>
-        p.roleCategory === "DEF" ? 1.8 : p.roleCategory === "MID" ? 1.3 : 0.7
-      );
+    const stats = isDefendingHome ? session.homeStats : session.awayStats;
+    const clubId = isDefendingHome ? session.homeClubId : session.awayClubId;
+    const defClubName = isDefendingHome ? homeClub.shortName : awayClub.shortName;
+    stats.fouls += 1;
 
-      if (Math.random() < 0.165 * refFactor) {
-        const alreadyYellow = session.yellowCardedIds.includes(offender.id);
-        if (alreadyYellow || Math.random() < 0.03) {
-          // Red card
-          stats.redCards += 1;
-          session.redCardedIds.push(offender.id);
-          session.playerRatings[offender.id] = Math.max(
-            3.5,
-            (session.playerRatings[offender.id] ?? 6.5) - 1.5
+    const defOutfield = defActive.filter((p) => p.roleCategory !== "GK");
+    if (defOutfield.length === 0) return { fouled: true, cardIssued: false };
+    const offender =
+      preferredOffender && preferredOffender.roleCategory !== "GK"
+        ? preferredOffender
+        : weightedPick(defOutfield, (p) =>
+            p.roleCategory === "DEF" ? 1.8 : p.roleCategory === "MID" ? 1.3 : 0.7
           );
-          if (isHome) {
-            session.homeActiveIds = session.homeActiveIds.filter((id) => id !== offender.id);
-          } else {
-            session.awayActiveIds = session.awayActiveIds.filter((id) => id !== offender.id);
-          }
-          session.events.push({
-            id: `red-${session.fixtureId}-${min}-${offender.id}`,
-            minute: min,
-            type: "red_card",
-            clubId,
-            playerId: offender.id,
-            playerName: offender.name,
-            text: alreadyYellow
-              ? `Segundo amarelo e EXPULSÃO! ${offender.name} recebe o cartão vermelho.`
-              : `Cartão VERMELHO direto para ${offender.name} após entrada dura!`,
-          });
+
+    const attOutfield = attActive.filter((p) => p.roleCategory !== "GK");
+    const victim =
+      preferredVictim && preferredVictim.roleCategory !== "GK"
+        ? preferredVictim
+        : attOutfield.length > 0
+        ? weightedPick(attOutfield, (p) =>
+            p.roleCategory === "ATT" ? 1.7 : p.roleCategory === "MID" ? 1.4 : 0.6
+          )
+        : undefined;
+
+    if (Math.random() < 0.165 * refFactor) {
+      const alreadyYellow = session.yellowCardedIds.includes(offender.id);
+      if (alreadyYellow || Math.random() < 0.03) {
+        // Red card
+        stats.redCards += 1;
+        session.redCardedIds.push(offender.id);
+        session.playerRatings[offender.id] = Math.max(
+          3.5,
+          (session.playerRatings[offender.id] ?? 6.5) - 1.5
+        );
+        if (isDefendingHome) {
+          session.homeActiveIds = session.homeActiveIds.filter((id) => id !== offender.id);
         } else {
-          stats.yellowCards += 1;
-          session.yellowCardedIds.push(offender.id);
-          session.playerRatings[offender.id] = Math.max(
-            4.5,
-            (session.playerRatings[offender.id] ?? 6.5) - 0.3
-          );
-          session.events.push({
-            id: `yel-${session.fixtureId}-${min}-${offender.id}`,
-            minute: min,
-            type: "yellow_card",
-            clubId,
-            playerId: offender.id,
-            playerName: offender.name,
-            text: `Cartão amarelo para ${offender.name} por falta tática.`,
-          });
+          session.awayActiveIds = session.awayActiveIds.filter((id) => id !== offender.id);
         }
+        session.events.push({
+          id: `red-${session.fixtureId}-${min}-${offender.id}`,
+          minute: min,
+          type: "red_card",
+          clubId,
+          playerId: offender.id,
+          playerName: offender.name,
+          assistPlayerId: victim?.id,
+          assistPlayerName: victim?.name,
+          text: alreadyYellow
+            ? `🟥 SEGUNDO AMARELO E EXPULSÃO! ${offender.name} (${defClubName}) chega atrasado na dividida com ${victim?.name ?? "o adversário"} e recebe o vermelho!`
+            : `🟥 CARTÃO VERMELHO DIRETO! Entrada duríssima de ${offender.name} (${defClubName}) para parar a arrancada de ${victim?.name ?? "o adversário"}!`,
+        });
+        return { fouled: true, cardIssued: true, offender, victim };
+      } else {
+        stats.yellowCards += 1;
+        session.yellowCardedIds.push(offender.id);
+        session.playerRatings[offender.id] = Math.max(
+          4.5,
+          (session.playerRatings[offender.id] ?? 6.5) - 0.3
+        );
+        session.events.push({
+          id: `yel-${session.fixtureId}-${min}-${offender.id}`,
+          minute: min,
+          type: "yellow_card",
+          clubId,
+          playerId: offender.id,
+          playerName: offender.name,
+          assistPlayerId: victim?.id,
+          assistPlayerName: victim?.name,
+          text: victim
+            ? `🟨 CARTÃO AMARELO! ${offender.name} (${defClubName}) para o avanço de ${victim.name} com falta dura e é advertido pelo árbitro.`
+            : `🟨 Cartão amarelo para ${offender.name} (${defClubName}) por falta tática na disputa de bola.`,
+        });
+        return { fouled: true, cardIssued: true, offender, victim };
       }
     }
+    return { fouled: true, cardIssued: false, offender, victim };
   };
-  checkFoul(true, homeActive, homeTactics);
-  checkFoul(false, awayActive, awayTactics);
 
-  // Injuries check (stamina fatigue, pressing intensity, reduced by home turf quality)
+  // Causal Injuries check: tied to the player suffering a tackle or sprinting with the ball
   const INJURY_TYPES = [
     "Distensão na coxa",
     "Entorse no tornozelo",
@@ -829,15 +873,23 @@ export function stepLiveMatchMinute(
     "Estiramento muscular",
     "Pancada no joelho",
   ];
-  const checkInjury = (isHome: boolean, active: Player[], tactics: Tactics) => {
+  const checkInjury = (
+    isHome: boolean,
+    active: Player[],
+    tactics: Tactics,
+    preferredVictim?: Player,
+    tackler?: Player,
+    fromFoul = false
+  ): boolean => {
     const clubId = isHome ? session.homeClubId : session.awayClubId;
+    const clubName = isHome ? homeClub.shortName : awayClub.shortName;
     const teamInjuriesCount = session.injuries.filter((i) => i.clubId === clubId).length;
-    if (teamInjuriesCount >= 2) return;
+    if (teamInjuriesCount >= 2) return false;
 
     const candidates = active.filter(
       (p) => p.roleCategory !== "GK" && !session.injuredIds.includes(p.id)
     );
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) return false;
 
     const avgStam =
       candidates.reduce((sum, p) => sum + (session.playerStamina[p.id] ?? 100), 0) /
@@ -845,18 +897,23 @@ export function stepLiveMatchMinute(
     const fatigueRisk = avgStam < 58 ? 0.0028 : avgStam < 72 ? 0.0014 : 0.0007;
     const pressMult = tactics.pressing === "High" ? 1.35 : tactics.pressing === "Low" ? 0.8 : 1.0;
     const turfMult = isHome ? homeTurfFactor : 1.0;
-    const injuryProb = 0.0022 * pressMult * turfMult + fatigueRisk;
+    const foulMult = fromFoul ? 2.4 : 1.0;
+    const injuryProb = (0.0022 * pressMult * turfMult + fatigueRisk) * foulMult;
 
-    if (Math.random() > injuryProb) return;
+    if (Math.random() > injuryProb) return false;
 
-    const victim = weightedPick(candidates, (p) => {
-      const stam = session.playerStamina[p.id] ?? 100;
-      const lowStamWeight = Math.max(0.5, (115 - stam) / 30);
-      return lowStamWeight;
-    });
+    const victim =
+      preferredVictim &&
+      preferredVictim.roleCategory !== "GK" &&
+      !session.injuredIds.includes(preferredVictim.id)
+        ? preferredVictim
+        : weightedPick(candidates, (p) => {
+            const stam = session.playerStamina[p.id] ?? 100;
+            return Math.max(0.5, (115 - stam) / 30);
+          });
 
     const injuryType = INJURY_TYPES[Math.floor(Math.random() * INJURY_TYPES.length)];
-    const matchesOut = 1 + Math.floor(Math.random() * 4); // 1 to 4 matchweeks
+    const matchesOut = 1 + Math.floor(Math.random() * 4);
 
     session.injuredIds.push(victim.id);
     session.injuries.push({
@@ -872,14 +929,17 @@ export function stepLiveMatchMinute(
       clubId,
       playerId: victim.id,
       playerName: victim.name,
-      text: `LESÃO! ${victim.name} sente ${injuryType} e precisará ficar ${matchesOut} rodada(s) no DM.`,
+      assistPlayerId: tackler?.id,
+      assistPlayerName: tackler?.name,
+      text: fromFoul && tackler
+        ? `🚑 LESÃO NA DIVIDIDA! Após sofrer a entrada de ${tackler.name}, ${victim.name} (${clubName}) sente ${injuryType} e ficará ${matchesOut} rodada(s) no DM.`
+        : `🚑 LESÃO NO LANCE! Durante a arrancada com a bola, ${victim.name} (${clubName}) sente ${injuryType} e precisará ficar ${matchesOut} rodada(s) no DM.`,
     });
 
     const subsUsed = isHome ? session.homeSubsUsed : session.awaySubsUsed;
     const benchIds = isHome ? session.homeBenchIds : session.awayBenchIds;
 
     if (clubId !== userClubId) {
-      // AI immediately subs out if possible, otherwise removes injured player
       const benchOutfield = benchIds
         .map((id) => playerMap.get(id))
         .filter((p): p is Player => Boolean(p))
@@ -896,16 +956,14 @@ export function stepLiveMatchMinute(
         session.awayActiveIds = session.awayActiveIds.filter((id) => id !== victim.id);
       }
     } else if (subsUsed >= 5) {
-      // User exhausted all 5 substitutions, player must leave the field
       if (isHome) {
         session.homeActiveIds = session.homeActiveIds.filter((id) => id !== victim.id);
       } else {
         session.awayActiveIds = session.awayActiveIds.filter((id) => id !== victim.id);
       }
     }
+    return true;
   };
-  checkInjury(true, homeActive, homeTactics);
-  checkInjury(false, awayActive, awayTactics);
 
   // Corner kick generator & set-piece handler
   const pickCornerTaker = (team: Player[]): Player => {
@@ -1017,7 +1075,7 @@ export function stepLiveMatchMinute(
     }
   };
 
-  // Attacking chance generation
+  // Causal Attacking chance generation (uses live 2D pitch ball carrier & passer when available)
   const resolveAttack = (
     isHome: boolean,
     attPower: TeamPower,
@@ -1025,7 +1083,11 @@ export function stepLiveMatchMinute(
     attTeam: Player[],
     defTeam: Player[],
     attTactics: Tactics,
-    clubName: string
+    clubName: string,
+    preferredShooter?: Player,
+    preferredAssister?: Player,
+    probMultiplier = 1.0,
+    forceTrigger = false
   ): boolean => {
     const clubId = isHome ? session.homeClubId : session.awayClubId;
     const stats = isHome ? session.homeStats : session.awayStats;
@@ -1038,44 +1100,55 @@ export function stepLiveMatchMinute(
       (attPower.attack - defPower.defense) * 0.0024 +
       (attPower.midfield - defPower.midfield) * 0.0014 +
       mentalityBonus;
-    const clampedProb = Math.max(0.06, Math.min(0.28, baseChanceProb));
-    if (Math.random() > clampedProb) return false;
+    const clampedProb = Math.max(0.06, Math.min(0.65, baseChanceProb * probMultiplier));
+    if (!forceTrigger && Math.random() > clampedProb) return false;
 
     const attackers = attTeam.filter((p) => p.roleCategory !== "GK");
     if (attackers.length === 0) return false;
 
-    const shooter = weightedPick(attackers, (p) => {
-      const isWinger = ["LW", "RW", "LM", "RM", "LAM", "RAM"].includes(p.primaryPosition);
-      const isWingBack = ["LB", "RB", "LWB", "RWB"].includes(p.primaryPosition);
-      const isAttackingMentality = attTactics.mentality === "Attacking";
-      let roleMult = 0.26;
-      if (p.roleCategory === "ATT") {
-        roleMult = isWinger ? 2.75 : 3.35;
-        if (attTactics.passingStyle === "Direct" && isWinger) roleMult += 0.35;
-      } else if (p.primaryPosition === "CAM") {
-        roleMult = 2.15 + (isAttackingMentality ? 0.35 : 0);
-      } else if (p.roleCategory === "MID") {
-        roleMult = p.primaryPosition === "CM" ? 1.35 + (isAttackingMentality ? 0.25 : 0) : 0.9;
-      } else if (isWingBack) {
-        roleMult = 0.58 + (isAttackingMentality ? 0.28 : 0);
-      }
+    const shooter =
+      preferredShooter &&
+      preferredShooter.roleCategory !== "GK" &&
+      (preferredShooter.roleCategory === "ATT" ||
+        preferredShooter.roleCategory === "MID" ||
+        Math.random() < 0.72)
+        ? preferredShooter
+        : weightedPick(attackers, (p) => {
+            const isWinger = ["LW", "RW", "LM", "RM", "LAM", "RAM"].includes(p.primaryPosition);
+            const isWingBack = ["LB", "RB", "LWB", "RWB"].includes(p.primaryPosition);
+            const isAttackingMentality = attTactics.mentality === "Attacking";
+            let roleMult = 0.26;
+            if (p.roleCategory === "ATT") {
+              roleMult = isWinger ? 2.75 : 3.35;
+              if (attTactics.passingStyle === "Direct" && isWinger) roleMult += 0.35;
+            } else if (p.primaryPosition === "CAM") {
+              roleMult = 2.15 + (isAttackingMentality ? 0.35 : 0);
+            } else if (p.roleCategory === "MID") {
+              roleMult = p.primaryPosition === "CM" ? 1.35 + (isAttackingMentality ? 0.25 : 0) : 0.9;
+            } else if (isWingBack) {
+              roleMult = 0.58 + (isAttackingMentality ? 0.28 : 0);
+            }
 
-      const stam = session.playerStamina[p.id] ?? p.stamina;
-      const staminaReadiness = 0.85 + 0.15 * (Math.max(20, stam) / 100);
-      const finishingBlend =
-        0.4 +
-        (p.stats.finishing * 0.55 +
-          p.faceStats.dribbling * 0.25 +
-          p.faceStats.pace * (attTactics.passingStyle === "Direct" ? 0.32 : 0.2)) /
-          100;
-      return roleMult * finishingBlend * staminaReadiness * evaluateShirtNumberAffinity(p).multiplier;
-    });
+            const stam = session.playerStamina[p.id] ?? p.stamina;
+            const staminaReadiness = 0.85 + 0.15 * (Math.max(20, stam) / 100);
+            const finishingBlend =
+              0.4 +
+              (p.stats.finishing * 0.55 +
+                p.faceStats.dribbling * 0.25 +
+                p.faceStats.pace * (attTactics.passingStyle === "Direct" ? 0.32 : 0.2)) /
+                100;
+            return roleMult * finishingBlend * staminaReadiness * evaluateShirtNumberAffinity(p).multiplier;
+          });
 
     const possibleAssisters = attackers.filter((p) => p.id !== shooter.id);
     const assistProb =
       attTactics.passingStyle === "Short" ? 0.78 : attTactics.passingStyle === "Direct" ? 0.68 : 0.73;
     const assister =
-      possibleAssisters.length > 0 && Math.random() < assistProb
+      preferredAssister &&
+      preferredAssister.id !== shooter.id &&
+      preferredAssister.roleCategory !== "GK"
+        ? preferredAssister
+        : possibleAssisters.length > 0 && Math.random() < assistProb
         ? weightedPick(possibleAssisters, (p) => {
             const isCreator = p.primaryPosition === "CAM" || p.primaryPosition === "CM";
             const isWinger = ["LW", "RW", "LM", "RM", "LAM", "RAM"].includes(p.primaryPosition);
@@ -1148,6 +1221,8 @@ export function stepLiveMatchMinute(
           clubId,
           playerId: shooter.id,
           playerName: shooter.name,
+          assistPlayerId: assister?.id,
+          assistPlayerName: assister?.name,
           text: chosenText,
         });
       }
@@ -1191,8 +1266,10 @@ export function stepLiveMatchMinute(
           clubId,
           playerId: shooter.id,
           playerName: shooter.name,
+          assistPlayerId: assister?.id,
+          assistPlayerName: assister?.name,
           disallowedGoal: true,
-          text: `GOL ANULADO! ${shooter.name} (${clubName}) balança a rede, mas a bandeirinha assinala impedimento e o VAR confirma.`,
+          text: `GOL ANULADO! ${shooter.name} (${clubName}) balança a rede após passe de ${assister?.name ?? "companheiro"}, mas a bandeirinha assinala impedimento e o VAR confirma.`,
         });
         return true;
       }
@@ -1232,6 +1309,8 @@ export function stepLiveMatchMinute(
           clubId: isHome ? session.awayClubId : session.homeClubId,
           playerId: keeper.id,
           playerName: keeper.name,
+          assistPlayerId: shooter.id,
+          assistPlayerName: shooter.name,
           text: `Defesaça de ${keeper.name}! Segura firme chute venenoso de ${shooter.name} (${clubName}).`,
         });
       }
@@ -1240,19 +1319,31 @@ export function stepLiveMatchMinute(
     return true;
   };
 
-  // Offside flags (independent of shots): ~2 per team per match, driven by tactics & player traits
+  // Causal Offside: triggered during a through-ball pass attempt from passer to offender
   const checkOffside = (
     isHome: boolean,
     attTeam: Player[],
     defTeam: Player[],
     attTactics: Tactics,
     defTactics: Tactics,
-    clubName: string
+    clubName: string,
+    preferredPasser?: Player,
+    probMult = 1.0
   ): boolean => {
     const mult = computeOffsideRiskMultiplier(attTeam, defTeam, attTactics, defTactics);
-    if (Math.random() > 0.0155 * mult) return false;
+    if (Math.random() > 0.0155 * mult * probMult) return false;
     const offender = pickOffsideOffender(attTeam, session);
     if (!offender) return false;
+
+    const passerCandidates = attTeam.filter(
+      (p) => p.id !== offender.id && p.roleCategory !== "GK"
+    );
+    const passer =
+      preferredPasser &&
+      preferredPasser.id !== offender.id &&
+      preferredPasser.roleCategory !== "GK"
+        ? preferredPasser
+        : passerCandidates.find((p) => p.roleCategory === "MID") ?? passerCandidates[0];
 
     const stats = isHome ? session.homeStats : session.awayStats;
     stats.offsides = (stats.offsides ?? 0) + 1;
@@ -1267,23 +1358,126 @@ export function stepLiveMatchMinute(
       clubId: isHome ? session.homeClubId : session.awayClubId,
       playerId: offender.id,
       playerName: offender.name,
-      text: `Impedimento! ${offender.name} (${clubName}) arranca antes da hora e a bandeirinha levanta a bandeira.`,
+      assistPlayerId: passer?.id,
+      assistPlayerName: passer?.name,
+      text: passer
+        ? `🚩 IMPEDIMENTO! ${passer.name} tenta o lançamento em profundidade para ${offender.name} (${clubName}), que estava adiantado atrás da linha da zaga!`
+        : `🚩 Impedimento! ${offender.name} (${clubName}) arranca antes da hora no lançamento e a bandeirinha levanta a bandeira.`,
     });
     return true;
   };
 
-  const prevTotalGoals = session.homeGoals + session.awayGoals;
-  const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
-  if (!homeOffside) {
-    resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
-  }
+  // Unified Causal Minute Resolution:
+  // If 2D pitch context is active, events originate strictly from the live ball carrier, passer, presser, and pitch zone!
+  const ctx = session.pitchContext;
+  if (ctx) {
+    const possIsHome = ctx.carrierClubId === session.homeClubId;
+    const attTeam = possIsHome ? homeActive : awayActive;
+    const defTeam = possIsHome ? awayActive : homeActive;
+    const attTactics = possIsHome ? homeTactics : awayTactics;
+    const defTactics = possIsHome ? awayTactics : homeTactics;
+    const attPower = possIsHome ? homePower : awayPower;
+    const defPower = possIsHome ? awayPower : homePower;
+    const attClubName = possIsHome ? homeClub.shortName : awayClub.shortName;
 
-  // Only simulate away attack in the same minute if home didn't just score a goal (which triggers center kickoff)
-  const homeJustScored = session.homeGoals + session.awayGoals > prevTotalGoals;
-  if (!homeJustScored) {
-    const awayOffside = checkOffside(false, awayActive, homeActive, awayTactics, homeTactics, awayClub.shortName);
-    if (!awayOffside) {
-      resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
+    const carrier =
+      (ctx.carrierId ? playerMap.get(ctx.carrierId) : undefined) ??
+      attTeam.find((p) => p.roleCategory !== "GK");
+    const lastPasser =
+      ctx.lastPasserId && ctx.lastPasserId !== carrier?.id
+        ? playerMap.get(ctx.lastPasserId)
+        : undefined;
+    const closestDefender =
+      (ctx.closestDefenderId ? playerMap.get(ctx.closestDefenderId) : undefined) ??
+      defTeam.find((p) => p.roleCategory !== "GK");
+
+    // 1. Defending team challenges the ball carrier (Foul / Card duel)
+    const foulRes = checkFoul(
+      !possIsHome,
+      defTeam,
+      defTactics,
+      attTeam,
+      closestDefender,
+      carrier,
+      1.85
+    );
+
+    // 2. Injury check on the active duel participants (higher risk if fouled!)
+    let injuryStopped = false;
+    if (foulRes.fouled) {
+      injuryStopped = checkInjury(
+        possIsHome,
+        attTeam,
+        attTactics,
+        foulRes.victim ?? carrier,
+        foulRes.offender ?? closestDefender,
+        true
+      );
+    } else {
+      injuryStopped =
+        checkInjury(possIsHome, attTeam, attTactics, carrier, closestDefender, false) ||
+        checkInjury(!possIsHome, defTeam, defTactics, closestDefender, carrier, false);
+    }
+
+    // 3. If no card/injury stoppage interrupted play, resolve attacking progression from current pitch zone
+    if (!foulRes.cardIssued && !injuryStopped) {
+      const inAttackingHalf = ctx.attackProgress >= 0.42 || Boolean(ctx.pendingVisualShot);
+      if (inAttackingHalf) {
+        const wasOffside = checkOffside(
+          possIsHome,
+          attTeam,
+          defTeam,
+          attTactics,
+          defTactics,
+          attClubName,
+          lastPasser ?? carrier,
+          2.1
+        );
+        if (!wasOffside && (ctx.attackProgress >= 0.52 || ctx.pendingVisualShot)) {
+          const forceVisualShot = Boolean(ctx.pendingVisualShot);
+          ctx.pendingVisualShot = false;
+          const zoneMult = forceVisualShot
+            ? 2.8
+            : ctx.attackProgress >= 0.72
+            ? 2.35
+            : 1.85;
+          resolveAttack(
+            possIsHome,
+            attPower,
+            defPower,
+            attTeam,
+            defTeam,
+            attTactics,
+            attClubName,
+            carrier,
+            lastPasser,
+            zoneMult,
+            forceVisualShot && Math.random() < 0.58
+          );
+        }
+      }
+    } else {
+      ctx.pendingVisualShot = false;
+    }
+  } else {
+    // Background AI matches / Instant Simulate-to-End fallback (causal roles preserved in events)
+    const homeFoul = checkFoul(true, homeActive, homeTactics, awayActive);
+    const awayFoul = checkFoul(false, awayActive, awayTactics, homeActive);
+    checkInjury(true, homeActive, homeTactics, awayFoul.victim, awayFoul.offender, awayFoul.fouled);
+    checkInjury(false, awayActive, awayTactics, homeFoul.victim, homeFoul.offender, homeFoul.fouled);
+
+    const prevTotalGoals = session.homeGoals + session.awayGoals;
+    const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
+    if (!homeOffside) {
+      resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
+    }
+
+    const homeJustScored = session.homeGoals + session.awayGoals > prevTotalGoals;
+    if (!homeJustScored) {
+      const awayOffside = checkOffside(false, awayActive, homeActive, awayTactics, homeTactics, awayClub.shortName);
+      if (!awayOffside) {
+        resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
+      }
     }
   }
 

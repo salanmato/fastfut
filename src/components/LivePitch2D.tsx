@@ -1100,6 +1100,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const ballPosRef = useRef<Coord>(ballPos);
   const carrierIdRef = useRef<number | null>(carrierId);
   const carrierClubIdRef = useRef<number>(carrierClubId);
+  const lastPasserIdRef = useRef<number | null>(null);
   const playPhaseRef = useRef<PlayPhase>(playPhase);
   const liveCoordsRef = useRef<Record<number, Coord>>(liveCoords);
   const activeRunsRef = useRef<Map<number, ActiveRun>>(new Map());
@@ -1243,10 +1244,18 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       assisterId?: number,
       targetGoalCoord?: Coord
     ): { shooterCoord: Coord } => {
-      const shooterCoord: Coord = {
-        x: 36 + Math.random() * 28,
-        y: attackingHome ? 10 + Math.random() * 9 : 90 - Math.random() * 9,
-      };
+      const existingShooter = shooterId !== null ? curCoords[shooterId] : undefined;
+      const shooterCoord: Coord = existingShooter
+        ? {
+            x: clamp(existingShooter.x, 24, 76),
+            y: attackingHome
+              ? clamp(existingShooter.y, 9, 25)
+              : clamp(existingShooter.y, 75, 91),
+          }
+        : {
+            x: 36 + Math.random() * 28,
+            y: attackingHome ? 10 + Math.random() * 9 : 90 - Math.random() * 9,
+          };
       const updated: Record<number, Coord> = { ...curCoords };
       const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
       const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
@@ -1256,14 +1265,24 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         updated[shooterId] = shooterCoord;
       }
       if (assisterId !== undefined) {
-        const wingX =
-          shooterCoord.x < 50 ? 14 + Math.random() * 16 : 70 + Math.random() * 16;
-        updated[assisterId] = {
-          x: wingX,
-          y: attackingHome
-            ? clamp(shooterCoord.y + 7 + Math.random() * 8, 12, 36)
-            : clamp(shooterCoord.y - 7 - Math.random() * 8, 64, 88),
-        };
+        const existingAssister = curCoords[assisterId];
+        if (existingAssister) {
+          updated[assisterId] = {
+            x: clamp(existingAssister.x, 12, 88),
+            y: attackingHome
+              ? clamp(existingAssister.y, 12, 42)
+              : clamp(existingAssister.y, 58, 88),
+          };
+        } else {
+          const wingX =
+            shooterCoord.x < 50 ? 14 + Math.random() * 16 : 70 + Math.random() * 16;
+          updated[assisterId] = {
+            x: wingX,
+            y: attackingHome
+              ? clamp(shooterCoord.y + 7 + Math.random() * 8, 12, 36)
+              : clamp(shooterCoord.y - 7 - Math.random() * 8, 64, 88),
+          };
+        }
       }
 
       // Bring attackers and defenders into the penalty box
@@ -1389,7 +1408,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         }
       }, koDelay);
     } else if (latest.type === "save") {
-      // On "save", latest.clubId is the keeper's club; opposing side took the shot
+      // On "save", latest.clubId is the keeper's club; opposing side took the shot (stored in assistPlayerId)
       const attackingHome = !isHomeEvent;
       const keeperTarget: Coord = {
         x: 48 + Math.random() * 4,
@@ -1397,7 +1416,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       };
       const oppIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
       const oppAttackers = oppIds.filter((id) => playerMap.get(id)?.roleCategory === "ATT");
-      const shooterGuess = oppAttackers[0] ?? oppIds[Math.max(0, oppIds.length - 1)] ?? null;
+      const shooterGuess =
+        latest.assistPlayerId ?? oppAttackers[0] ?? oppIds[Math.max(0, oppIds.length - 1)] ?? null;
       const { shooterCoord } = choreographBoxAction(
         attackingHome,
         shooterGuess,
@@ -1448,7 +1468,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     } else if (latest.type === "chance") {
       const missX = Math.random() < 0.5 ? 35 : 65;
       const missY = isHomeEvent ? 1.5 : 98.5;
-      const { shooterCoord } = choreographBoxAction(isHomeEvent, latest.playerId);
+      const { shooterCoord } = choreographBoxAction(
+        isHomeEvent,
+        latest.playerId,
+        latest.assistPlayerId
+      );
 
       const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
         shooterCoord.x,
@@ -1490,33 +1514,135 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         tone: "chance",
       });
       setHighlightPause(1100);
-    } else if (latest.type === "yellow_card") {
+    } else if (latest.type === "yellow_card" || latest.type === "red_card") {
+      const isRed = latest.type === "red_card";
+      const foulSpot: Coord = {
+        x: clamp(ballPosRef.current.x, 10, 90),
+        y: clamp(ballPosRef.current.y, 12, 88),
+      };
+      const victimId = latest.assistPlayerId ?? carrierIdRef.current;
+      const duelCoords: Record<number, Coord> = { ...curCoords };
+      if (victimId) {
+        duelCoords[victimId] = foulSpot;
+      }
+      duelCoords[latest.playerId] = {
+        x: clamp(foulSpot.x + (foulSpot.x < 50 ? 1.6 : -1.6), 8, 92),
+        y: clamp(foulSpot.y + (isHomeEvent ? -1.4 : 1.4), 8, 92),
+      };
+      setLiveCoords(duelCoords);
+      liveCoordsRef.current = duelCoords;
+      setBallPos(foulSpot);
+      ballPosRef.current = foulSpot;
+      setBallVisual({ x: foulSpot.x, y: foulSpot.y, altitude: 0, isAerial: false });
+      setTrail(null);
+
       setBanner({
-        text: `CARTÃO AMARELO • ${latest.playerName} (${latest.minute}')`,
-        tone: "yellow_card",
+        text: isRed
+          ? `EXPULSO! ${latest.playerName} (${latest.minute}')`
+          : `CARTÃO AMARELO • ${latest.playerName} (${latest.minute}')`,
+        tone: isRed ? "red_card" : "yellow_card",
         minute: latest.minute,
       });
       setCardHighlight({
         playerId: latest.playerId,
         playerName: latest.playerName,
-        type: "yellow_card",
+        type: isRed ? "red_card" : "yellow_card",
         minute: latest.minute,
       });
-      setHighlightPause(1800, 1200);
-    } else if (latest.type === "red_card") {
-      setBanner({
-        text: `EXPULSO! ${latest.playerName} (${latest.minute}')`,
-        tone: "red_card",
-        minute: latest.minute,
-      });
-      setCardHighlight({
-        playerId: latest.playerId,
-        playerName: latest.playerName,
-        type: "red_card",
-        minute: latest.minute,
-      });
-      setHighlightPause(2200, 1400);
+      setHighlightPause(isRed ? 2400 : 1900, 1250);
+
+      // Stage 2: Free kick taken from the exact spot of the foul by the fouled team!
+      const fouledHome = !isHomeEvent;
+      const fkClubId = fouledHome ? homeClub.id : awayClub.id;
+      const fkActiveIds = fouledHome ? session.homeActiveIds : session.awayActiveIds;
+      const fkDelay = Math.max(
+        700,
+        Math.round((isRed ? 1300 : 1000) * clamp(speedRef.current / 1200, 0.45, 1.4))
+      );
+      window.setTimeout(() => {
+        const fkTakerId =
+          (victimId && fkActiveIds.includes(victimId) ? victimId : null) ??
+          fkActiveIds.find((id) => playerMap.get(id)?.roleCategory === "MID") ??
+          fkActiveIds.find((id) => playerMap.get(id)?.roleCategory !== "GK") ??
+          null;
+        if (fkTakerId === null) return;
+
+        const targetReceiverId =
+          fkActiveIds.find(
+            (id) =>
+              id !== fkTakerId &&
+              (playerMap.get(id)?.roleCategory === "ATT" ||
+                playerMap.get(id)?.roleCategory === "MID")
+          ) ?? fkTakerId;
+        const rawReceiverCoord = liveCoordsRef.current[targetReceiverId] ?? {
+          x: 50,
+          y: fouledHome ? Math.max(12, foulSpot.y - 18) : Math.min(88, foulSpot.y + 18),
+        };
+        const fkTarget: Coord = {
+          x: clamp(rawReceiverCoord.x, 16, 84),
+          y: fouledHome
+            ? clamp(Math.min(foulSpot.y - 12, rawReceiverCoord.y), 10, 82)
+            : clamp(Math.max(foulSpot.y + 12, rawReceiverCoord.y), 18, 90),
+        };
+        const fkCurve = computeTrajectoryCurve(
+          foulSpot.x,
+          foulSpot.y,
+          fkTarget.x,
+          fkTarget.y,
+          true,
+          "pass"
+        );
+        setCarrierId(targetReceiverId);
+        carrierIdRef.current = targetReceiverId;
+        setCarrierClubId(fkClubId);
+        carrierClubIdRef.current = fkClubId;
+        lastPasserIdRef.current = fkTakerId;
+        setTrail({
+          x1: foulSpot.x,
+          y1: foulSpot.y,
+          x2: fkTarget.x,
+          y2: fkTarget.y,
+          kind: "pass",
+          isAerial: true,
+          maxAltitude: 0.75,
+          curveX: fkCurve.curveX,
+          curveY: fkCurve.curveY,
+        });
+        setBallPos(fkTarget);
+        ballPosRef.current = fkTarget;
+        triggerBallFlight(
+          foulSpot.x,
+          foulSpot.y,
+          fkTarget.x,
+          fkTarget.y,
+          fkCurve.curveX,
+          fkCurve.curveY,
+          true,
+          0.75,
+          480
+        );
+      }, fkDelay);
     } else if (latest.type === "injury") {
+      const injSpot: Coord = {
+        x: clamp(ballPosRef.current.x, 10, 90),
+        y: clamp(ballPosRef.current.y, 12, 88),
+      };
+      const injCoords: Record<number, Coord> = {
+        ...curCoords,
+        [latest.playerId]: injSpot,
+      };
+      if (latest.assistPlayerId) {
+        injCoords[latest.assistPlayerId] = {
+          x: clamp(injSpot.x + 2, 8, 92),
+          y: clamp(injSpot.y + 1.5, 8, 92),
+        };
+      }
+      setLiveCoords(injCoords);
+      liveCoordsRef.current = injCoords;
+      setBallPos(injSpot);
+      ballPosRef.current = injSpot;
+      setBallVisual({ x: injSpot.x, y: injSpot.y, altitude: 0, isAerial: false });
+      setTrail(null);
       setBanner({
         text: `LESÃO! ${latest.playerName} (${latest.minute}')`,
         tone: "injury",
@@ -1528,7 +1654,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         type: "injury",
         minute: latest.minute,
       });
-      setHighlightPause(1800, 1200);
+      setHighlightPause(1900, 1200);
     } else if (latest.type === "corner") {
       const attackingHome = isHomeEvent;
       const cornerClub = isHomeEvent ? homeClub : awayClub;
@@ -1860,13 +1986,17 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         y: attackingHome ? clamp(lineY - beyond, 8, 47) : clamp(lineY + beyond, 53, 92),
       };
 
-      // Passer: a midfielder behind the line who plays the through ball
+      // Passer: the actual player who played the through ball (stored in latest.assistPlayerId)
       const passerId =
+        (latest.assistPlayerId && attIds.includes(latest.assistPlayerId)
+          ? latest.assistPlayerId
+          : undefined) ??
         attIds.find(
           (id) =>
             id !== latest.playerId &&
             playerMap.get(id)?.roleCategory === "MID"
-        ) ?? attIds.find((id) => id !== latest.playerId && playerMap.get(id)?.roleCategory !== "GK");
+        ) ??
+        attIds.find((id) => id !== latest.playerId && playerMap.get(id)?.roleCategory !== "GK");
       const passerCoord: Coord = passerId
         ? { ...(curCoords[passerId] ?? { x: 50, y: 50 }) }
         : { x: 50, y: attackingHome ? 60 : 40 };
@@ -2114,111 +2244,36 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         const isCentered = Math.abs(nextBallPos.x - 50) < 26;
 
         // IN-THE-BOX AGGRESSION:
-        // When an attacker penetrates the final 22m, they don't give up: they test the keeper with a shot!
+        // When an attacker penetrates the final 24m, they drive into prime shooting position and flag a real shot for the engine!
         const shootProb = isForward
-          ? isCentered ? 0.44 : 0.28
+          ? isCentered ? 0.46 : 0.30
           : carrierPlayer?.roleCategory === "MID" && isCentered
-          ? 0.22
-          : 0.05;
+          ? 0.24
+          : 0.06;
 
         const takeTickShot =
-          progressNorm >= 0.78 && goalDistY < 24 && Math.random() < shootProb;
+          progressNorm >= 0.72 && goalDistY < 26 && Math.random() < shootProb;
 
         if (takeTickShot) {
-          // Direct strike on goal!
-          const isNearPost = Math.random() < 0.45;
-          const goalX = isNearPost
-            ? clamp(nextBallPos.x * 0.4 + 50 * 0.6, 44, 56)
-            : 45 + Math.random() * 10;
-
-          const defTeamIds = prevIsHome ? cur.session.awayActiveIds : cur.session.homeActiveIds;
-          const defGkId = defTeamIds.find((id) => cur.playerMap.get(id)?.roleCategory === "GK");
-          const shotRoll = Math.random();
-
-          let finalTargetBall: Coord;
-          let nextBallOwnerId: number | null = null;
-          let nextClubIsHome = prevIsHome;
-
-          if (shotRoll < 0.52 && defGkId) {
-            // Goalkeeper dives to save/deflect!
-            finalTargetBall = {
-              x: clamp(goalX + (Math.random() * 6 - 3), 44, 56),
-              y: prevIsHome ? 4.5 : 95.5,
-            };
-            curCoords[defGkId] = { x: finalTargetBall.x, y: finalTargetBall.y };
-
-            if (Math.random() < 0.38) {
-              // Rebound loose ball into the 6-yard box for following attackers!
-              const reboundCoord: Coord = {
-                x: clamp(goalX + (Math.random() * 16 - 8), 26, 74),
-                y: prevIsHome ? 11 + Math.random() * 5 : 89 - Math.random() * 5,
-              };
-              nextBallPos = reboundCoord;
-              nextBallOwnerId = null; // Loose ball, scrambles in box!
-            } else {
-              nextBallPos = finalTargetBall;
-              nextBallOwnerId = defGkId;
-              nextClubIsHome = !prevIsHome;
-            }
-          } else if (shotRoll < 0.78) {
-            // Deflected by defender sliding across (corner or scramble)
-            finalTargetBall = {
-              x: clamp(goalX + (nextBallPos.x < 50 ? -8 : 8), 32, 68),
-              y: prevIsHome ? 8 + Math.random() * 6 : 92 - Math.random() * 6,
-            };
-            nextBallPos = finalTargetBall;
-            nextBallOwnerId = null;
-          } else {
-            // Shot whistles just wide of post or over bar
-            const wideX = Math.random() < 0.5 ? 38 + Math.random() * 3 : 59 + Math.random() * 3;
-            finalTargetBall = {
-              x: wideX,
-              y: prevIsHome ? 2.0 : 98.0,
-            };
-            nextBallPos = finalTargetBall;
-            if (defGkId) {
-              nextBallOwnerId = defGkId;
-              nextClubIsHome = !prevIsHome;
-            }
-          }
-
-          const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
-            nextBallPos.x,
-            nextBallPos.y,
-            finalTargetBall.x,
-            finalTargetBall.y,
-            true,
-            "shot"
-          );
-
-          setTrail({
-            x1: nextBallPos.x,
-            y1: nextBallPos.y,
-            x2: finalTargetBall.x,
-            y2: finalTargetBall.y,
-            kind: "shot",
-            isAerial,
-            maxAltitude,
-            curveX,
-            curveY,
-          });
-
-          triggerBallFlight(
-            nextBallPos.x,
-            nextBallPos.y,
-            finalTargetBall.x,
-            finalTargetBall.y,
-            curveX,
-            curveY,
-            isAerial,
-            maxAltitude,
-            330
-          );
-
-          nextBallPos = finalTargetBall;
-          nextCarrierId = nextBallOwnerId ?? currentCarrierId;
-          nextIsHome = nextClubIsHome;
+          // Position the ball carrier inside/at edge of the box ready for stepLiveMatchMinute to fire the official shot!
+          const shootSpot: Coord = {
+            x: clamp(nextBallPos.x * 0.7 + 50 * 0.3, 28, 72),
+            y: prevIsHome
+              ? clamp(nextBallPos.y + dirY * 2.5, 10, 21)
+              : clamp(nextBallPos.y + dirY * 2.5, 79, 90),
+          };
+          nextBallPos = shootSpot;
+          curCoords[currentCarrierId] = shootSpot;
+          nextCarrierId = currentCarrierId;
+          nextIsHome = prevIsHome;
           nextPhase = "final_third";
+          setTrail(null);
+          if (flightRafRef.current === null) {
+            setBallVisual({ x: shootSpot.x, y: shootSpot.y, altitude: 0, isAerial: false });
+          }
+          if (cur.session.pitchContext) {
+            cur.session.pitchContext.pendingVisualShot = true;
+          }
         } else {
           const dribbleRate =
             isForward ? 0.44 : carrierPlayer?.roleCategory === "MID" ? 0.34 : 0.22;
@@ -2305,6 +2360,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               Math.max(220, Math.min(520, passDist * 14))
             );
 
+            if (receiverId !== currentCarrierId) {
+              lastPasserIdRef.current = currentCarrierId;
+            }
             nextBallPos = targetBall;
             nextCarrierId = receiverId;
           }
@@ -2312,6 +2370,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       } else {
         // Possession turnover: closest defender intercepts and springs build-up or counter
         nextIsHome = !prevIsHome;
+        lastPasserIdRef.current = null;
         const newActiveIds = nextIsHome
           ? cur.session.homeActiveIds
           : cur.session.awayActiveIds;
@@ -2546,6 +2605,33 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       stepPlayers(cur.session.homeActiveIds, homeTargets);
       stepPlayers(cur.session.awayActiveIds, awayTargets);
+
+      // Find the defending outfield player closest to the ball carrier for causal fouls/duels
+      const defIds = nextIsHome ? cur.session.awayActiveIds : cur.session.homeActiveIds;
+      let closestDefenderId: number | null = null;
+      let minDefDist = Infinity;
+      for (const dId of defIds) {
+        if (cur.playerMap.get(dId)?.roleCategory === "GK") continue;
+        const dCoord = nextCoords[dId] ?? curCoords[dId];
+        if (!dCoord) continue;
+        const d = Math.hypot(dCoord.x - nextBallPos.x, dCoord.y - nextBallPos.y);
+        if (d < minDefDist) {
+          minDefDist = d;
+          closestDefenderId = dId;
+        }
+      }
+
+      cur.session.pitchContext = {
+        ballX: nextBallPos.x,
+        ballY: nextBallPos.y,
+        carrierId: nextCarrierId,
+        carrierClubId: nextClubId,
+        lastPasserId: lastPasserIdRef.current,
+        closestDefenderId,
+        playPhase: nextPhase,
+        attackProgress: clamp(currentProgress, 0, 1),
+        pendingVisualShot: cur.session.pitchContext?.pendingVisualShot ?? false,
+      };
 
       setBallPos(nextBallPos);
       setCarrierId(nextCarrierId);
