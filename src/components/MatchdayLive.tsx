@@ -112,6 +112,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const [, setTick] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [speedMs, setSpeedMs] = useState<number>(1200);
+  const [pitchSize, setPitchSize] = useState<"normal" | "large" | "full">(() => {
+    try {
+      const saved = localStorage.getItem("fm_pitch_size") as "normal" | "large" | "full";
+      if (saved === "normal" || saved === "large" || saved === "full") return saved;
+    } catch {}
+    return "large";
+  });
   const simPauseUntilRef = useRef<number>(0);
   const halftimeTriggeredRef = useRef<boolean>(false);
   const [subOutId, setSubOutId] = useState<number | null>(null);
@@ -427,9 +434,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       )}
 
       {/* Main Layout */}
-      <div className="grid gap-5 lg:grid-cols-12">
+      <div className={`grid gap-5 transition-all ${pitchSize === "full" ? "grid-cols-1" : "lg:grid-cols-12"}`}>
         {/* Left/Center: User Match Broadcast */}
-        <div className="space-y-5 lg:col-span-8">
+        <div className={`space-y-5 transition-all ${pitchSize === "full" ? "w-full" : "lg:col-span-8"}`}>
           {/* Scoreboard with Stadium Photo Atmosphere */}
           <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-6">
             {getClubVisuals(homeClub).stadiumImageUrl && (
@@ -551,6 +558,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             simPauseRef={simPauseUntilRef}
             subOutId={subOutId}
             onSelectSubOut={(pid) => setSubOutId((prev) => (prev === pid ? null : pid))}
+            pitchSize={pitchSize}
+            onPitchSizeChange={setPitchSize}
           />
 
           {/* Match Stats */}
@@ -725,7 +734,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         </div>
 
         {/* Right Column: Substitutions & Live Coaching */}
-        <div className="lg:col-span-4">
+        <div className={`transition-all ${pitchSize === "full" ? "w-full" : "lg:col-span-4"}`}>
           <div className="sticky top-20 rounded-2xl border border-slate-800 bg-slate-900 p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-300">

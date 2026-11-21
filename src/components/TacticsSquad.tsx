@@ -336,7 +336,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
 
       <div className="grid gap-6 xl:grid-cols-12">
         {/* Left Column: Tactical Instructions + 2D Pitch */}
-        <div className="space-y-4 xl:col-span-5">
+        <div className="space-y-4 xl:col-span-6">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-bold text-white">
@@ -455,7 +455,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
           </div>
 
           {/* 2D Football Pitch */}
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl border-2 border-emerald-700 bg-[#065f46] select-none">
+          <div className="relative aspect-[4/5] sm:aspect-[3/4] w-full overflow-hidden rounded-2xl border-2 border-emerald-700 bg-[#065f46] select-none shadow-xl">
             {/* Pitch markings */}
             <div className="pointer-events-none absolute inset-4 rounded-lg border border-white/15">
               {/* Halfway line */}
@@ -531,7 +531,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
         </div>
 
         {/* Right Column: Starters / Bench / Reserves List */}
-        <div className="space-y-5 xl:col-span-7">
+        <div className="space-y-5 xl:col-span-6">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
             <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-400">
               Titulares ({starters.length})

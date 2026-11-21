@@ -22,6 +22,8 @@ import {
 import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubKit } from "./ClubKit";
 
+export type PitchSize = "normal" | "large" | "full";
+
 interface LivePitch2DProps {
   session: LiveMatchSession;
   homeClub: Club;
@@ -36,6 +38,8 @@ interface LivePitch2DProps {
   simPauseRef?: React.MutableRefObject<number>;
   subOutId: number | null;
   onSelectSubOut: (playerId: number) => void;
+  pitchSize?: PitchSize;
+  onPitchSizeChange?: (size: PitchSize) => void;
 }
 
 const ACTION_EVERY = 4; // pitch ticks per ball action (pass / dribble / turnover)
@@ -681,7 +685,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   simPauseRef,
   subOutId,
   onSelectSubOut,
+  pitchSize: propPitchSize,
+  onPitchSizeChange,
 }) => {
+  const [pitchSizeState, setPitchSizeState] = useState<PitchSize>(() => {
+    try {
+      const saved = localStorage.getItem("fm_pitch_size") as PitchSize;
+      if (saved === "normal" || saved === "large" || saved === "full") return saved;
+    } catch {}
+    return "large";
+  });
+
+  const activePitchSize = propPitchSize ?? pitchSizeState;
+
+  const handlePitchSizeChange = (nextSize: PitchSize) => {
+    setPitchSizeState(nextSize);
+    try {
+      localStorage.setItem("fm_pitch_size", nextSize);
+    } catch {}
+    onPitchSizeChange?.(nextSize);
+  };
+
   const [showOffsideLine, setShowOffsideLine] = useState(true);
   const [offsideMark, setOffsideMark] = useState<OffsideMark | null>(null);
   const [showNames, setShowNames] = useState(true);
@@ -1771,7 +1795,47 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Pitch Size Selector */}
+          <div className="flex items-center rounded-lg border border-slate-700 bg-slate-800 p-0.5 text-[11px] font-semibold">
+            <span className="hidden sm:inline px-1.5 text-[10px] uppercase font-bold text-slate-400">
+              Campo:
+            </span>
+            <button
+              onClick={() => handlePitchSizeChange("normal")}
+              className={`rounded px-2.5 py-1 text-xs transition ${
+                activePitchSize === "normal"
+                  ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Tamanho Padrão (Compacto)"
+            >
+              Padrão
+            </button>
+            <button
+              onClick={() => handlePitchSizeChange("large")}
+              className={`rounded px-2.5 py-1 text-xs transition ${
+                activePitchSize === "large"
+                  ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Tamanho Grande (Recomendado - Mais Espaçoso)"
+            >
+              Grande
+            </button>
+            <button
+              onClick={() => handlePitchSizeChange("full")}
+              className={`rounded px-2.5 py-1 text-xs transition ${
+                activePitchSize === "full"
+                  ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Tamanho Expandido (Tela Cheia / Visão Panorâmica)"
+            >
+              Expandido
+            </button>
+          </div>
+
           <button
             onClick={() => setShowOffsideLine((v) => !v)}
             title="Mostra a linha do penúltimo defensor (referência para impedimento)"
@@ -1818,7 +1882,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
       {/* Vertical 2D Pitch */}
       <div
-        className="relative aspect-[3/4] w-full max-w-2xl mx-auto overflow-hidden rounded-xl border-2 border-emerald-800 select-none shadow-[inset_0_0_60px_rgba(0,0,0,0.35)]"
+        className={`relative mx-auto overflow-hidden rounded-2xl border-2 border-emerald-800 select-none shadow-[inset_0_0_70px_rgba(0,0,0,0.4)] transition-all duration-300 ${
+          activePitchSize === "normal"
+            ? "w-full max-w-2xl aspect-[3/4]"
+            : activePitchSize === "large"
+            ? "w-full max-w-4xl aspect-[4/5] sm:aspect-[3/4]"
+            : "w-full max-w-6xl aspect-[4/5] sm:aspect-[16/11] lg:aspect-[16/10]"
+        }`}
         style={{
           backgroundImage:
             "repeating-linear-gradient(180deg, #064e3b 0%, #064e3b 8.333%, #065f46 8.333%, #065f46 16.666%)",
@@ -2209,7 +2279,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   <ClubKit
                     club={club}
                     variant={variant}
-                    size="sm"
+                    size={activePitchSize === "full" ? "md" : "sm"}
                     number={player.shirtNumber ?? info.label.slice(0, 2)}
                   />
                   {hasYellow && (
@@ -2239,7 +2309,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               ) : (
                 <div
-                  className={`relative flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full text-[9px] font-black transition ${
+                  className={`relative flex items-center justify-center rounded-full font-black transition ${
+                    activePitchSize === "full"
+                      ? "h-8 w-8 text-[11px]"
+                      : activePitchSize === "large"
+                      ? "h-7 w-7 sm:h-8 sm:w-8 text-[10px]"
+                      : "h-6 w-6 sm:h-7 sm:w-7 text-[9px]"
+                  } ${
                     isCardTarget && cardHighlight?.type === "yellow_card"
                       ? "ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-[0_0_25px_#f59e0b] scale-120 animate-pulse"
                       : isCardTarget && cardHighlight?.type === "red_card"
@@ -2290,11 +2366,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               {/* Name & Stamina pill */}
               {showNames && (
                 <div className="mt-0.5 flex flex-col items-center">
-                  <span className="max-w-[66px] truncate rounded bg-slate-950/90 px-1 text-[9px] font-semibold leading-tight text-white">
+                  <span
+                    className={`truncate rounded bg-slate-950/90 px-1.5 text-[9px] font-semibold leading-tight text-white ${
+                      activePitchSize === "full"
+                        ? "max-w-[100px] text-[10px]"
+                        : activePitchSize === "large"
+                        ? "max-w-[85px] sm:max-w-[95px]"
+                        : "max-w-[66px]"
+                    }`}
+                  >
                     {surname}
                   </span>
                   {!session.finished && (
-                    <div className="mt-0.5 h-0.5 w-6 overflow-hidden rounded-full bg-slate-900">
+                    <div
+                      className={`mt-0.5 h-0.5 overflow-hidden rounded-full bg-slate-900 ${
+                        activePitchSize === "full"
+                          ? "w-8"
+                          : activePitchSize === "large"
+                          ? "w-7"
+                          : "w-6"
+                      }`}
+                    >
                       <div
                         className={`h-full ${getStaminaColor(stamina)}`}
                         style={{ width: `${stamina}%` }}
@@ -2335,8 +2427,20 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             >
               <div className="relative flex items-center justify-center">
                 {/* Flat 2D Soccer Ball Token */}
-                <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-white border-2 border-slate-950 shadow-sm flex items-center justify-center">
-                  <div className="h-1 w-1 rounded-full bg-slate-950" />
+                <div
+                  className={`rounded-full bg-white border-2 border-slate-950 shadow-md flex items-center justify-center ${
+                    activePitchSize === "full"
+                      ? "h-4 w-4"
+                      : activePitchSize === "large"
+                      ? "h-3.5 w-3.5 sm:h-4 sm:w-4"
+                      : "h-3 w-3 sm:h-3.5 sm:w-3.5"
+                  }`}
+                >
+                  <div
+                    className={`rounded-full bg-slate-950 ${
+                      activePitchSize === "full" ? "h-1.5 w-1.5" : "h-1 w-1"
+                    }`}
+                  />
                 </div>
 
                 {/* Aerial altitude pill */}
