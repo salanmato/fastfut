@@ -136,12 +136,15 @@ function hydrateSave(parsed: SaveState): SaveState {
     parsed.seasonFinished,
     parsed.userClubId
   );
+  const hydratedPlayers = initializeSquadCategoriesAndLoans(
+    ensureAllPlayersShirtNumbers(parsed.players),
+    parsed.clubs
+  ).map((p) =>
+    p.roleCategory === "GK" && p.stamina < 95 ? { ...p, stamina: 98 } : p
+  );
   return {
     ...parsed,
-    players: initializeSquadCategoriesAndLoans(
-      ensureAllPlayersShirtNumbers(parsed.players),
-      parsed.clubs
-    ),
+    players: hydratedPlayers,
     stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
     kitTheme: parsed.kitTheme ?? "home",
     autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
@@ -606,8 +609,16 @@ export const App: React.FC = () => {
       const newApps = prevApps + 1;
       const newAvg =
         Math.round(((p.seasonAvgRating * prevApps + perf.rating) / newApps) * 100) / 100;
-      const staminaDrop = 16 - Math.min(8, Math.floor((p.stats.stamina - 65) / 5));
-      const postRecovery = Math.max(58, Math.min(100, p.stamina - Math.max(6, staminaDrop) + 8));
+      let postRecovery: number;
+      if (p.roleCategory === "GK") {
+        // Goalkeepers tire far less than outfield players and recover almost completely between rounds (96-99%)
+        const baseStam = p.stamina < 94 ? 98 : p.stamina;
+        postRecovery = baseStam <= 96 ? Math.min(99, baseStam + 1) : baseStam - 1;
+      } else {
+        const staminaBonus = Math.max(0, Math.min(8, Math.floor((p.stats.stamina - 65) / 5)));
+        const staminaDrop = 16 - staminaBonus;
+        postRecovery = Math.max(58, Math.min(100, p.stamina - Math.max(6, staminaDrop) + 8));
+      }
 
       return {
         ...p,

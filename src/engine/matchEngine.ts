@@ -103,7 +103,10 @@ export function autoPickLineup(
   const available = healthy.length >= 11 ? [...healthy] : [...healthy, ...injured];
   const starters: number[] = [];
 
-  const effectiveOvr = (p: Player) => p.overall * (0.65 + 0.35 * (p.stamina / 100));
+  const effectiveOvr = (p: Player) =>
+    p.roleCategory === "GK"
+      ? p.overall * (0.92 + 0.08 * (p.stamina / 100))
+      : p.overall * (0.65 + 0.35 * (p.stamina / 100));
 
   for (const slot of slots) {
     let bestIdx = -1;
@@ -762,7 +765,10 @@ export function computeTeamPower(
 
   const getEff = (p: Player, val: number) => {
     const stam = staminaOverrides?.[p.id] ?? p.stamina;
-    const fatigueFactor = 0.72 + 0.28 * (Math.max(15, stam) / 100);
+    const fatigueFactor =
+      p.roleCategory === "GK"
+        ? 0.94 + 0.06 * (Math.max(50, stam) / 100)
+        : 0.72 + 0.28 * (Math.max(15, stam) / 100);
     const shirtFactor = evaluateShirtNumberAffinity(p).multiplier;
     return val * fatigueFactor * shirtFactor;
   };
@@ -955,7 +961,8 @@ export function initLiveMatchSession(
   const playerRatings: Record<number, number> = {};
 
   for (const p of [...homePlayers, ...awayPlayers]) {
-    playerStamina[p.id] = Math.max(45, p.stamina);
+    playerStamina[p.id] =
+      p.roleCategory === "GK" ? Math.max(94, p.stamina) : Math.max(45, p.stamina);
   }
   for (const id of [...homeActiveIds, ...awayActiveIds]) {
     playerRatings[id] = 6.5;
@@ -1277,12 +1284,21 @@ export function stepLiveMatchMinute(
       (tactics.mentality === "Attacking" ? 0.08 : tactics.mentality === "Defensive" ? -0.05 : 0);
     const turfMult = isHome ? homeTurfFactor : 1;
     for (const p of active) {
-      const mult =
-        (p.roleCategory === "GK" ? 0.16 : 1 - (p.stats.stamina - 70) * 0.004) * turfMult;
-      session.playerStamina[p.id] = Math.max(
-        18,
-        (session.playerStamina[p.id] ?? 100) - baseDrain * mult
-      );
+      if (p.roleCategory === "GK") {
+        // Goalkeepers tire much less than outfield players (~3-4% over 90 mins, independent of pressing)
+        const gkDrain = 0.038 * turfMult;
+        session.playerStamina[p.id] = Math.max(
+          88,
+          (session.playerStamina[p.id] ?? 100) - gkDrain
+        );
+      } else {
+        const stamStat = Math.max(45, p.stats.stamina);
+        const mult = (1 - (stamStat - 70) * 0.004) * turfMult;
+        session.playerStamina[p.id] = Math.max(
+          18,
+          (session.playerStamina[p.id] ?? 100) - baseDrain * mult
+        );
+      }
     }
   };
   drainFor(true, homeTactics, homeActive);
