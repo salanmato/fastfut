@@ -1211,11 +1211,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     lastHandledEventCountRef.current = session.events.length;
 
     const EVENT_PRIORITY: Record<MatchEvent["type"], number> = {
+      corner: 105, // Corner sequence chains any follow-up header goal/chance in the same minute!
       goal: 100,
       red_card: 90,
       whistle: 85,
       offside: 80,
-      corner: 70,
       save: 65,
       chance: 60,
       substitution: 55,
@@ -1226,6 +1226,10 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     const latest: MatchEvent = [...newEvents].sort(
       (a, b) => (EVENT_PRIORITY[b.type] ?? 0) - (EVENT_PRIORITY[a.type] ?? 0)
     )[0];
+    const cornerFollowUpEvent: MatchEvent | undefined =
+      latest.type === "corner"
+        ? newEvents.find((e) => e.id !== latest.id && (e.type === "goal" || e.type === "chance"))
+        : undefined;
 
     if (latest.id === lastHandledEventIdRef.current) return;
     lastHandledEventIdRef.current = latest.id;
@@ -1530,101 +1534,320 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const cornerClub = isHomeEvent ? homeClub : awayClub;
       const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
       const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
+      const speedScale = clamp(speedRef.current / 1200, 0.45, 1.4);
 
-      // Randomly pick left or right corner flag
-      const cornerLeft = Math.random() < 0.5;
-      const cornerFlagX = cornerLeft ? 4.5 : 95.5;
-      const cornerFlagY = attackingHome ? 3.5 : 96.5;
+      // STAGE 1 (0ms -> ~900ms): The shot that gets deflected by a defender or saved by GK out over the endline!
+      const shooterId = latest.assistPlayerId ?? latest.playerId;
+      const shooterName = getPlayerDisplayName(latest.assistPlayerName ?? latest.playerName);
+      const { shooterCoord } = choreographBoxAction(attackingHome, shooterId);
 
-      const targetBoxX = 45 + Math.random() * 10;
-      const targetBoxY = attackingHome ? 10 + Math.random() * 5 : 90 - Math.random() * 5;
+      // Pick the corner side matching the side from which the shot was deflected
+      const cornerLeft = shooterCoord.x < 50;
+      const outX = cornerLeft ? 34 + Math.random() * 6 : 60 + Math.random() * 6;
+      const outY = attackingHome ? 2.0 : 98.0;
 
-      const updatedCoords: Record<number, Coord> = { ...curCoords };
-
-      // Position the corner kick taker right at the corner flag
-      updatedCoords[latest.playerId] = {
-        x: cornerFlagX + (cornerLeft ? 1.5 : -1.5),
-        y: cornerFlagY + (attackingHome ? 1.2 : -1.2),
-      };
-
-      // Position defending goalkeeper on line in center and defenders in box
-      for (const id of defIds) {
-        const p = playerMap.get(id);
-        if (p?.roleCategory === "GK") {
-          updatedCoords[id] = { x: 50, y: attackingHome ? 4.5 : 95.5 };
-        } else if (p) {
-          const base = updatedCoords[id] ?? { x: 50, y: 50 };
-          updatedCoords[id] = {
-            x: clamp(base.x * 0.4 + (40 + Math.random() * 20) * 0.6, 26, 74),
-            y: clamp(attackingHome ? 8 + Math.random() * 9 : 92 - Math.random() * 9, 5, 95),
-          };
-        }
-      }
-
-      // Attacking team pushes tall players (CBs / ST) into the penalty box for header
-      for (const id of attIds) {
-        if (id === latest.playerId) continue;
-        const p = playerMap.get(id);
-        if (!p || p.roleCategory === "GK") continue;
-        const isTall = p.roleCategory === "ATT" || p.roleCategory === "DEF";
-        const boxY = isTall
-          ? (attackingHome ? 9 + Math.random() * 7 : 91 - Math.random() * 7)
-          : (attackingHome ? 22 + Math.random() * 4 : 78 - Math.random() * 4);
-        updatedCoords[id] = {
-          x: clamp(32 + Math.random() * 36, 24, 76),
-          y: clamp(boxY, 6, 94),
-        };
-      }
-
-      setLiveCoords(updatedCoords);
-
-      const { curveX, curveY } = computeTrajectoryCurve(
-        cornerFlagX,
-        cornerFlagY,
-        targetBoxX,
-        targetBoxY,
+      const shotCurve = computeTrajectoryCurve(
+        shooterCoord.x,
+        shooterCoord.y,
+        outX,
+        outY,
         true,
-        "cross"
+        "shot"
       );
 
       setPlayPhase("final_third");
-      setCarrierId(latest.playerId);
+      setCarrierId(shooterId);
       setCarrierClubId(latest.clubId);
       setTrail({
-        x1: cornerFlagX,
-        y1: cornerFlagY,
-        x2: targetBoxX,
-        y2: targetBoxY,
-        kind: "cross",
+        x1: shooterCoord.x,
+        y1: shooterCoord.y,
+        x2: outX,
+        y2: outY,
+        kind: "shot",
         isAerial: true,
-        maxAltitude: 1.15,
-        curveX,
-        curveY,
+        maxAltitude: 0.55,
+        curveX: shotCurve.curveX,
+        curveY: shotCurve.curveY,
       });
-
-      // Ball starts at corner flag, then flights high into the box
-      setBallPos({ x: cornerFlagX, y: cornerFlagY });
+      setBallPos({ x: outX, y: outY });
       triggerBallFlight(
-        cornerFlagX,
-        cornerFlagY,
-        targetBoxX,
-        targetBoxY,
-        curveX,
-        curveY,
+        shooterCoord.x,
+        shooterCoord.y,
+        outX,
+        outY,
+        shotCurve.curveX,
+        shotCurve.curveY,
         true,
-        1.15,
-        750
+        0.55,
+        420
       );
-
       setBanner({
-        text: "ESCANTEIO",
-        tone: "corner",
-        minute: latest.minute,
-        clubName: cornerClub.name,
-        clubColor: cornerClub.primaryColor,
-        scorerName: `${latest.playerName} (${cornerClub.shortName})`,
+        text: `CHUTE DESVIADO! ${shooterName} → Escanteio (${latest.minute}')`,
+        tone: "save",
       });
-      setHighlightPause(2200, 1500);
+
+      const totalPauseBase = cornerFollowUpEvent?.type === "goal" ? 4100 : 2850;
+      setHighlightPause(totalPauseBase, 2000);
+
+      // STAGE 2 (~900ms): Ball placed at the corner flag, taker runs to flag, box crowds, and aerial cross flies in!
+      const cornerFlagX = cornerLeft ? 4.5 : 95.5;
+      const cornerFlagY = attackingHome ? 3.5 : 96.5;
+      const targetBoxX = 45 + Math.random() * 10;
+      const targetBoxY = attackingHome ? 10 + Math.random() * 4.5 : 90 - Math.random() * 4.5;
+      const stage2Delay = Math.max(550, Math.round(900 * speedScale));
+
+      window.setTimeout(() => {
+        const boxCoords: Record<number, Coord> = { ...liveCoordsRef.current };
+
+        // Position corner taker right at the corner flag
+        boxCoords[latest.playerId] = {
+          x: cornerFlagX + (cornerLeft ? 1.5 : -1.5),
+          y: cornerFlagY + (attackingHome ? 1.2 : -1.2),
+        };
+
+        // Defending GK on line and defenders marking in box
+        for (const id of defIds) {
+          const p = playerMap.get(id);
+          if (p?.roleCategory === "GK") {
+            boxCoords[id] = { x: 50, y: attackingHome ? 4.5 : 95.5 };
+          } else if (p) {
+            const base = boxCoords[id] ?? { x: 50, y: 50 };
+            boxCoords[id] = {
+              x: clamp(base.x * 0.4 + (40 + Math.random() * 20) * 0.6, 26, 74),
+              y: clamp(attackingHome ? 8 + Math.random() * 9 : 92 - Math.random() * 9, 5, 95),
+            };
+          }
+        }
+
+        // Attacking tall players (CBs / ST) push into penalty area; if there is a header target, place them at targetBox
+        for (const id of attIds) {
+          if (id === latest.playerId) continue;
+          if (cornerFollowUpEvent && id === cornerFollowUpEvent.playerId) {
+            boxCoords[id] = { x: targetBoxX, y: targetBoxY };
+            continue;
+          }
+          const p = playerMap.get(id);
+          if (!p || p.roleCategory === "GK") continue;
+          const isTall = p.roleCategory === "ATT" || p.roleCategory === "DEF";
+          const boxY = isTall
+            ? (attackingHome ? 9 + Math.random() * 7 : 91 - Math.random() * 7)
+            : (attackingHome ? 22 + Math.random() * 4 : 78 - Math.random() * 4);
+          boxCoords[id] = {
+            x: clamp(32 + Math.random() * 36, 24, 76),
+            y: clamp(boxY, 6, 94),
+          };
+        }
+
+        setLiveCoords(boxCoords);
+        liveCoordsRef.current = boxCoords;
+
+        const { curveX, curveY } = computeTrajectoryCurve(
+          cornerFlagX,
+          cornerFlagY,
+          targetBoxX,
+          targetBoxY,
+          true,
+          "cross"
+        );
+
+        setCarrierId(latest.playerId);
+        carrierIdRef.current = latest.playerId;
+        setCarrierClubId(latest.clubId);
+        carrierClubIdRef.current = latest.clubId;
+        setTrail({
+          x1: cornerFlagX,
+          y1: cornerFlagY,
+          x2: targetBoxX,
+          y2: targetBoxY,
+          kind: "cross",
+          isAerial: true,
+          maxAltitude: 1.15,
+          curveX,
+          curveY,
+        });
+        setBallPos({ x: targetBoxX, y: targetBoxY });
+        ballPosRef.current = { x: targetBoxX, y: targetBoxY };
+        triggerBallFlight(
+          cornerFlagX,
+          cornerFlagY,
+          targetBoxX,
+          targetBoxY,
+          curveX,
+          curveY,
+          true,
+          1.15,
+          700
+        );
+        setBanner({
+          text: "ESCANTEIO",
+          tone: "corner",
+          minute: latest.minute,
+          clubName: cornerClub.name,
+          clubColor: cornerClub.primaryColor,
+          scorerName: `${latest.playerName} (${cornerClub.shortName})`,
+        });
+      }, stage2Delay);
+
+      // STAGE 3 (~1680ms): Header in the box (Goal, dangerous header chance, or defensive clearance)
+      const stage3Delay = stage2Delay + Math.max(520, Math.round(740 * speedScale));
+      window.setTimeout(() => {
+        if (cornerFollowUpEvent?.type === "goal") {
+          const goalX = 50 + (Math.random() * 4 - 2);
+          const goalY = attackingHome ? 1.6 : 98.4;
+          const scorer = playerMap.get(cornerFollowUpEvent.playerId);
+          const assister = cornerFollowUpEvent.assistPlayerId
+            ? playerMap.get(cornerFollowUpEvent.assistPlayerId)
+            : undefined;
+          const hdrCurve = computeTrajectoryCurve(
+            targetBoxX,
+            targetBoxY,
+            goalX,
+            goalY,
+            true,
+            "goal"
+          );
+          setCarrierId(cornerFollowUpEvent.playerId);
+          carrierIdRef.current = cornerFollowUpEvent.playerId;
+          setTrail({
+            x1: targetBoxX,
+            y1: targetBoxY,
+            x2: goalX,
+            y2: goalY,
+            kind: "goal",
+            isAerial: true,
+            maxAltitude: 0.65,
+            curveX: hdrCurve.curveX,
+            curveY: hdrCurve.curveY,
+          });
+          setBallPos({ x: goalX, y: goalY });
+          ballPosRef.current = { x: goalX, y: goalY };
+          triggerBallFlight(
+            targetBoxX,
+            targetBoxY,
+            goalX,
+            goalY,
+            hdrCurve.curveX,
+            hdrCurve.curveY,
+            true,
+            0.65,
+            420
+          );
+          setBanner({
+            text: "GOOOOL DE CABEÇA!",
+            tone: "goal",
+            minute: cornerFollowUpEvent.minute,
+            clubName: cornerClub.name,
+            clubColor: cornerClub.primaryColor,
+            scorerName: cornerFollowUpEvent.playerName,
+            scorerShirt: scorer?.shirtNumber,
+            scorerRating: (session.playerRatings[cornerFollowUpEvent.playerId] ?? 7.8).toFixed(1),
+            assistName: cornerFollowUpEvent.assistPlayerName,
+            assistShirt: assister?.shirtNumber,
+            assistRating: cornerFollowUpEvent.assistPlayerId
+              ? (session.playerRatings[cornerFollowUpEvent.assistPlayerId] ?? 7.3).toFixed(1)
+              : undefined,
+          });
+
+          const concedingIsHome = !attackingHome;
+          pendingKickoffHomeRef.current = concedingIsHome;
+          if (kickoffTimeoutRef.current !== null) {
+            window.clearTimeout(kickoffTimeoutRef.current);
+          }
+          kickoffTimeoutRef.current = window.setTimeout(() => {
+            kickoffTimeoutRef.current = null;
+            if (pendingKickoffHomeRef.current !== null) {
+              const koHome = pendingKickoffHomeRef.current;
+              pendingKickoffHomeRef.current = null;
+              resetToCenterKickoff(koHome);
+            }
+          }, Math.max(700, Math.round(1150 * speedScale)));
+        } else if (cornerFollowUpEvent?.type === "chance") {
+          const missX = Math.random() < 0.5 ? 41 : 59;
+          const missY = attackingHome ? 1.5 : 98.5;
+          const hdrCurve = computeTrajectoryCurve(
+            targetBoxX,
+            targetBoxY,
+            missX,
+            missY,
+            true,
+            "header"
+          );
+          setCarrierId(cornerFollowUpEvent.playerId);
+          carrierIdRef.current = cornerFollowUpEvent.playerId;
+          setTrail({
+            x1: targetBoxX,
+            y1: targetBoxY,
+            x2: missX,
+            y2: missY,
+            kind: "shot",
+            isAerial: true,
+            maxAltitude: 0.7,
+            curveX: hdrCurve.curveX,
+            curveY: hdrCurve.curveY,
+          });
+          setBallPos({ x: missX, y: missY });
+          ballPosRef.current = { x: missX, y: missY };
+          triggerBallFlight(
+            targetBoxX,
+            targetBoxY,
+            missX,
+            missY,
+            hdrCurve.curveX,
+            hdrCurve.curveY,
+            true,
+            0.7,
+            400
+          );
+          setBanner({
+            text: `QUASE DE CABEÇA! ${getPlayerDisplayName(cornerFollowUpEvent.playerName)} (${cornerFollowUpEvent.minute}')`,
+            tone: "chance",
+          });
+        } else {
+          // Defense rises in the box and heads the ball clear out of the penalty area!
+          const clearX = 32 + Math.random() * 36;
+          const clearY = attackingHome ? 27 + Math.random() * 8 : 73 - Math.random() * 8;
+          const clrCurve = computeTrajectoryCurve(
+            targetBoxX,
+            targetBoxY,
+            clearX,
+            clearY,
+            true,
+            "header"
+          );
+          const clearerId =
+            defIds.find((id) => playerMap.get(id)?.roleCategory === "DEF") ?? defIds[0] ?? null;
+          if (clearerId !== null) {
+            setCarrierId(clearerId);
+            carrierIdRef.current = clearerId;
+            setCarrierClubId(attackingHome ? awayClub.id : homeClub.id);
+            carrierClubIdRef.current = attackingHome ? awayClub.id : homeClub.id;
+          }
+          setTrail({
+            x1: targetBoxX,
+            y1: targetBoxY,
+            x2: clearX,
+            y2: clearY,
+            kind: "pass",
+            isAerial: true,
+            maxAltitude: 0.85,
+            curveX: clrCurve.curveX,
+            curveY: clrCurve.curveY,
+          });
+          setBallPos({ x: clearX, y: clearY });
+          ballPosRef.current = { x: clearX, y: clearY };
+          triggerBallFlight(
+            targetBoxX,
+            targetBoxY,
+            clearX,
+            clearY,
+            clrCurve.curveX,
+            clrCurve.curveY,
+            true,
+            0.85,
+            450
+          );
+        }
+      }, stage3Delay);
     } else if (latest.type === "offside") {
       const attackingHome = isHomeEvent;
       const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;

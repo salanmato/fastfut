@@ -921,7 +921,12 @@ export function stepLiveMatchMinute(
     return pool.sort((a, b) => (b.faceStats.passing || 70) - (a.faceStats.passing || 70))[0];
   };
 
-  const triggerCornerKick = (isCornerHome: boolean, customReason?: string) => {
+  const triggerCornerKick = (
+    isCornerHome: boolean,
+    shooter: Player,
+    deflector?: Player,
+    origin: "gk_save" | "deflected_shot" = "deflected_shot"
+  ) => {
     const cornerClubId = isCornerHome ? session.homeClubId : session.awayClubId;
     const cornerClubName = isCornerHome ? homeClub.shortName : awayClub.shortName;
     const cornerStats = isCornerHome ? session.homeStats : session.awayStats;
@@ -930,13 +935,18 @@ export function stepLiveMatchMinute(
 
     cornerStats.corners += 1;
 
-    const defaultTexts = [
-      `⛳ ESCANTEIO para o ${cornerClubName}! Desvio providencial da zaga e ${taker.name} corre para a bandeirinha!`,
-      `⛳ ESCANTEIO! A bola sai pela linha de fundo e ${taker.name} (${cornerClubName}) vai bater na bandeirinha!`,
-      `⛳ ESCANTEIO para o ${cornerClubName}! O defensor trava o cruzamento no carrinho e cede escanteio!`,
-      `⛳ ESCANTEIO! Pressão no ataque do ${cornerClubName}! ${taker.name} ergue a mão e se prepara para alçar na área!`,
+    const saveTexts = [
+      `⛳ ESCANTEIO para o ${cornerClubName}! ${shooter.name} solta uma bomba no alvo, ${deflector?.name ?? "o goleiro"} espalma pela linha de fundo e ${taker.name} vai cobrar!`,
+      `⛳ ESCANTEIO! Defesaça de ${deflector?.name ?? "o goleiro"} no chute colocado de ${shooter.name} (${cornerClubName}), mandando para escanteio!`,
+      `⛳ ESCANTEIO para o ${cornerClubName}! ${shooter.name} finaliza forte e ${deflector?.name ?? "o goleiro"} salva com a ponta dos dedos por cima do travessão!`,
     ];
-    const text = customReason || defaultTexts[Math.floor(Math.random() * defaultTexts.length)];
+    const deflectedTexts = [
+      `⛳ ESCANTEIO para o ${cornerClubName}! Finalização perigosa de ${shooter.name} explode no carrinho de ${deflector?.name ?? "zagueiro"} e sai pela linha de fundo!`,
+      `⛳ ESCANTEIO! ${shooter.name} (${cornerClubName}) bate cruzado para o gol, a zaga desvia tirando tinta da trave e ${taker.name} corre para a bandeirinha!`,
+      `⛳ ESCANTEIO para o ${cornerClubName}! Chute forte de ${shooter.name} é bloqueado na hora H por ${deflector?.name ?? "a defesa"} pela linha de fundo!`,
+    ];
+    const pool = origin === "gk_save" ? saveTexts : deflectedTexts;
+    const text = pool[Math.floor(Math.random() * pool.length)];
 
     session.events.push({
       id: `corner-${session.fixtureId}-${min}-${taker.id}-${cornerStats.corners}`,
@@ -945,6 +955,8 @@ export function stepLiveMatchMinute(
       clubId: cornerClubId,
       playerId: taker.id,
       playerName: taker.name,
+      assistPlayerId: shooter.id,
+      assistPlayerName: shooter.name,
       text,
     });
 
@@ -1107,9 +1119,20 @@ export function stepLiveMatchMinute(
       Math.min(0.62, 0.38 + (shooter.faceStats.shooting * shooterShirtMult - 72) * 0.004)
     );
     if (Math.random() > onTargetProb) {
-      if (Math.random() < 0.38) {
-        // Shot deflected by defender across endline into a corner!
-        triggerCornerKick(isHome, `⛳ ESCANTEIO para o ${clubName}! Chute perigoso de ${shooter.name} é desviado no carrinho pela zaga e sai pela linha de fundo!`);
+      if (Math.random() < 0.42) {
+        // Shot blocked/deflected by a defender across the endline for a corner!
+        const defOutfield = defTeam.filter((p) => p.roleCategory === "DEF");
+        const blocker =
+          defOutfield.length > 0
+            ? defOutfield[Math.floor(Math.random() * defOutfield.length)]
+            : defTeam.find((p) => p.roleCategory !== "GK");
+        if (blocker) {
+          session.playerRatings[blocker.id] = Math.min(
+            10.0,
+            (session.playerRatings[blocker.id] ?? 6.5) + 0.08
+          );
+        }
+        triggerCornerKick(isHome, shooter, blocker, "deflected_shot");
       } else if (xg >= 0.16) {
         const missTexts = [
           `Finalização perigosa! ${shooter.name} (${clubName}) ganha na velocidade da marcação e chuta cruzado, assustando o goleiro!`,
@@ -1198,8 +1221,10 @@ export function stepLiveMatchMinute(
       return true;
     } else if (keeper) {
       session.playerRatings[keeper.id] = Math.min(10.0, (session.playerRatings[keeper.id] ?? 6.5) + 0.28);
-      const isCornerSave = Math.random() < 0.46;
-      if (xg >= 0.2) {
+      const isCornerSave = Math.random() < 0.48;
+      if (isCornerSave) {
+        triggerCornerKick(isHome, shooter, keeper, "gk_save");
+      } else if (xg >= 0.2) {
         session.events.push({
           id: `save-${session.fixtureId}-${min}-${keeper.id}-${stats.shots}`,
           minute: min,
@@ -1207,13 +1232,8 @@ export function stepLiveMatchMinute(
           clubId: isHome ? session.awayClubId : session.homeClubId,
           playerId: keeper.id,
           playerName: keeper.name,
-          text: isCornerSave
-            ? `Defesaça de ${keeper.name}! Espalma chute venenoso de ${shooter.name} (${clubName}) para escanteio!`
-            : `Defesaça de ${keeper.name}! Espalma chute venenoso de ${shooter.name} (${clubName}).`,
+          text: `Defesaça de ${keeper.name}! Segura firme chute venenoso de ${shooter.name} (${clubName}).`,
         });
-      }
-      if (isCornerSave) {
-        triggerCornerKick(isHome, `⛳ ESCANTEIO para o ${clubName}! ${keeper.name} salva com a ponta dos dedos e cede escanteio na bandeirinha!`);
       }
       return true;
     }
@@ -1254,24 +1274,16 @@ export function stepLiveMatchMinute(
 
   const prevTotalGoals = session.homeGoals + session.awayGoals;
   const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
-  const homeAttack = !homeOffside && resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
-  if (!homeOffside && !homeAttack) {
-    const isAtt = homeTactics.mentality === "Attacking";
-    if (Math.random() < (isAtt ? 0.046 : 0.032)) {
-      triggerCornerKick(true);
-    }
+  if (!homeOffside) {
+    resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
   }
 
   // Only simulate away attack in the same minute if home didn't just score a goal (which triggers center kickoff)
   const homeJustScored = session.homeGoals + session.awayGoals > prevTotalGoals;
   if (!homeJustScored) {
     const awayOffside = checkOffside(false, awayActive, homeActive, awayTactics, homeTactics, awayClub.shortName);
-    const awayAttack = !awayOffside && resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
-    if (!awayOffside && !awayAttack) {
-      const isAtt = awayTactics.mentality === "Attacking";
-      if (Math.random() < (isAtt ? 0.046 : 0.032)) {
-        triggerCornerKick(false);
-      }
+    if (!awayOffside) {
+      resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
     }
   }
 
