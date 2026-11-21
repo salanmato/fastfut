@@ -1168,7 +1168,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             subOutId={subOutId}
             onSelectSubOut={(pid) => {
               setActivePanelTab("subs");
-              setSubOutId((prev) => (prev === pid ? null : pid));
+              handleClickPitchStarter(pid);
             }}
             pitchSize={pitchSize}
             onPitchSizeChange={setPitchSize}
@@ -1635,6 +1635,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   const badgeStyle =
                     ev.type === "goal"
                       ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+                      : ev.type === "woodwork"
+                      ? "border-amber-400/70 bg-amber-500/15 text-amber-100 font-semibold"
                       : ev.type === "red_card"
                       ? "border-rose-500/50 bg-rose-500/15 text-rose-200"
                       : ev.type === "injury"
@@ -1656,6 +1658,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   let eventIconNode: React.ReactNode = <span className="text-slate-500">•</span>;
                   if (ev.type === "goal") {
                     eventIconNode = <Award className="h-4 w-4 text-emerald-400" />;
+                  } else if (ev.type === "woodwork") {
+                    eventIconNode = <Flame className="h-4 w-4 text-amber-400" />;
                   } else if (ev.type === "stoppage_time") {
                     eventIconNode = <Clock className="h-4 w-4 text-amber-400" />;
                   } else if (ev.type === "whistle") {
@@ -1758,6 +1762,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     `${userSession.awayStats.shots} (${userSession.awayStats.shotsOnTarget})`,
                     userSession.homeStats.shots,
                     userSession.awayStats.shots,
+                  ],
+                  [
+                    "Bolas na Trave",
+                    `${userSession.homeStats.woodwork ?? 0}`,
+                    `${userSession.awayStats.woodwork ?? 0}`,
+                    userSession.homeStats.woodwork ?? 0,
+                    userSession.awayStats.woodwork ?? 0,
                   ],
                   [
                     "Impedimentos",

@@ -473,6 +473,7 @@ export function initLiveMatchSession(
       yellowCards: 0,
       redCards: 0,
       offsides: 0,
+      woodwork: 0,
     },
     awayStats: {
       possession: 50,
@@ -484,6 +485,7 @@ export function initLiveMatchSession(
       yellowCards: 0,
       redCards: 0,
       offsides: 0,
+      woodwork: 0,
     },
     events: [],
     homeActiveIds,
@@ -1062,6 +1064,23 @@ export function stepLiveMatchMinute(
             assistPlayerName: taker.name,
             text: `GOOOOL DE CABEÇA do ${cornerClubName}! ${headerTaker.name} sobe no terceiro andar após escanteio milimétrico de ${taker.name} e estufa a rede!`,
           });
+        } else if (Math.random() < 0.24) {
+          cornerStats.woodwork = (cornerStats.woodwork ?? 0) + 1;
+          session.playerRatings[headerTaker.id] = Math.min(
+            10.0,
+            (session.playerRatings[headerTaker.id] ?? 6.5) + 0.14
+          );
+          session.events.push({
+            id: `woodwork-corner-${session.fixtureId}-${min}-${headerTaker.id}-${cornerStats.shots}`,
+            minute: min,
+            type: "woodwork",
+            clubId: cornerClubId,
+            playerId: headerTaker.id,
+            playerName: headerTaker.name,
+            assistPlayerId: taker.id,
+            assistPlayerName: taker.name,
+            text: `💥 NO TRAVESSÃO! ${headerTaker.name} (${cornerClubName}) sobe mais que todo mundo no escanteio de ${taker.name} e testa firme na trave!`,
+          });
         } else {
           session.events.push({
             id: `chance-corner-${session.fixtureId}-${min}-${headerTaker.id}-${cornerStats.shots}`,
@@ -1194,7 +1213,35 @@ export function stepLiveMatchMinute(
       Math.min(0.62, 0.38 + (shooter.faceStats.shooting * shooterShirtMult - 72) * 0.004)
     );
     if (Math.random() > onTargetProb) {
-      if (Math.random() < 0.42) {
+      const woodworkProb = 0.085 + Math.max(0, (shooter.stats.finishing - 70) * 0.0012);
+      if (Math.random() < woodworkProb) {
+        // Shot hits the goalpost or crossbar ("Bola na Trave") and ricochets back into play!
+        stats.woodwork = (stats.woodwork ?? 0) + 1;
+        session.playerRatings[shooter.id] = Math.min(
+          10.0,
+          (session.playerRatings[shooter.id] ?? 6.5) + 0.14
+        );
+        const woodworkTexts = [
+          `💥 NA TRAVE! ${shooter.name} (${clubName}) solta uma bomba colocada, o goleiro só olha e a bola explode no poste!`,
+          `💥 NO TRAVESSÃO! Que pecado! ${shooter.name} (${clubName}) finaliza com categoria e carimba o travessão antes da zaga afastar!`,
+          assister
+            ? `💥 EXPLODE NA TRAVE! ${shooter.name} (${clubName}) recebe passe açucarado de ${assister.name}, bate cruzado e a bola sacode a trave!`
+            : `💥 CARIMBOU A MADEIRA! Chute venenosíssimo de ${shooter.name} (${clubName}) bate na quina da trave e volta para a área!`,
+        ];
+        const chosenWoodworkText =
+          woodworkTexts[Math.floor(Math.random() * woodworkTexts.length)];
+        session.events.push({
+          id: `woodwork-${session.fixtureId}-${min}-${shooter.id}-${stats.shots}`,
+          minute: min,
+          type: "woodwork",
+          clubId,
+          playerId: shooter.id,
+          playerName: shooter.name,
+          assistPlayerId: assister?.id,
+          assistPlayerName: assister?.name,
+          text: chosenWoodworkText,
+        });
+      } else if (Math.random() < 0.42) {
         // Shot blocked/deflected by a defender across the endline for a corner!
         const defOutfield = defTeam.filter((p) => p.roleCategory === "DEF");
         const blocker =

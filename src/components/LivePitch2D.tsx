@@ -136,6 +136,7 @@ interface EventBanner {
   text: string;
   tone:
     | "goal"
+    | "woodwork"
     | "save"
     | "chance"
     | "corner"
@@ -902,6 +903,17 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const [playPhase, setPlayPhase] = useState<PlayPhase>("build_up");
   const [trail, setTrail] = useState<PitchTrail | null>(null);
   const [banner, setBanner] = useState<EventBanner | null>(null);
+  const [woodworkImpact, setWoodworkImpact] = useState<{
+    x: number;
+    y: number;
+    kind: "post" | "crossbar";
+  } | null>(null);
+
+  useEffect(() => {
+    if (!woodworkImpact) return;
+    const t = window.setTimeout(() => setWoodworkImpact(null), 1650);
+    return () => window.clearTimeout(t);
+  }, [woodworkImpact]);
 
   const homeSlots = useMemo(
     () => getFormationSlots(homeTactics.formation),
@@ -1212,11 +1224,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     lastHandledEventCountRef.current = session.events.length;
 
     const EVENT_PRIORITY: Record<MatchEvent["type"], number> = {
-      corner: 105, // Corner sequence chains any follow-up header goal/chance in the same minute!
+      corner: 105, // Corner sequence chains any follow-up header goal/woodwork/chance in the same minute!
       goal: 100,
       red_card: 90,
       whistle: 85,
       offside: 80,
+      woodwork: 75,
       save: 65,
       chance: 60,
       substitution: 55,
@@ -1229,7 +1242,11 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     )[0];
     const cornerFollowUpEvent: MatchEvent | undefined =
       latest.type === "corner"
-        ? newEvents.find((e) => e.id !== latest.id && (e.type === "goal" || e.type === "chance"))
+        ? newEvents.find(
+            (e) =>
+              e.id !== latest.id &&
+              (e.type === "goal" || e.type === "woodwork" || e.type === "chance")
+          )
         : undefined;
 
     if (latest.id === lastHandledEventIdRef.current) return;
@@ -1465,6 +1482,132 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         tone: "save",
       });
       setHighlightPause(1300);
+    } else if (latest.type === "woodwork") {
+      // 2-Stage Woodwork Animation:
+      // Stage 1 (0 -> 380ms): Shot flies straight onto the goalpost (x=45.05 or 54.95) or crossbar (x=47..53)
+      // Stage 2 (380 -> 900ms): Goal frame flashes on impact and ball ricochets back into the penalty area!
+      const isCrossbar = Math.random() < 0.42;
+      const hitLeftPost = Math.random() < 0.5;
+      const postX = isCrossbar
+        ? 47 + Math.random() * 6
+        : hitLeftPost
+        ? 45.05
+        : 54.95;
+      const postY = isHomeEvent ? 3.0 : 97.0;
+      const { shooterCoord } = choreographBoxAction(
+        isHomeEvent,
+        latest.playerId,
+        latest.assistPlayerId,
+        { x: postX, y: postY }
+      );
+
+      const shotCurve = computeTrajectoryCurve(
+        shooterCoord.x,
+        shooterCoord.y,
+        postX,
+        postY,
+        true,
+        "shot"
+      );
+
+      setPlayPhase("final_third");
+      setCarrierId(latest.playerId);
+      setCarrierClubId(latest.clubId);
+      setTrail({
+        x1: shooterCoord.x,
+        y1: shooterCoord.y,
+        x2: postX,
+        y2: postY,
+        kind: "shot",
+        isAerial: true,
+        maxAltitude: isCrossbar ? 0.85 : 0.45,
+        curveX: shotCurve.curveX,
+        curveY: shotCurve.curveY,
+      });
+      setBallPos({ x: postX, y: postY });
+      ballPosRef.current = { x: postX, y: postY };
+      triggerBallFlight(
+        shooterCoord.x,
+        shooterCoord.y,
+        postX,
+        postY,
+        shotCurve.curveX,
+        shotCurve.curveY,
+        true,
+        isCrossbar ? 0.85 : 0.45,
+        380
+      );
+      setBanner({
+        text: isCrossbar
+          ? `NO TRAVESSÃO! ${getPlayerDisplayName(latest.playerName)} (${latest.minute}')`
+          : `NA TRAVE! ${getPlayerDisplayName(latest.playerName)} (${latest.minute}')`,
+        tone: "woodwork",
+        minute: latest.minute,
+        clubName: (isHomeEvent ? homeClub : awayClub).shortName,
+        scorerName: latest.playerName,
+      });
+      setHighlightPause(1950, 1250);
+
+      // Stage 2: Impact flash on post/crossbar + sharp ricochet rebound back into play
+      window.setTimeout(() => {
+        setWoodworkImpact({
+          x: postX,
+          y: postY,
+          kind: isCrossbar ? "crossbar" : "post",
+        });
+
+        const reboundX = clamp(
+          postX + (postX < 50 ? -8 - Math.random() * 9 : 8 + Math.random() * 9),
+          22,
+          78
+        );
+        const reboundY = isHomeEvent
+          ? 11 + Math.random() * 7.5
+          : 89 - Math.random() * 7.5;
+        const rebCurve = computeTrajectoryCurve(
+          postX,
+          postY,
+          reboundX,
+          reboundY,
+          true,
+          "pass"
+        );
+
+        const defIds = isHomeEvent ? session.awayActiveIds : session.homeActiveIds;
+        const reboundRecovererId =
+          defIds.find((id) => playerMap.get(id)?.roleCategory === "DEF") ??
+          defIds[0] ??
+          latest.playerId;
+
+        setCarrierId(reboundRecovererId);
+        carrierIdRef.current = reboundRecovererId;
+        setCarrierClubId(isHomeEvent ? awayClub.id : homeClub.id);
+        carrierClubIdRef.current = isHomeEvent ? awayClub.id : homeClub.id;
+        setTrail({
+          x1: postX,
+          y1: postY,
+          x2: reboundX,
+          y2: reboundY,
+          kind: "shot",
+          isAerial: true,
+          maxAltitude: 0.55,
+          curveX: rebCurve.curveX,
+          curveY: rebCurve.curveY,
+        });
+        setBallPos({ x: reboundX, y: reboundY });
+        ballPosRef.current = { x: reboundX, y: reboundY };
+        triggerBallFlight(
+          postX,
+          postY,
+          reboundX,
+          reboundY,
+          rebCurve.curveX,
+          rebCurve.curveY,
+          true,
+          0.55,
+          460
+        );
+      }, 380);
     } else if (latest.type === "chance") {
       const missX = Math.random() < 0.5 ? 35 : 65;
       const missY = isHomeEvent ? 1.5 : 98.5;
@@ -1887,6 +2030,71 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               resetToCenterKickoff(koHome);
             }
           }, Math.max(700, Math.round(1150 * speedScale)));
+        } else if (cornerFollowUpEvent?.type === "woodwork") {
+          const postX = 46.5 + Math.random() * 7;
+          const postY = attackingHome ? 3.0 : 97.0;
+          const hdrCurve = computeTrajectoryCurve(
+            targetBoxX,
+            targetBoxY,
+            postX,
+            postY,
+            true,
+            "header"
+          );
+          setCarrierId(cornerFollowUpEvent.playerId);
+          carrierIdRef.current = cornerFollowUpEvent.playerId;
+          setTrail({
+            x1: targetBoxX,
+            y1: targetBoxY,
+            x2: postX,
+            y2: postY,
+            kind: "shot",
+            isAerial: true,
+            maxAltitude: 0.85,
+            curveX: hdrCurve.curveX,
+            curveY: hdrCurve.curveY,
+          });
+          setBallPos({ x: postX, y: postY });
+          ballPosRef.current = { x: postX, y: postY };
+          triggerBallFlight(
+            targetBoxX,
+            targetBoxY,
+            postX,
+            postY,
+            hdrCurve.curveX,
+            hdrCurve.curveY,
+            true,
+            0.85,
+            340
+          );
+          setBanner({
+            text: `CABEÇADA NO TRAVESSÃO! ${getPlayerDisplayName(cornerFollowUpEvent.playerName)} (${cornerFollowUpEvent.minute}')`,
+            tone: "woodwork",
+            minute: cornerFollowUpEvent.minute,
+            clubName: cornerClub.shortName,
+            scorerName: cornerFollowUpEvent.playerName,
+          });
+
+          window.setTimeout(() => {
+            setWoodworkImpact({ x: postX, y: postY, kind: "crossbar" });
+            const rebX = clamp(postX + (Math.random() * 16 - 8), 28, 72);
+            const rebY = attackingHome ? 12 + Math.random() * 6 : 88 - Math.random() * 6;
+            const rebCurve = computeTrajectoryCurve(postX, postY, rebX, rebY, true, "pass");
+            setTrail({
+              x1: postX,
+              y1: postY,
+              x2: rebX,
+              y2: rebY,
+              kind: "shot",
+              isAerial: true,
+              maxAltitude: 0.5,
+              curveX: rebCurve.curveX,
+              curveY: rebCurve.curveY,
+            });
+            setBallPos({ x: rebX, y: rebY });
+            ballPosRef.current = { x: rebX, y: rebY };
+            triggerBallFlight(postX, postY, rebX, rebY, rebCurve.curveX, rebCurve.curveY, true, 0.5, 420);
+          }, 340);
         } else if (cornerFollowUpEvent?.type === "chance") {
           const missX = Math.random() < 0.5 ? 41 : 59;
           const missY = attackingHome ? 1.5 : 98.5;
@@ -2911,8 +3119,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             width="9.9"
             height="2.4"
             fill="rgba(255,255,255,0.14)"
-            stroke="rgba(255,255,255,0.75)"
-            strokeWidth={1.4}
+            stroke={woodworkImpact && woodworkImpact.y < 50 ? "#fbbf24" : "rgba(255,255,255,0.75)"}
+            strokeWidth={woodworkImpact && woodworkImpact.y < 50 ? 2.6 : 1.4}
             vectorEffect="non-scaling-stroke"
           />
           <rect
@@ -2921,10 +3129,34 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             width="9.9"
             height="2.4"
             fill="rgba(255,255,255,0.14)"
-            stroke="rgba(255,255,255,0.75)"
-            strokeWidth={1.4}
+            stroke={woodworkImpact && woodworkImpact.y > 50 ? "#fbbf24" : "rgba(255,255,255,0.75)"}
+            strokeWidth={woodworkImpact && woodworkImpact.y > 50 ? 2.6 : 1.4}
             vectorEffect="non-scaling-stroke"
           />
+
+          {/* Woodwork Impact Shockwave Ring on Post / Crossbar */}
+          {woodworkImpact && (
+            <g>
+              <circle
+                cx={woodworkImpact.x}
+                cy={woodworkImpact.y}
+                r={3.6}
+                fill="rgba(251, 191, 36, 0.25)"
+                stroke="#f59e0b"
+                strokeWidth={1.6}
+                vectorEffect="non-scaling-stroke"
+              />
+              <circle
+                cx={woodworkImpact.x}
+                cy={woodworkImpact.y}
+                r={1.8}
+                fill="#fbbf24"
+                stroke="#ffffff"
+                strokeWidth={1.2}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          )}
 
           {/* Live offside line (second-last defender of the defending team) */}
           {!session.finished && !offsideMark && liveOffsideLineY !== null && showOffsideLine && (
@@ -3170,6 +3402,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     {banner.text}
                   </div>
                   <div className="text-xs font-bold text-slate-300">{banner.scorerName}</div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "woodwork" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 animate-bounce">
+              <div className="flex items-center gap-3 rounded-xl border-2 border-amber-400 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(251,191,36,0.65)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 text-sm font-black shadow-md">
+                  💥
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-amber-300 font-bold">
+                    Bola na Trave • {banner.clubName ?? "Quase Gol"} ({banner.minute}')
+                  </div>
+                  <div className="text-xs font-black text-white">
+                    {banner.text}
+                  </div>
                 </div>
               </div>
             </div>

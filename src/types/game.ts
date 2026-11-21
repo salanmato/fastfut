@@ -170,6 +170,7 @@ export interface Player {
 
 export type MatchEventType =
   | "goal"
+  | "woodwork"
   | "chance"
   | "save"
   | "corner"
@@ -204,6 +205,7 @@ export interface MatchTeamStats {
   yellowCards: number;
   redCards: number;
   offsides?: number;
+  woodwork?: number;
 }
 
 export interface MatchInjury {
