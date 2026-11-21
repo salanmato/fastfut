@@ -144,6 +144,7 @@ interface EventBanner {
     | "save"
     | "chance"
     | "corner"
+    | "throw_in"
     | "substitution"
     | "yellow_card"
     | "red_card"
@@ -948,12 +949,25 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     y: number;
     kind: "post" | "crossbar";
   } | null>(null);
+  const [throwInSpot, setThrowInSpot] = useState<{
+    x: number;
+    y: number;
+    isLeft: boolean;
+    clubShortName: string;
+    takerName: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!woodworkImpact) return;
     const t = window.setTimeout(() => setWoodworkImpact(null), 1650);
     return () => window.clearTimeout(t);
   }, [woodworkImpact]);
+
+  useEffect(() => {
+    if (!throwInSpot) return;
+    const t = window.setTimeout(() => setThrowInSpot(null), 1750);
+    return () => window.clearTimeout(t);
+  }, [throwInSpot]);
 
   const homeSlots = useMemo(
     () => getFormationSlots(homeTactics.formation),
@@ -1273,6 +1287,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       save: 65,
       chance: 60,
       substitution: 55,
+      throw_in: 52,
       injury: 50,
       yellow_card: 45,
       stoppage_time: 40,
@@ -2318,6 +2333,162 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           setTrail(null);
         }
       }, freeKickDelay);
+    } else if (latest.type === "throw_in") {
+      // 2-Stage Throw-in (Cobrança de Lateral) Sequence:
+      // Stage 1 (0 -> 620ms): Ball deflected out across left (x=3.5) or right (x=96.5) touchline; fullback steps onto the line!
+      // Stage 2 (620 -> 1250ms): Fullback throws the ball in an overhead arc back into play to receiver!
+      const attackingHome = isHomeEvent;
+      const throwClub = isHomeEvent ? homeClub : awayClub;
+      const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
+      const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
+      const isLeftFlank = latest.text.includes("esquerda")
+        ? true
+        : latest.text.includes("direita")
+        ? false
+        : ballPosRef.current.x < 50;
+      const isLongThrow = latest.text.includes("LATERAL LONGO");
+
+      const touchlineX = isLeftFlank ? 4.0 : 96.0;
+      const outX = isLeftFlank ? 3.2 : 96.8;
+      const touchlineY = isLongThrow
+        ? attackingHome
+          ? 12 + Math.random() * 7
+          : 88 - Math.random() * 7
+        : clamp(ballPosRef.current.y, 14, 86);
+
+      const startX = clamp(
+        isLeftFlank
+          ? Math.min(ballPosRef.current.x, 22)
+          : Math.max(ballPosRef.current.x, 78),
+        6,
+        94
+      );
+      const startY = clamp(ballPosRef.current.y, 12, 88);
+
+      // Stage 1: Ball goes out over the touchline
+      const outCurve = computeTrajectoryCurve(startX, startY, outX, touchlineY, false, "pass");
+      setTrail({
+        x1: startX,
+        y1: startY,
+        x2: outX,
+        y2: touchlineY,
+        kind: "pass",
+        isAerial: false,
+        maxAltitude: 0,
+        curveX: outCurve.curveX,
+        curveY: outCurve.curveY,
+      });
+      setBallPos({ x: touchlineX, y: touchlineY });
+      ballPosRef.current = { x: touchlineX, y: touchlineY };
+      triggerBallFlight(startX, startY, outX, touchlineY, outCurve.curveX, outCurve.curveY, false, 0, 320);
+
+      // Position throw-in taker on the touchline and bring receiver & nearby players closer
+      const throwCoords: Record<number, Coord> = { ...curCoords };
+      throwCoords[latest.playerId] = { x: touchlineX, y: touchlineY };
+
+      const receiverId =
+        (latest.assistPlayerId && attIds.includes(latest.assistPlayerId)
+          ? latest.assistPlayerId
+          : undefined) ??
+        attIds.find((id) => id !== latest.playerId && playerMap.get(id)?.roleCategory !== "GK") ??
+        latest.playerId;
+
+      const dirY = attackingHome ? -1 : 1;
+      const targetThrowCoord: Coord = isLongThrow
+        ? {
+            x: isLeftFlank ? 38 + Math.random() * 14 : 48 + Math.random() * 14,
+            y: attackingHome ? 10 + Math.random() * 6 : 90 - Math.random() * 6,
+          }
+        : {
+            x: isLeftFlank ? 13 + Math.random() * 11 : 87 - Math.random() * 11,
+            y: clamp(touchlineY + dirY * (6 + Math.random() * 8), 10, 90),
+          };
+
+      throwCoords[receiverId] = targetThrowCoord;
+
+      // Pull 1-2 nearest defenders to mark around the throw-in zone
+      const nearDefs = defIds
+        .filter((id) => playerMap.get(id)?.roleCategory !== "GK")
+        .sort((a, b) => {
+          const ca = throwCoords[a] ?? { x: 50, y: 50 };
+          const cb = throwCoords[b] ?? { x: 50, y: 50 };
+          return (
+            Math.hypot(ca.x - touchlineX, ca.y - touchlineY) -
+            Math.hypot(cb.x - touchlineX, cb.y - touchlineY)
+          );
+        });
+      if (nearDefs[0]) {
+        throwCoords[nearDefs[0]] = {
+          x: clamp(targetThrowCoord.x + (isLeftFlank ? 4.5 : -4.5), 10, 90),
+          y: clamp(targetThrowCoord.y + dirY * 2.5, 9, 91),
+        };
+      }
+
+      setLiveCoords(throwCoords);
+      liveCoordsRef.current = throwCoords;
+      setCarrierId(latest.playerId);
+      carrierIdRef.current = latest.playerId;
+      setCarrierClubId(latest.clubId);
+      carrierClubIdRef.current = latest.clubId;
+
+      setThrowInSpot({
+        x: touchlineX,
+        y: touchlineY,
+        isLeft: isLeftFlank,
+        clubShortName: throwClub.shortName,
+        takerName: getPlayerDisplayName(latest.playerName),
+      });
+      setBanner({
+        text: isLongThrow ? "LATERAL LONGO NA ÁREA" : "COBRANÇA DE LATERAL",
+        tone: "throw_in",
+        minute: latest.minute,
+        clubName: throwClub.name,
+        scorerName: `${getPlayerDisplayName(latest.playerName)} (${throwClub.shortName})`,
+      });
+      setHighlightPause(1550, 1000);
+
+      // Stage 2: Taker throws the ball overhead from the touchline to receiver
+      const stage2Delay = Math.max(420, Math.round(620 * clamp(speedRef.current / 1200, 0.45, 1.35)));
+      window.setTimeout(() => {
+        const throwCurve = computeTrajectoryCurve(
+          touchlineX,
+          touchlineY,
+          targetThrowCoord.x,
+          targetThrowCoord.y,
+          true,
+          isLongThrow ? "cross" : "pass"
+        );
+        const throwAlt = isLongThrow ? 0.95 : 0.48;
+        setCarrierId(receiverId);
+        carrierIdRef.current = receiverId;
+        setCarrierClubId(latest.clubId);
+        carrierClubIdRef.current = latest.clubId;
+        lastPasserIdRef.current = latest.playerId;
+        setTrail({
+          x1: touchlineX,
+          y1: touchlineY,
+          x2: targetThrowCoord.x,
+          y2: targetThrowCoord.y,
+          kind: isLongThrow ? "cross" : "pass",
+          isAerial: true,
+          maxAltitude: throwAlt,
+          curveX: throwCurve.curveX,
+          curveY: throwCurve.curveY,
+        });
+        setBallPos(targetThrowCoord);
+        ballPosRef.current = targetThrowCoord;
+        triggerBallFlight(
+          touchlineX,
+          touchlineY,
+          targetThrowCoord.x,
+          targetThrowCoord.y,
+          throwCurve.curveX,
+          throwCurve.curveY,
+          true,
+          throwAlt,
+          isLongThrow ? 520 : 380
+        );
+      }, stage2Delay);
     } else if (latest.type === "stoppage_time") {
       const isFirst = !session.secondHalfStarted;
       const extraMins = isFirst ? session.firstHalfExtra : session.secondHalfExtra;
@@ -3415,6 +3586,21 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           </div>
         )}
 
+        {/* Touchline Throw-in (Cobrança de Lateral) Marker on the Sideline */}
+        {throwInSpot && (
+          <div
+            className={`pointer-events-none absolute z-30 -translate-y-1/2 flex items-center gap-1.5 animate-pulse ${
+              throwInSpot.isLeft ? "left-1.5" : "right-1.5 flex-row-reverse"
+            }`}
+            style={{ top: `${throwInSpot.y}%` }}
+          >
+            <div className="h-3.5 w-3.5 rounded-full bg-teal-400 ring-4 ring-teal-400/35 shadow-[0_0_14px_#2dd4bf]" />
+            <span className="whitespace-nowrap rounded-md border border-teal-300/80 bg-slate-950/95 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-teal-300 shadow-lg">
+              🙌 Lateral • {throwInSpot.takerName} ({throwInSpot.clubShortName})
+            </span>
+          </div>
+        )}
+
 
 
         {/* Event Banner Overlay */}
@@ -3571,6 +3757,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   </div>
                   <div className="text-xs font-black text-white">
                     Cobrança: {banner.scorerName || banner.text}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "throw_in" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2">
+              <div className="flex items-center gap-3 rounded-xl border border-teal-400/70 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_25px_rgba(45,212,191,0.4)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-400 text-slate-950 text-sm font-black shadow-md">
+                  🙌
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-teal-300 font-bold">
+                    {banner.text} • {banner.minute}'
+                  </div>
+                  <div className="text-xs font-black text-white">
+                    Arremesso: {banner.scorerName}
                   </div>
                 </div>
               </div>

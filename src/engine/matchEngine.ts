@@ -996,6 +996,7 @@ export function initLiveMatchSession(
       shotsOnTarget: 0,
       xg: 0,
       corners: 0,
+      throwIns: 0,
       fouls: 0,
       yellowCards: 0,
       redCards: 0,
@@ -1008,6 +1009,7 @@ export function initLiveMatchSession(
       shotsOnTarget: 0,
       xg: 0,
       corners: 0,
+      throwIns: 0,
       fouls: 0,
       yellowCards: 0,
       redCards: 0,
@@ -1667,6 +1669,79 @@ export function stepLiveMatchMinute(
     }
   };
 
+  // Throw-in (Cobrança de Lateral) generator & set-piece handler
+  const pickThrowInTaker = (team: Player[], isLeftFlank: boolean): Player => {
+    const outfield = team.filter((p) => p.roleCategory !== "GK");
+    if (outfield.length === 0) return team[0] || homeActive[0];
+    const preferredPos = isLeftFlank
+      ? ["LB", "LWB", "LM", "LW"]
+      : ["RB", "RWB", "RM", "RW"];
+    const flankSpecialists = outfield.filter(
+      (p) =>
+        preferredPos.includes(p.primaryPosition) ||
+        p.positions?.some((pos) => preferredPos.includes(pos))
+    );
+    if (flankSpecialists.length > 0) {
+      return flankSpecialists[0];
+    }
+    const fullbacks = outfield.filter((p) =>
+      ["LB", "RB", "LWB", "RWB"].includes(p.primaryPosition)
+    );
+    return fullbacks[0] ?? outfield[0];
+  };
+
+  const triggerThrowIn = (
+    isThrowHome: boolean,
+    carrier?: Player,
+    defender?: Player,
+    isLeftFlank = Math.random() < 0.5,
+    inFinalThird = false
+  ) => {
+    const throwClubId = isThrowHome ? session.homeClubId : session.awayClubId;
+    const throwClubName = isThrowHome ? homeClub.shortName : awayClub.shortName;
+    const throwStats = isThrowHome ? session.homeStats : session.awayStats;
+    const throwTeam = isThrowHome ? homeActive : awayActive;
+    const throwTactics = isThrowHome ? homeTactics : awayTactics;
+    const taker = pickThrowInTaker(throwTeam, isLeftFlank);
+
+    throwStats.throwIns = (throwStats.throwIns ?? 0) + 1;
+
+    const receiverCandidates = throwTeam.filter(
+      (p) => p.id !== taker.id && p.roleCategory !== "GK"
+    );
+    const receiver =
+      (carrier && carrier.id !== taker.id ? carrier : undefined) ??
+      receiverCandidates.find(
+        (p) => p.roleCategory === "MID" || p.roleCategory === "ATT"
+      ) ??
+      receiverCandidates[0] ??
+      taker;
+
+    const isLongThrowToBox =
+      inFinalThird &&
+      (taker.stats.strength >= 74 || throwTactics.passingStyle === "Direct") &&
+      Math.random() < 0.45;
+
+    const sideLabel = isLeftFlank ? "pela esquerda" : "pela direita";
+    const text = isLongThrowToBox
+      ? `🙌 LATERAL LONGO NA ÁREA! Após corte de ${defender?.name ?? "a defesa"} pela linha lateral, ${taker.name} (${throwClubName}) arremessa a bola direto no tumulto da grande área buscando ${receiver.name}!`
+      : defender && carrier
+      ? `🙌 LATERAL para o ${throwClubName}! ${defender.name} fecha o corredor ${sideLabel} e corta a jogada de ${carrier.name} pela linha lateral. ${taker.name} cobra rápido para ${receiver.name}!`
+      : `🙌 Cobrança de lateral para o ${throwClubName} ${sideLabel}. ${taker.name} repõe a bola em jogo para ${receiver.name}.`;
+
+    session.events.push({
+      id: `throw-${session.fixtureId}-${min}-${taker.id}-${throwStats.throwIns}`,
+      minute: min,
+      type: "throw_in",
+      clubId: throwClubId,
+      playerId: taker.id,
+      playerName: taker.name,
+      assistPlayerId: receiver.id,
+      assistPlayerName: receiver.name,
+      text,
+    });
+  };
+
   // Causal Attacking chance generation (uses live 2D pitch ball carrier & passer when available)
   const resolveAttack = (
     isHome: boolean,
@@ -2127,8 +2202,9 @@ export function stepLiveMatchMinute(
       );
     }
 
-    // 3. If no card/injury stoppage interrupted play, resolve attacking progression from current pitch zone
+    // 3. If no card/injury stoppage interrupted play, resolve attacking progression or flank throw-in
     if (!foulRes.cardIssued && !injuryStopped) {
+      const prevEvCount = session.events.length;
       const inAttackingHalf = ctx.attackProgress >= 0.42 || Boolean(ctx.pendingVisualShot);
       if (inAttackingHalf) {
         const wasOffside = checkOffside(
@@ -2164,6 +2240,21 @@ export function stepLiveMatchMinute(
           );
         }
       }
+
+      // If no shot/offside event occurred this minute and play is near the touchlines, defender can poke the ball out for a Throw-in!
+      const isNearFlank = ctx.ballX < 27 || ctx.ballX > 73;
+      const throwInProb = isNearFlank ? 0.24 : 0.085;
+      if (session.events.length === prevEvCount && Math.random() < throwInProb) {
+        const isLeftFlank =
+          isNearFlank ? ctx.ballX < 50 : Math.random() < 0.5;
+        triggerThrowIn(
+          possIsHome,
+          carrier,
+          closestDefender,
+          isLeftFlank,
+          ctx.attackProgress >= 0.65
+        );
+      }
     } else {
       ctx.pendingVisualShot = false;
     }
@@ -2175,6 +2266,7 @@ export function stepLiveMatchMinute(
     checkInjury(false, awayActive, awayTactics, homeFoul.victim, homeFoul.offender, homeFoul.cardIssued);
 
     const prevTotalGoals = session.homeGoals + session.awayGoals;
+    const prevEventsLen = session.events.length;
     const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
     if (!homeOffside) {
       resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
@@ -2186,6 +2278,17 @@ export function stepLiveMatchMinute(
       if (!awayOffside) {
         resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
       }
+    }
+
+    if (session.events.length === prevEventsLen && Math.random() < 0.14) {
+      const throwHome = Math.random() < (session.homeStats.possession / 100);
+      triggerThrowIn(
+        throwHome,
+        undefined,
+        undefined,
+        Math.random() < 0.5,
+        Math.random() < 0.35
+      );
     }
   }
 

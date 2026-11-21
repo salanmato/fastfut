@@ -174,6 +174,7 @@ export type MatchEventType =
   | "chance"
   | "save"
   | "corner"
+  | "throw_in"
   | "yellow_card"
   | "red_card"
   | "injury"
@@ -201,6 +202,7 @@ export interface MatchTeamStats {
   shotsOnTarget: number;
   xg: number;
   corners: number;
+  throwIns?: number;
   fouls: number;
   yellowCards: number;
   redCards: number;

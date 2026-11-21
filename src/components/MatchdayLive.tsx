@@ -1349,6 +1349,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-bold"
                     : ev.type === "corner"
                     ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-200 font-bold"
+                    : ev.type === "throw_in"
+                    ? "border-teal-500/40 bg-teal-500/10 text-teal-200"
                     : ev.type === "substitution"
                     ? "border-emerald-500/40 bg-slate-900/90 text-slate-200"
                     : ev.type === "offside"
@@ -1380,6 +1382,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   eventIconNode = <ArrowLeftRight className="h-4 w-4 text-emerald-400" />;
                 } else if (ev.type === "corner") {
                   eventIconNode = <Flag className="h-4 w-4 text-cyan-400 fill-cyan-400" />;
+                } else if (ev.type === "throw_in") {
+                  eventIconNode = <Compass className="h-4 w-4 text-teal-400" />;
                 } else if (ev.type === "save") {
                   eventIconNode = <Shield className="h-4 w-4 text-indigo-400" />;
                 }
@@ -1478,11 +1482,18 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   userSession.awayStats.offsides ?? 0,
                 ],
                 [
-                  "Escanteios / Faltas",
-                  `${userSession.homeStats.corners} / ${userSession.homeStats.fouls}`,
-                  `${userSession.awayStats.corners} / ${userSession.awayStats.fouls}`,
-                  userSession.homeStats.corners + userSession.homeStats.fouls,
-                  userSession.awayStats.corners + userSession.awayStats.fouls,
+                  "Escanteios / Laterais",
+                  `${userSession.homeStats.corners} / ${userSession.homeStats.throwIns ?? 0}`,
+                  `${userSession.awayStats.corners} / ${userSession.awayStats.throwIns ?? 0}`,
+                  userSession.homeStats.corners + (userSession.homeStats.throwIns ?? 0),
+                  userSession.awayStats.corners + (userSession.awayStats.throwIns ?? 0),
+                ],
+                [
+                  "Faltas",
+                  `${userSession.homeStats.fouls}`,
+                  `${userSession.awayStats.fouls}`,
+                  userSession.homeStats.fouls,
+                  userSession.awayStats.fouls,
                 ],
               ].map(([label, hText, aText, hNum, aNum]) => {
                 const total = Math.max(0.01, (hNum as number) + (aNum as number));
