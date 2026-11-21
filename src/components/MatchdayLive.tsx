@@ -139,6 +139,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const simPauseUntilRef = useRef<number>(0);
   const halftimeTriggeredRef = useRef<boolean>(false);
   const [subOutId, setSubOutId] = useState<number | null>(null);
+  const [subInId, setSubInId] = useState<number | null>(null);
+  const [preMatchSwapId, setPreMatchSwapId] = useState<number | null>(null);
   const [tacticalStopReason, setTacticalStopReason] = useState<{
     type: "red_card" | "injury";
     playerId: number;
@@ -340,10 +342,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
     onFinishMatchweek(results);
   };
 
-  const handleLiveSub = (benchPlayerId: number) => {
-    if (!userSession || subOutId === null || userSession.finished) return;
-    const pOut = playerMap.get(subOutId);
-    const pIn = playerMap.get(benchPlayerId);
+  const executeLiveSub = (outId: number, inId: number) => {
+    if (!userSession || userSession.finished) return;
+    const pOut = playerMap.get(outId);
+    const pIn = playerMap.get(inId);
     if (!pOut || !pIn) return;
     const ok = performLiveSubstitution(
       userSession,
@@ -355,8 +357,85 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
     );
     if (ok) {
       setSubOutId(null);
+      setSubInId(null);
       setTick((t) => t + 1);
     }
+  };
+
+  const handleClickPitchStarter = (starterId: number) => {
+    if (!userSession || userSession.finished) return;
+    const subsUsed =
+      userSession.homeClubId === userClubId
+        ? userSession.homeSubsUsed
+        : userSession.awaySubsUsed;
+    if (subsUsed >= 5) return;
+
+    if (subInId !== null) {
+      executeLiveSub(starterId, subInId);
+      return;
+    }
+    setSubOutId((prev) => (prev === starterId ? null : starterId));
+  };
+
+  const handleClickBenchPlayer = (benchPlayerId: number) => {
+    if (!userSession || userSession.finished) return;
+    const subsUsed =
+      userSession.homeClubId === userClubId
+        ? userSession.homeSubsUsed
+        : userSession.awaySubsUsed;
+    if (subsUsed >= 5) return;
+
+    if (subOutId !== null) {
+      executeLiveSub(subOutId, benchPlayerId);
+      return;
+    }
+    setSubInId((prev) => (prev === benchPlayerId ? null : benchPlayerId));
+  };
+
+  const handlePreMatchSwap = (clickedId: number) => {
+    if (!userSession || userSession.minute > 0) return;
+    if (preMatchSwapId === null) {
+      setPreMatchSwapId(clickedId);
+      return;
+    }
+    if (preMatchSwapId === clickedId) {
+      setPreMatchSwapId(null);
+      return;
+    }
+
+    const isHome = userSession.homeClubId === userClubId;
+    const activeIds = isHome ? [...userSession.homeActiveIds] : [...userSession.awayActiveIds];
+    const benchIds = isHome ? [...userSession.homeBenchIds] : [...userSession.awayBenchIds];
+
+    const idxAStart = activeIds.indexOf(preMatchSwapId);
+    const idxABench = benchIds.indexOf(preMatchSwapId);
+    const idxBStart = activeIds.indexOf(clickedId);
+    const idxBBench = benchIds.indexOf(clickedId);
+
+    if (idxAStart >= 0) activeIds[idxAStart] = clickedId;
+    else if (idxABench >= 0) benchIds[idxABench] = clickedId;
+
+    if (idxBStart >= 0) activeIds[idxBStart] = preMatchSwapId;
+    else if (idxBBench >= 0) benchIds[idxBBench] = preMatchSwapId;
+
+    if (isHome) {
+      userSession.homeActiveIds = activeIds;
+      userSession.homeBenchIds = benchIds;
+    } else {
+      userSession.awayActiveIds = activeIds;
+      userSession.awayBenchIds = benchIds;
+    }
+
+    setLiveTacticsByClub((prev) => ({
+      ...prev,
+      [userClubId]: {
+        ...prev[userClubId],
+        starters: activeIds,
+        bench: benchIds,
+      },
+    }));
+    setPreMatchSwapId(null);
+    setTick((t) => t + 1);
   };
 
   if (!userSession) {
@@ -531,47 +610,85 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             {/* Home Starting XI */}
             <div className="space-y-1.5 flex-1">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex justify-between">
-                <span>11 Titulares</span>
+                <span>
+                  11 Titulares{" "}
+                  {homeClub.id === userClubId && userSession.minute === 0 && (
+                    <span className="text-emerald-400 normal-case font-semibold">
+                      (clique p/ trocar com banco)
+                    </span>
+                  )}
+                </span>
                 <span>OVR / Stamina</span>
               </div>
               <div className="space-y-1">
-                {homeStarters.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-800/80 bg-slate-950/60 px-3 py-1.5 text-xs transition hover:border-slate-700"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 text-center font-bold text-amber-300 text-[11px]">
-                        #{p.shirtNumber ?? "-"}
-                      </span>
-                      <span className="w-8 text-center rounded bg-slate-800 px-1 py-0.5 text-[10px] font-bold text-slate-300">
-                        {p.primaryPosition}
-                      </span>
-                      <span className="truncate font-semibold text-white">
-                        {getPlayerDisplayName(p.name)}
-                      </span>
-                    </div>
-                    {renderOvrStamina(p.overall, Math.round(p.stamina), "text-slate-200")}
-                  </div>
-                ))}
+                {homeStarters.map((p) => {
+                  const isUserInteractive = homeClub.id === userClubId && userSession.minute === 0;
+                  const isSelected = preMatchSwapId === p.id;
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      disabled={!isUserInteractive}
+                      onClick={() => isUserInteractive && handlePreMatchSwap(p.id)}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-left text-xs transition ${
+                        isSelected
+                          ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
+                          : isUserInteractive && preMatchSwapId !== null
+                          ? "border-emerald-500/40 bg-slate-950/80 hover:border-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                          : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-5 text-center font-bold text-amber-300 text-[11px]">
+                          #{p.shirtNumber ?? "-"}
+                        </span>
+                        <span className="w-8 text-center rounded bg-slate-800 px-1 py-0.5 text-[10px] font-bold text-slate-300">
+                          {p.primaryPosition}
+                        </span>
+                        <span className="truncate font-semibold text-white">
+                          {getPlayerDisplayName(p.name)}
+                        </span>
+                      </div>
+                      {renderOvrStamina(p.overall, Math.round(p.stamina), "text-slate-200")}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Home Bench */}
             <div className="pt-2 border-t border-slate-800">
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Banco de Reservas ({homeBench.length})
+              <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span>Banco de Reservas ({homeBench.length})</span>
+                {homeClub.id === userClubId && userSession.minute === 0 && (
+                  <span className="text-emerald-400">
+                    {preMatchSwapId !== null ? "Selecione com quem trocar" : "Clique p/ escalar"}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-1">
-                {homeBench.slice(0, 7).map((p) => (
-                  <span
-                    key={p.id}
-                    className="rounded bg-slate-950 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-800"
-                    title={`${p.name} (${p.primaryPosition}) - OVR ${p.overall}`}
-                  >
-                    {p.primaryPosition} {getPlayerDisplayName(p.name)} ({p.overall})
-                  </span>
-                ))}
+                {homeBench.slice(0, 7).map((p) => {
+                  const isUserInteractive = homeClub.id === userClubId && userSession.minute === 0;
+                  const isSelected = preMatchSwapId === p.id;
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      disabled={!isUserInteractive}
+                      onClick={() => isUserInteractive && handlePreMatchSwap(p.id)}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium border transition ${
+                        isSelected
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/50"
+                          : isUserInteractive
+                          ? "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400 hover:text-emerald-300 cursor-pointer"
+                          : "border-slate-800 bg-slate-950 text-slate-300"
+                      }`}
+                      title={`${p.name} (${p.primaryPosition}) - OVR ${p.overall}`}
+                    >
+                      {p.primaryPosition} {getPlayerDisplayName(p.name)} ({p.overall})
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -749,47 +866,85 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             {/* Away Starting XI */}
             <div className="space-y-1.5 flex-1">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex justify-between">
-                <span>11 Titulares</span>
+                <span>
+                  11 Titulares{" "}
+                  {awayClub.id === userClubId && userSession.minute === 0 && (
+                    <span className="text-emerald-400 normal-case font-semibold">
+                      (clique p/ trocar com banco)
+                    </span>
+                  )}
+                </span>
                 <span>OVR / Stamina</span>
               </div>
               <div className="space-y-1">
-                {awayStarters.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-800/80 bg-slate-950/60 px-3 py-1.5 text-xs transition hover:border-slate-700"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 text-center font-bold text-amber-300 text-[11px]">
-                        #{p.shirtNumber ?? "-"}
-                      </span>
-                      <span className="w-8 text-center rounded bg-slate-800 px-1 py-0.5 text-[10px] font-bold text-slate-300">
-                        {p.primaryPosition}
-                      </span>
-                      <span className="truncate font-semibold text-white">
-                        {getPlayerDisplayName(p.name)}
-                      </span>
-                    </div>
-                    {renderOvrStamina(p.overall, Math.round(p.stamina), "text-slate-200")}
-                  </div>
-                ))}
+                {awayStarters.map((p) => {
+                  const isUserInteractive = awayClub.id === userClubId && userSession.minute === 0;
+                  const isSelected = preMatchSwapId === p.id;
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      disabled={!isUserInteractive}
+                      onClick={() => isUserInteractive && handlePreMatchSwap(p.id)}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-left text-xs transition ${
+                        isSelected
+                          ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
+                          : isUserInteractive && preMatchSwapId !== null
+                          ? "border-emerald-500/40 bg-slate-950/80 hover:border-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                          : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-5 text-center font-bold text-amber-300 text-[11px]">
+                          #{p.shirtNumber ?? "-"}
+                        </span>
+                        <span className="w-8 text-center rounded bg-slate-800 px-1 py-0.5 text-[10px] font-bold text-slate-300">
+                          {p.primaryPosition}
+                        </span>
+                        <span className="truncate font-semibold text-white">
+                          {getPlayerDisplayName(p.name)}
+                        </span>
+                      </div>
+                      {renderOvrStamina(p.overall, Math.round(p.stamina), "text-slate-200")}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Away Bench */}
             <div className="pt-2 border-t border-slate-800">
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Banco de Reservas ({awayBench.length})
+              <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span>Banco de Reservas ({awayBench.length})</span>
+                {awayClub.id === userClubId && userSession.minute === 0 && (
+                  <span className="text-emerald-400">
+                    {preMatchSwapId !== null ? "Selecione com quem trocar" : "Clique p/ escalar"}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-1">
-                {awayBench.slice(0, 7).map((p) => (
-                  <span
-                    key={p.id}
-                    className="rounded bg-slate-950 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-800"
-                    title={`${p.name} (${p.primaryPosition}) - OVR ${p.overall}`}
-                  >
-                    {p.primaryPosition} {getPlayerDisplayName(p.name)} ({p.overall})
-                  </span>
-                ))}
+                {awayBench.slice(0, 7).map((p) => {
+                  const isUserInteractive = awayClub.id === userClubId && userSession.minute === 0;
+                  const isSelected = preMatchSwapId === p.id;
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      disabled={!isUserInteractive}
+                      onClick={() => isUserInteractive && handlePreMatchSwap(p.id)}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium border transition ${
+                        isSelected
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/50"
+                          : isUserInteractive
+                          ? "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400 hover:text-emerald-300 cursor-pointer"
+                          : "border-slate-800 bg-slate-950 text-slate-300"
+                      }`}
+                      title={`${p.name} (${p.primaryPosition}) - OVR ${p.overall}`}
+                    >
+                      {p.primaryPosition} {getPlayerDisplayName(p.name)} ({p.overall})
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1173,27 +1328,54 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   </div>
                 </div>
 
-                {/* Sub Out banner */}
-                {subOutId !== null && (
-                  <div className="flex flex-col gap-1 rounded-xl border-2 border-amber-400/70 bg-amber-500/15 px-3 py-2 text-xs text-amber-200 shadow-sm">
+                {/* Sub Out / Sub In active selection banner */}
+                {(subOutId !== null || subInId !== null) && (
+                  <div
+                    className={`flex flex-col gap-1 rounded-xl border-2 px-3 py-2 text-xs shadow-sm ${
+                      subInId !== null
+                        ? "border-emerald-400/70 bg-emerald-500/15 text-emerald-200"
+                        : "border-amber-400/70 bg-amber-500/15 text-amber-200"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 truncate font-bold">
-                        <span className="inline-flex items-center gap-0.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
-                          <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAI
+                      {subOutId !== null ? (
+                        <span className="inline-flex items-center gap-1.5 truncate font-bold">
+                          <span className="inline-flex items-center gap-0.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+                            <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAI
+                          </span>
+                          <strong className="text-white">
+                            {getPlayerDisplayName(playerMap.get(subOutId)?.name)}
+                          </strong>
                         </span>
-                        <strong className="text-white">
-                          {getPlayerDisplayName(playerMap.get(subOutId)?.name)}
-                        </strong>
-                      </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 truncate font-bold">
+                          <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500 px-1.5 py-0.5 text-[9px] font-black text-slate-950">
+                            <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> ENTRA
+                          </span>
+                          <strong className="text-white">
+                            {getPlayerDisplayName(playerMap.get(subInId!)?.name)} (
+                            {playerMap.get(subInId!)?.primaryPosition})
+                          </strong>
+                        </span>
+                      )}
                       <button
-                        onClick={() => setSubOutId(null)}
+                        onClick={() => {
+                          setSubOutId(null);
+                          setSubInId(null);
+                        }}
                         className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-200 hover:bg-slate-700"
                       >
                         Cancelar
                       </button>
                     </div>
-                    <div className="text-[10px] font-semibold text-emerald-300">
-                      ▲ Selecione abaixo no Banco de Reservas quem vai ENTRAR
+                    <div
+                      className={`text-[10px] font-semibold ${
+                        subOutId !== null ? "text-emerald-300" : "text-rose-300"
+                      }`}
+                    >
+                      {subOutId !== null
+                        ? "▲ Selecione abaixo no Banco de Reservas quem vai ENTRAR"
+                        : "▼ Selecione abaixo em 'Em Campo' quem vai SAIR"}
                     </div>
                   </div>
                 )}
@@ -1202,7 +1384,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     <span>Em Campo ({userActiveIds.length})</span>
-                    <span>{userSubsUsed < 5 ? "Clique p/ substituir" : "Trocas esgotadas"}</span>
+                    <span className={subInId !== null ? "text-rose-400 animate-pulse" : ""}>
+                      {userSubsUsed >= 5
+                        ? "Trocas esgotadas"
+                        : subInId !== null
+                        ? "Clique em quem vai SAIR"
+                        : "Clique p/ substituir"}
+                    </span>
                   </div>
                   <div className="space-y-1">
                     {userActiveIds.map((id) => {
@@ -1214,27 +1402,45 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       const sofaColor = getSofascoreRatingColor(numRating);
                       const isSelected = subOutId === id;
                       const isInjured = userSession.injuredIds.includes(id);
+                      const subInPlayer = subInId !== null ? playerMap.get(subInId) : undefined;
+                      const isSamePosAsSubIn =
+                        subInPlayer &&
+                        (p.primaryPosition === subInPlayer.primaryPosition ||
+                          subInPlayer.positions?.includes(p.primaryPosition));
                       const subInEv = userSession.events.find(
                         (e) => e.type === "substitution" && e.playerId === id
                       );
                       return (
                         <button
                           key={id}
-                          disabled={userSubsUsed >= 5}
-                          onClick={() => setSubOutId((prev) => (prev === id ? null : id))}
+                          disabled={userSubsUsed >= 5 || userSession.finished}
+                          onClick={() => handleClickPitchStarter(id)}
                           className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
                             isSelected
                               ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
+                              : subInId !== null
+                              ? isSamePosAsSubIn
+                                ? "border-rose-400/70 bg-rose-500/15 hover:bg-rose-500/25 ring-1 ring-rose-400/30 cursor-pointer"
+                                : "border-rose-500/40 bg-slate-950/80 hover:border-rose-400 hover:bg-rose-500/15 cursor-pointer"
                               : isInjured
                               ? "border-rose-500/60 bg-rose-500/15"
                               : "border-slate-800 bg-slate-950/70 hover:border-amber-500/40 disabled:opacity-60"
                           }`}
                         >
                           <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-white">
-                            <span className="inline-block w-6 shrink-0 text-[10px] font-bold text-slate-400">
+                            <span
+                              className={`inline-block w-6 shrink-0 text-[10px] font-bold ${
+                                isSamePosAsSubIn ? "text-emerald-300" : "text-slate-400"
+                              }`}
+                            >
                               {p.primaryPosition}
                             </span>
                             <span className="truncate">{getPlayerDisplayName(p.name)}</span>
+                            {isSamePosAsSubIn && (
+                              <span className="ml-1 shrink-0 rounded bg-emerald-500/20 px-1 py-0.2 text-[8px] font-black uppercase text-emerald-300 border border-emerald-500/40">
+                                Mesma Pos.
+                              </span>
+                            )}
                             {subInEv && (
                               <span
                                 title={`Entrou aos ${subInEv.minute}' no lugar de ${subInEv.assistPlayerName}`}
@@ -1259,11 +1465,17 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                               {rating}
                             </span>
                             {renderOvrStamina(p.overall, stam, "text-slate-200")}
-                            <ArrowLeftRight
-                              className={`h-3 w-3 ${
-                                isSelected ? "text-amber-300" : "text-slate-500"
-                              }`}
-                            />
+                            {subInId !== null ? (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+                                <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAIR
+                              </span>
+                            ) : (
+                              <ArrowLeftRight
+                                className={`h-3 w-3 ${
+                                  isSelected ? "text-amber-300" : "text-slate-500"
+                                }`}
+                              />
+                            )}
                           </span>
                         </button>
                       );
@@ -1275,10 +1487,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-emerald-400">
                     <span>Banco de Reservas ({userBenchIds.length})</span>
-                    <span>
-                      {subOutId !== null && userSubsUsed < 5
-                        ? "Clique p/ entrar"
-                        : "Selecione quem sai"}
+                    <span className={subOutId !== null ? "text-emerald-300 animate-pulse" : ""}>
+                      {userSubsUsed >= 5
+                        ? "Trocas esgotadas"
+                        : subOutId !== null
+                        ? "Clique em quem vai ENTRAR"
+                        : "Clique p/ preparar entrada"}
                     </span>
                   </div>
                   <div className="space-y-1">
@@ -1286,38 +1500,66 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       const p = playerMap.get(id);
                       if (!p) return null;
                       const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
-                      const ready = subOutId !== null && userSubsUsed < 5;
+                      const canSub = userSubsUsed < 5 && !userSession.finished;
+                      const isReadyToCompleteOut = subOutId !== null && canSub;
+                      const isSelectedToEnter = subInId === id;
+                      const subOutPlayer = subOutId !== null ? playerMap.get(subOutId) : undefined;
+                      const isSamePosAsSubOut =
+                        subOutPlayer &&
+                        (p.primaryPosition === subOutPlayer.primaryPosition ||
+                          p.positions?.includes(subOutPlayer.primaryPosition));
                       return (
                         <button
                           key={id}
-                          disabled={!ready}
-                          onClick={() => handleLiveSub(id)}
+                          disabled={!canSub}
+                          onClick={() => handleClickBenchPlayer(id)}
                           className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
-                            ready
-                              ? "border-emerald-500/60 bg-emerald-500/15 hover:bg-emerald-500/25 cursor-pointer shadow-sm ring-1 ring-emerald-500/30"
-                              : "border-slate-800/80 bg-slate-950/40 text-slate-400 opacity-75 cursor-default"
+                            isSelectedToEnter
+                              ? "border-emerald-400 bg-emerald-400/20 ring-1 ring-emerald-400/50 shadow-sm"
+                              : isReadyToCompleteOut
+                              ? isSamePosAsSubOut
+                                ? "border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 cursor-pointer shadow-sm ring-1 ring-emerald-400/40"
+                                : "border-emerald-500/60 bg-emerald-500/15 hover:bg-emerald-500/25 cursor-pointer shadow-sm ring-1 ring-emerald-500/30"
+                              : canSub
+                              ? "border-slate-800 bg-slate-950/70 text-slate-200 hover:border-emerald-500/50 hover:bg-emerald-500/10 cursor-pointer"
+                              : "border-slate-800/80 bg-slate-950/40 text-slate-400 opacity-60 cursor-not-allowed"
                           }`}
                         >
                           <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-white">
                             <span
                               className={`inline-block w-6 shrink-0 text-[10px] font-bold ${
-                                ready ? "text-emerald-300" : "text-slate-500"
+                                isSelectedToEnter || isReadyToCompleteOut
+                                  ? "text-emerald-300"
+                                  : "text-slate-400"
                               }`}
                             >
                               {p.primaryPosition}
                             </span>
                             <span className="truncate">{getPlayerDisplayName(p.name)}</span>
+                            {isSamePosAsSubOut && (
+                              <span className="ml-1 shrink-0 rounded bg-emerald-500/20 px-1 py-0.2 text-[8px] font-black uppercase text-emerald-300 border border-emerald-500/40">
+                                Mesma Pos.
+                              </span>
+                            )}
                           </span>
                           <span className="flex items-center gap-1.5 shrink-0">
                             {renderOvrStamina(
                               p.overall,
                               stam,
-                              ready ? "text-emerald-300" : "text-slate-300"
+                              isSelectedToEnter || isReadyToCompleteOut
+                                ? "text-emerald-300"
+                                : "text-slate-300"
                             )}
-                            {ready && (
+                            {isSelectedToEnter ? (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black text-slate-950">
+                                <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> PRONTO
+                              </span>
+                            ) : isReadyToCompleteOut ? (
                               <span className="inline-flex items-center gap-0.5 rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black text-slate-950">
                                 <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> ENTRAR
                               </span>
+                            ) : (
+                              <ArrowLeftRight className="h-3 w-3 text-slate-500" />
                             )}
                           </span>
                         </button>
@@ -1723,7 +1965,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                   <div className="mb-1.5 text-[10px] font-bold uppercase text-slate-400">
-                    Em Campo ({userActiveIds.length}) — Trocas {userSubsUsed}/5
+                    {subInId !== null
+                      ? `Quem sai p/ entrada de ${getPlayerDisplayName(playerMap.get(subInId)?.name)}?`
+                      : `Em Campo (${userActiveIds.length}) — Trocas ${userSubsUsed}/5`}
                   </div>
                   <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
                     {userActiveIds.map((id) => {
@@ -1735,10 +1979,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       return (
                         <button
                           key={id}
-                          onClick={() => setSubOutId((prev) => (prev === id ? null : id))}
+                          onClick={() => handleClickPitchStarter(id)}
                           className={`flex w-full items-center justify-between rounded-lg border px-2 py-1 text-left text-xs ${
                             isSel
                               ? "border-amber-400 bg-amber-400/15"
+                              : subInId !== null
+                              ? "border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20"
                               : isInj
                               ? "border-rose-500/60 bg-rose-500/15"
                               : "border-slate-800 bg-slate-900/70 hover:border-amber-500/40"
@@ -1755,7 +2001,14 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                               </span>
                             )}
                           </span>
-                          {renderOvrStamina(p.overall, stam, "text-slate-300")}
+                          <span className="flex items-center gap-1.5">
+                            {renderOvrStamina(p.overall, stam, "text-slate-300")}
+                            {subInId !== null && (
+                              <span className="rounded bg-rose-500 px-1 py-0.5 text-[8px] font-black text-white">
+                                SAIR
+                              </span>
+                            )}
+                          </span>
                         </button>
                       );
                     })}
@@ -1766,23 +2019,25 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   <div className="mb-1.5 text-[10px] font-bold uppercase text-emerald-400">
                     {subOutId !== null
                       ? `Entrar no lugar de ${getPlayerDisplayName(playerMap.get(subOutId)?.name)}`
-                      : "Banco de Reservas"}
+                      : "Banco de Reservas (clique p/ substituir)"}
                   </div>
                   <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
                     {userBenchIds.map((id) => {
                       const p = playerMap.get(id);
                       if (!p) return null;
                       const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
+                      const isSelIn = subInId === id;
                       const ready = subOutId !== null;
                       return (
                         <button
                           key={id}
-                          disabled={!ready}
-                          onClick={() => handleLiveSub(id)}
+                          onClick={() => handleClickBenchPlayer(id)}
                           className={`flex w-full items-center justify-between rounded-lg border px-2 py-1 text-left text-xs ${
-                            ready
+                            isSelIn
+                              ? "border-emerald-400 bg-emerald-400/20 ring-1 ring-emerald-400/40"
+                              : ready
                               ? "border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25"
-                              : "border-slate-800 bg-slate-900/40 opacity-60"
+                              : "border-slate-800 bg-slate-900/70 hover:border-emerald-500/40"
                           }`}
                         >
                           <span className="truncate font-semibold text-white">
@@ -1791,11 +2046,22 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                             </span>
                             {getPlayerDisplayName(p.name)}
                           </span>
-                          {renderOvrStamina(
-                            p.overall,
-                            stam,
-                            ready ? "text-emerald-300" : "text-slate-300"
-                          )}
+                          <span className="flex items-center gap-1.5">
+                            {renderOvrStamina(
+                              p.overall,
+                              stam,
+                              isSelIn || ready ? "text-emerald-300" : "text-slate-300"
+                            )}
+                            {isSelIn ? (
+                              <span className="rounded bg-emerald-400 px-1 py-0.5 text-[8px] font-black text-slate-950">
+                                PRONTO
+                              </span>
+                            ) : ready ? (
+                              <span className="rounded bg-emerald-400 px-1 py-0.5 text-[8px] font-black text-slate-950">
+                                ENTRAR
+                              </span>
+                            ) : null}
+                          </span>
                         </button>
                       );
                     })}
