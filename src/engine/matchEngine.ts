@@ -6,6 +6,7 @@ import type {
   MatchInjury,
   MatchResult,
   MatchTeamStats,
+  PendingSubstitution,
   Player,
   Referee,
   StadiumConfig,
@@ -91,6 +92,7 @@ export interface LiveMatchSession {
   homeSynergy?: TeamSynergyResult;
   awaySynergy?: TeamSynergyResult;
   pitchContext?: LivePitchContext;
+  pendingSubs?: PendingSubstitution[];
 }
 
 export function autoPickLineup(
@@ -1051,6 +1053,7 @@ export function initLiveMatchSession(
     homeAdvantagePct: stadiumMetrics.homeAdvantagePct,
     homeSynergy,
     awaySynergy,
+    pendingSubs: [],
   };
 }
 
@@ -1060,7 +1063,8 @@ export function performLiveSubstitution(
   playerOutId: number,
   playerInId: number,
   playerOutName: string,
-  playerInName: string
+  playerInName: string,
+  customReason?: string
 ): boolean {
   const isHome = clubId === session.homeClubId;
   const activeIds = isHome ? session.homeActiveIds : session.awayActiveIds;
@@ -1083,6 +1087,13 @@ export function performLiveSubstitution(
     session.awaySubsUsed += 1;
   }
 
+  // Remove from pendingSubs if was queued
+  if (session.pendingSubs) {
+    session.pendingSubs = session.pendingSubs.filter(
+      (ps) => !(ps.clubId === clubId && ps.playerInId === playerInId)
+    );
+  }
+
   session.playerRatings[playerInId] = session.playerRatings[playerInId] ?? 6.4;
   session.events.push({
     id: `sub-${session.fixtureId}-${session.minute}-${playerInId}`,
@@ -1093,10 +1104,118 @@ export function performLiveSubstitution(
     playerName: playerInName,
     assistPlayerId: playerOutId,
     assistPlayerName: playerOutName,
-    text: `Substituição: entra ${playerInName} no lugar de ${playerOutName}.`,
+    text: customReason
+      ? `Substituição: com o jogo parado (${customReason}), entra ${playerInName} no lugar de ${playerOutName}.`
+      : `Substituição: entra ${playerInName} no lugar de ${playerOutName}.`,
   });
 
   return true;
+}
+
+export function requestLiveSubstitution(
+  session: LiveMatchSession,
+  clubId: number,
+  playerOutId: number,
+  playerInId: number,
+  playerOutName: string,
+  playerInName: string,
+  forceImmediate = false
+): { status: "executed" | "queued" | "failed"; message: string; subId?: string } {
+  const isHome = clubId === session.homeClubId;
+  const subsUsed = isHome ? session.homeSubsUsed : session.awaySubsUsed;
+  const pendingForClub = (session.pendingSubs ?? []).filter((s) => s.clubId === clubId).length;
+
+  if (subsUsed + pendingForClub >= 5) {
+    return { status: "failed", message: "Limite de 5 substituições atingido nesta partida." };
+  }
+
+  // Check if player is already queued
+  if (
+    session.pendingSubs?.some(
+      (ps) => ps.playerInId === playerInId || ps.playerOutId === playerOutId
+    )
+  ) {
+    return { status: "failed", message: "Substituição já está agendada para este atleta." };
+  }
+
+  const isDeadBallOrInterval =
+    forceImmediate ||
+    session.minute === 0 ||
+    Boolean(session.isHalftime);
+
+  if (isDeadBallOrInterval) {
+    const ok = performLiveSubstitution(
+      session,
+      clubId,
+      playerOutId,
+      playerInId,
+      playerOutName,
+      playerInName,
+      session.isHalftime ? "no intervalo" : undefined
+    );
+    return ok
+      ? {
+          status: "executed",
+          message: `Substituição realizada: entra ${playerInName} no lugar de ${playerOutName}.`,
+        }
+      : { status: "failed", message: "Não foi possível realizar a substituição." };
+  }
+
+  // Queue substitution until dead ball (bola sair pela lateral, linha de fundo, falta, gol ou impedimento)
+  const subId = `pend-sub-${session.fixtureId}-${Date.now()}-${playerInId}`;
+  session.pendingSubs = session.pendingSubs ?? [];
+  session.pendingSubs.push({
+    id: subId,
+    clubId,
+    playerOutId,
+    playerInId,
+    playerOutName,
+    playerInName,
+    requestedMinute: session.minute,
+  });
+
+  return {
+    status: "queued",
+    message: `Substituição agendada! ${playerInName} aguarda na linha lateral e entrará na próxima parada de bola.`,
+    subId,
+  };
+}
+
+export function cancelPendingSubstitution(
+  session: LiveMatchSession,
+  subId: string
+): boolean {
+  if (!session.pendingSubs) return false;
+  const prevLen = session.pendingSubs.length;
+  session.pendingSubs = session.pendingSubs.filter((s) => s.id !== subId);
+  return session.pendingSubs.length < prevLen;
+}
+
+export function processPendingSubsOnStoppage(
+  session: LiveMatchSession,
+  stoppageReason: string,
+  _playerMap?: Map<number, Player>
+): boolean {
+  if (!session.pendingSubs || session.pendingSubs.length === 0) return false;
+
+  const queue = [...session.pendingSubs];
+  session.pendingSubs = [];
+  let anyDone = false;
+
+  for (const pending of queue) {
+    const ok = performLiveSubstitution(
+      session,
+      pending.clubId,
+      pending.playerOutId,
+      pending.playerInId,
+      pending.playerOutName,
+      pending.playerInName,
+      stoppageReason
+    );
+    if (ok) anyDone = true;
+  }
+
+  return anyDone;
 }
 
 function maybePerformAiSub(
@@ -1105,7 +1224,9 @@ function maybePerformAiSub(
   playerMap: Map<number, Player>
 ): void {
   const subsUsed = isHome ? session.homeSubsUsed : session.awaySubsUsed;
-  if (subsUsed >= 4) return;
+  const clubId = isHome ? session.homeClubId : session.awayClubId;
+  const pendingForClub = (session.pendingSubs ?? []).filter((s) => s.clubId === clubId).length;
+  if (subsUsed + pendingForClub >= 4) return;
   if (session.minute < 58 || session.minute > 86) return;
   if (Math.random() > 0.14) return;
 
@@ -1113,8 +1234,10 @@ function maybePerformAiSub(
   const benchIds = isHome ? session.homeBenchIds : session.awayBenchIds;
   if (benchIds.length === 0) return;
 
-  // Find most fatigued outfield starter
+  // Find most fatigued outfield starter that is not already pending sub
+  const pendingOutIds = new Set((session.pendingSubs ?? []).map((s) => s.playerOutId));
   const outfieldActive = activeIds
+    .filter((id) => !pendingOutIds.has(id))
     .map((id) => playerMap.get(id))
     .filter((p): p is Player => Boolean(p))
     .filter((p) => p.roleCategory !== "GK")
@@ -1123,7 +1246,9 @@ function maybePerformAiSub(
   const candidateOut = outfieldActive[0];
   if (!candidateOut || (session.playerStamina[candidateOut.id] ?? 100) > 76) return;
 
+  const pendingInIds = new Set((session.pendingSubs ?? []).map((s) => s.playerInId));
   const benchPlayers = benchIds
+    .filter((id) => !pendingInIds.has(id))
     .map((id) => playerMap.get(id))
     .filter((p): p is Player => Boolean(p))
     .filter((p) => p.roleCategory !== "GK");
@@ -1136,9 +1261,9 @@ function maybePerformAiSub(
     sameRole[0] ?? benchPlayers.sort((a, b) => b.overall - a.overall)[0];
   if (!candidateIn) return;
 
-  performLiveSubstitution(
+  requestLiveSubstitution(
     session,
-    isHome ? session.homeClubId : session.awayClubId,
+    clubId,
     candidateOut.id,
     candidateIn.id,
     candidateOut.name,
@@ -1219,6 +1344,7 @@ export function stepLiveMatchMinute(
 
   session.minute += 1;
   const min = session.minute;
+  const prevMinuteEventsLen = session.events.length;
 
   // Stoppage time announcement for 1st half
   if (min === 45 && !session.secondHalfStarted) {
@@ -2520,6 +2646,58 @@ export function stepLiveMatchMinute(
     }
   }
 
+  // Dead-ball stoppage check: execute pending substitutions when ball goes out of play
+  const minuteFreshEvents = session.events.slice(prevMinuteEventsLen);
+  const deadBallEvent = minuteFreshEvents.find((e) =>
+    [
+      "throw_in",
+      "corner",
+      "goal",
+      "yellow_card",
+      "red_card",
+      "injury",
+      "offside",
+      "woodwork",
+      "chance",
+      "penalty_miss",
+      "stoppage_time",
+    ].includes(e.type)
+  );
+
+  if (deadBallEvent && session.pendingSubs && session.pendingSubs.length > 0) {
+    const reasonLabel =
+      deadBallEvent.type === "throw_in"
+        ? "lateral"
+        : deadBallEvent.type === "corner"
+        ? "escanteio"
+        : deadBallEvent.type === "goal"
+        ? "após o gol"
+        : deadBallEvent.type === "yellow_card" || deadBallEvent.type === "red_card"
+        ? "falta"
+        : deadBallEvent.type === "injury"
+        ? "atendimento médico"
+        : deadBallEvent.type === "offside"
+        ? "impedimento"
+        : deadBallEvent.type === "stoppage_time"
+        ? "acréscimos"
+        : "bola fora";
+    processPendingSubsOnStoppage(session, reasonLabel, playerMap);
+  } else if (
+    session.pendingSubs &&
+    session.pendingSubs.length > 0 &&
+    session.pendingSubs.some((s) => min - s.requestedMinute >= 2)
+  ) {
+    // If pending for 2+ minutes with no other stoppage, ball goes out for a throw-in allowing the sub to enter
+    triggerThrowIn(
+      Math.random() < 0.5,
+      undefined,
+      undefined,
+      Math.random() < 0.5,
+      false
+    );
+    processPendingSubsOnStoppage(session, "lateral", playerMap);
+  }
+
   // Check half-time break (end of 1st half)
   if (!session.secondHalfStarted && min >= session.firstHalfEnd) {
     session.isHalftime = true;
@@ -2532,11 +2710,13 @@ export function stepLiveMatchMinute(
       playerName: "Árbitro",
       text: "Fim do primeiro tempo! O árbitro apita o intervalo de jogo.",
     });
+    processPendingSubsOnStoppage(session, "intervalo", playerMap);
     return;
   }
 
   // Check end of match (full time)
   if (session.secondHalfStarted && min >= session.stoppageEnd) {
+    processPendingSubsOnStoppage(session, "acréscimos", playerMap);
     session.finished = true;
     session.events.push({
       id: `whistle-ft-${session.fixtureId}-${min}`,

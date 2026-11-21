@@ -222,6 +222,16 @@ export interface MatchInjury {
   matchesOut: number;
 }
 
+export interface PendingSubstitution {
+  id: string;
+  clubId: number;
+  playerOutId: number;
+  playerInId: number;
+  playerOutName: string;
+  playerInName: string;
+  requestedMinute: number;
+}
+
 export interface MatchResult {
   fixtureId: number;
   homeGoals: number;

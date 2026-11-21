@@ -4235,6 +4235,23 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           </div>
         )}
 
+        {/* Pending Substitutions Touchline Indicator */}
+        {session.pendingSubs && session.pendingSubs.length > 0 && !session.finished && !banner && !isHalftime && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 w-[90%] max-w-sm">
+            <div className="flex items-center justify-between gap-2 rounded-full border border-amber-400/80 bg-slate-950/90 backdrop-blur-md px-3.5 py-1 text-white shadow-lg">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-2 w-2 shrink-0 rounded-full bg-amber-400 animate-ping" />
+                <span className="truncate text-[10px] font-bold text-amber-200">
+                  Substituição na linha lateral: {session.pendingSubs.map((s) => s.playerInName).join(", ")}
+                </span>
+              </div>
+              <span className="shrink-0 rounded bg-amber-400/20 px-1.5 py-0.2 text-[8px] font-black uppercase text-amber-300 border border-amber-400/40">
+                Aguardando a bola sair
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* 22 Active Players (Sofascore Official Layout) */}
         {Array.from(playerPositions.entries()).map(([playerId, info]) => {
           const player = playerMap.get(playerId);

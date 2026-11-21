@@ -34,11 +34,12 @@ import type {
   Tactics,
 } from "../types/game";
 import {
+  cancelPendingSubstitution,
   computeTacticalMatchup,
   evaluateTacticalFit,
   finalizeMatchResult,
   initLiveMatchSession,
-  performLiveSubstitution,
+  requestLiveSubstitution,
   stepLiveMatchMinute,
   type LiveMatchSession,
 } from "../engine/matchEngine";
@@ -371,19 +372,31 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
     const pOut = playerMap.get(outId);
     const pIn = playerMap.get(inId);
     if (!pOut || !pIn) return;
-    const ok = performLiveSubstitution(
+
+    const isImmediate =
+      userSession.minute === 0 ||
+      Boolean(userSession.isHalftime) ||
+      tacticalStopReason !== null;
+
+    requestLiveSubstitution(
       userSession,
       userClubId,
       pOut.id,
       pIn.id,
       pOut.name,
-      pIn.name
+      pIn.name,
+      isImmediate
     );
-    if (ok) {
-      setSubOutId(null);
-      setSubInId(null);
-      setTick((t) => t + 1);
-    }
+
+    setSubOutId(null);
+    setSubInId(null);
+    setTick((t) => t + 1);
+  };
+
+  const handleCancelPendingSub = (subId: string) => {
+    if (!userSession) return;
+    cancelPendingSubstitution(userSession, subId);
+    setTick((t) => t + 1);
   };
 
   const handleClickPitchStarter = (starterId: number) => {
@@ -392,7 +405,18 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       userSession.homeClubId === userClubId
         ? userSession.homeSubsUsed
         : userSession.awaySubsUsed;
-    if (subsUsed >= 5) return;
+    const pendingCount = (userSession.pendingSubs ?? []).filter(
+      (ps) => ps.clubId === userClubId
+    ).length;
+    if (subsUsed + pendingCount >= 5) return;
+
+    const alreadyPending = (userSession.pendingSubs ?? []).find(
+      (ps) => ps.clubId === userClubId && ps.playerOutId === starterId
+    );
+    if (alreadyPending) {
+      handleCancelPendingSub(alreadyPending.id);
+      return;
+    }
 
     if (subInId !== null) {
       executeLiveSub(starterId, subInId);
@@ -407,7 +431,18 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       userSession.homeClubId === userClubId
         ? userSession.homeSubsUsed
         : userSession.awaySubsUsed;
-    if (subsUsed >= 5) return;
+    const pendingCount = (userSession.pendingSubs ?? []).filter(
+      (ps) => ps.clubId === userClubId
+    ).length;
+    if (subsUsed + pendingCount >= 5) return;
+
+    const alreadyPending = (userSession.pendingSubs ?? []).find(
+      (ps) => ps.clubId === userClubId && ps.playerInId === benchPlayerId
+    );
+    if (alreadyPending) {
+      handleCancelPendingSub(alreadyPending.id);
+      return;
+    }
 
     if (subOutId !== null) {
       executeLiveSub(subOutId, benchPlayerId);
@@ -479,6 +514,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   const userActiveIds = isUserHome ? userSession.homeActiveIds : userSession.awayActiveIds;
   const userBenchIds = isUserHome ? userSession.homeBenchIds : userSession.awayBenchIds;
   const userSubsUsed = isUserHome ? userSession.homeSubsUsed : userSession.awaySubsUsed;
+  const pendingUserSubs = (userSession.pendingSubs ?? []).filter(
+    (ps) => ps.clubId === userClubId
+  );
+  const totalUserSubsCount = userSubsUsed + pendingUserSubs.length;
 
   const homeGoalEvents = userSession.events.filter(
     (e) => e.type === "goal" && e.clubId === homeClub.id
@@ -1605,6 +1644,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 <strong className="text-emerald-400">
                   {userSubsUsed}/5
                 </strong>
+                {pendingUserSubs.length > 0 && (
+                  <span className="ml-1 text-amber-300 font-bold">
+                    (+{pendingUserSubs.length} agendada{pendingUserSubs.length > 1 ? "s" : ""})
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -1834,12 +1878,62 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               </div>
             )}
 
+            {/* Pending Substitutions Waiting for Dead-Ball Banner */}
+            {pendingUserSubs.length > 0 && (
+              <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-2.5 space-y-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                    <Clock className="h-3.5 w-3.5 animate-spin" />
+                    Substituição agendada ({pendingUserSubs.length})
+                  </span>
+                  <span className="text-[10px] font-semibold text-amber-400">
+                    Aguardando a bola sair
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {pendingUserSubs.map((ps) => (
+                    <div
+                      key={ps.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-slate-950/80 px-2.5 py-1.5 text-xs"
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5 truncate">
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-500/20 px-1 py-0.2 text-[9px] font-black text-emerald-300">
+                          <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> ENTRA
+                        </span>
+                        <span className="truncate font-bold text-white">
+                          {getPlayerDisplayName(ps.playerInName)}
+                        </span>
+                        <span className="text-slate-400 text-[10px]">p/</span>
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-rose-500/20 px-1 py-0.2 text-[9px] font-black text-rose-300">
+                          <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAI
+                        </span>
+                        <span className="truncate font-semibold text-slate-300">
+                          {getPlayerDisplayName(ps.playerOutName)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelPendingSub(ps.id)}
+                        className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:bg-rose-500 hover:text-white transition cursor-pointer"
+                        title="Cancelar esta substituição antes da bola sair"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 leading-snug">
+                  ⏳ O atleta já está pronto na linha lateral e entrará na próxima parada de jogo (lateral, escanteio, falta, tiro de meta ou gol).
+                </p>
+              </div>
+            )}
+
             {/* Starters list */}
             <div>
               <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <span>Em Campo ({userActiveIds.length})</span>
                 <span className={subInId !== null ? "text-rose-400 animate-pulse" : ""}>
-                  {userSubsUsed >= 5
+                  {totalUserSubsCount >= 5
                     ? "Trocas esgotadas"
                     : subInId !== null
                     ? "Clique em quem vai SAIR"
@@ -1856,6 +1950,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   const sofaColor = getSofascoreRatingColor(numRating);
                   const isSelected = subOutId === id;
                   const isInjured = userSession.injuredIds.includes(id);
+                  const isPendingOut = pendingUserSubs.some((ps) => ps.playerOutId === id);
                   const subInPlayer = subInId !== null ? playerMap.get(subInId) : undefined;
                   const isSamePosAsSubIn =
                     subInPlayer &&
@@ -1867,10 +1962,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   return (
                     <button
                       key={id}
-                      disabled={userSubsUsed >= 5 || userSession.finished}
+                      disabled={totalUserSubsCount >= 5 || userSession.finished}
                       onClick={() => handleClickPitchStarter(id)}
                       className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
-                        isSelected
+                        isPendingOut
+                          ? "border-amber-400/80 bg-amber-500/20 ring-1 ring-amber-400/40 cursor-pointer"
+                          : isSelected
                           ? "border-amber-400 bg-amber-400/15 ring-1 ring-amber-400/40"
                           : subInId !== null
                           ? isSamePosAsSubIn
@@ -1890,6 +1987,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                           {p.primaryPosition}
                         </span>
                         <span className="truncate">{getPlayerDisplayName(p.name)}</span>
+                        {isPendingOut && (
+                          <span className="ml-1 shrink-0 rounded bg-amber-500/25 px-1 py-0.2 text-[8px] font-black uppercase text-amber-300 border border-amber-500/50 animate-pulse">
+                            ⏳ Sai na parada
+                          </span>
+                        )}
                         {isSamePosAsSubIn && (
                           <span className="ml-1 shrink-0 rounded bg-emerald-500/20 px-1 py-0.2 text-[8px] font-black uppercase text-emerald-300 border border-emerald-500/40">
                             Mesma Pos.
@@ -1919,7 +2021,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                           {rating}
                         </span>
                         {renderOvrStamina(p.overall, stam, "text-slate-200")}
-                        {subInId !== null ? (
+                        {isPendingOut ? (
+                          <span className="text-[9px] font-bold text-amber-300">
+                            Aguardando
+                          </span>
+                        ) : subInId !== null ? (
                           <span className="inline-flex items-center gap-0.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
                             <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAIR
                           </span>
@@ -1942,7 +2048,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-emerald-400">
                 <span>Banco de Reservas ({userBenchIds.length})</span>
                 <span className={subOutId !== null ? "text-emerald-300 animate-pulse" : ""}>
-                  {userSubsUsed >= 5
+                  {totalUserSubsCount >= 5
                     ? "Trocas esgotadas"
                     : subOutId !== null
                     ? "Clique em quem vai ENTRAR"
@@ -1954,7 +2060,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   const p = playerMap.get(id);
                   if (!p) return null;
                   const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
-                  const canSub = userSubsUsed < 5 && !userSession.finished;
+                  const isPendingIn = pendingUserSubs.some((ps) => ps.playerInId === id);
+                  const canSub = totalUserSubsCount < 5 && !userSession.finished && !isPendingIn;
                   const isReadyToCompleteOut = subOutId !== null && canSub;
                   const isSelectedToEnter = subInId === id;
                   const subOutPlayer = subOutId !== null ? playerMap.get(subOutId) : undefined;
@@ -1965,10 +2072,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   return (
                     <button
                       key={id}
-                      disabled={!canSub}
+                      disabled={!canSub && !isPendingIn}
                       onClick={() => handleClickBenchPlayer(id)}
                       className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
-                        isSelectedToEnter
+                        isPendingIn
+                          ? "border-emerald-400/80 bg-emerald-500/20 ring-1 ring-emerald-400/40 cursor-pointer shadow-sm"
+                          : isSelectedToEnter
                           ? "border-emerald-400 bg-emerald-400/20 ring-1 ring-emerald-400/50 shadow-sm"
                           : isReadyToCompleteOut
                           ? isSamePosAsSubOut
@@ -1982,7 +2091,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-white">
                         <span
                           className={`inline-block w-6 shrink-0 text-[10px] font-bold ${
-                            isSelectedToEnter || isReadyToCompleteOut
+                            isPendingIn || isSelectedToEnter || isReadyToCompleteOut
                               ? "text-emerald-300"
                               : "text-slate-400"
                           }`}
@@ -1990,6 +2099,11 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                           {p.primaryPosition}
                         </span>
                         <span className="truncate">{getPlayerDisplayName(p.name)}</span>
+                        {isPendingIn && (
+                          <span className="ml-1 shrink-0 rounded bg-emerald-500/25 px-1 py-0.2 text-[8px] font-black uppercase text-emerald-300 border border-emerald-500/50 animate-pulse">
+                            ⏳ Aguarda na linha
+                          </span>
+                        )}
                         {isSamePosAsSubOut && (
                           <span className="ml-1 shrink-0 rounded bg-emerald-500/20 px-1 py-0.2 text-[8px] font-black uppercase text-emerald-300 border border-emerald-500/40">
                             Mesma Pos.
@@ -2000,11 +2114,15 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                         {renderOvrStamina(
                           p.overall,
                           stam,
-                          isSelectedToEnter || isReadyToCompleteOut
+                          isPendingIn || isSelectedToEnter || isReadyToCompleteOut
                             ? "text-emerald-300"
                             : "text-slate-300"
                         )}
-                        {isSelectedToEnter ? (
+                        {isPendingIn ? (
+                          <span className="text-[9px] font-bold text-emerald-300">
+                            Na Lateral
+                          </span>
+                        ) : isSelectedToEnter ? (
                           <span className="inline-flex items-center gap-0.5 rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black text-slate-950">
                             <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> PRONTO
                           </span>
