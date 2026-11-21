@@ -691,20 +691,41 @@ def main() -> None:
     seen_person_keys: set[tuple[str, str]] = set()
     next_player_id = 1
 
-    # 3a. Ingest FC27 players for European, English, Saudi, MLS clubs
+    # 3a. Ingest FC27 players for European, English, Saudi, MLS clubs (Men's competitions only)
+    EXCLUDED_LEAGUE_KEYWORDS = (
+        "Women",
+        "Fem",
+        "Frauen",
+        "Vrouwen",
+        "Damen",
+        "Kvenna",
+        "Kvinner",
+        "Žen",
+        "Liga F",
+        "Arkema",
+        "Icon",
+    )
     with fc27_zip.open("fc27_players_database.csv") as f:
         reader = list(csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig")))
-        # Sort: Base official cards (eaId < 50_000_000) first, then higher overall
-        reader.sort(key=lambda r: (1 if to_int(r.get("eaId"), 0) > 50_000_000 else 0, -to_int(r.get("overall"), 0)))
+        # Sort: Base official cards (rarity == 'Rare' and eaId < 50_000_000) first, then higher overall
+        reader.sort(
+            key=lambda r: (
+                0 if (r.get("rarity") or "").strip() == "Rare" and to_int(r.get("eaId"), 0) < 50_000_000 else 1,
+                -to_int(r.get("overall"), 0),
+            )
+        )
         for row in reader:
             league = (row.get("league") or "").strip()
+            if any(kw in league for kw in EXCLUDED_LEAGUE_KEYWORDS):
+                continue
+
             raw_club = (row.get("club") or "").strip()
             overall = to_int(row.get("overall"), 70)
 
             # Look up club
             club_id = fc27_club_to_id.get((league, raw_club))
             if club_id is None:
-                # Also try matching without league constraint if club name matches
+                # Also try matching without league constraint if club name matches (only among men's leagues)
                 for (l_name, c_name), cid in fc27_club_to_id.items():
                     if c_name == raw_club:
                         club_id = cid
@@ -722,7 +743,10 @@ def main() -> None:
                 continue
             seen_person_keys.add(person_key)
 
+            fc_iq_str = (row.get("fc_iq_roles") or "").strip()
             raw_positions = [p.strip() for p in (row.get("positions") or "CM").split(",") if p.strip()]
+            if fc_iq_str.startswith("GK "):
+                raw_positions = ["GK"]
             primary_pos = raw_positions[0] if raw_positions else "CM"
             role_cat = classify_role(primary_pos)
             is_gk = primary_pos == "GK"
@@ -744,6 +768,34 @@ def main() -> None:
                 defending = to_int(row.get("face_defending"), round(overall * 0.62))
                 physicality = to_int(row.get("face_physicality"), round(overall * 0.78))
                 reflexes = to_int(row.get("stat_reactions"), overall)
+
+                # Detect Kaggle CSV scraper bug where overall was overwritten by face_pace (e.g., Zak Lovelace OVR 87 with 59 DRI / 57 SHO)
+                other_face_max = max(shooting, passing, dribbling, defending, physicality)
+                if overall == pace and (overall - other_face_max) >= 12:
+                    role_scores = [float(x) for x in re.findall(r":\s*([0-9.]+)", fc_iq_str)]
+                    if role_scores:
+                        overall = max(55, min(78, int(round(max(role_scores)))))
+                    else:
+                        overall = max(55, min(78, int(round((pace * 0.2 + other_face_max * 0.8)))))
+
+            tm = tm_lookup.get(normalize_name(player_name)) or tm_lookup.get(normalize_name(full_name))
+            tm_mv = tm["market_value_eur"] if tm and tm["market_value_eur"] > 0 else 0
+
+            # If card is a non-Rare FUT Promo card (e.g. Future Stars / TOTW with eaId >= 50M) and way above real Transfermarkt value, normalize to real base OVR
+            is_promo_card = (row.get("rarity") or "").strip() != "Rare" or to_int(row.get("eaId"), 0) >= 50_000_000
+            if is_promo_card and tm_mv > 0:
+                real_ovr_cap = tm_mv_to_overall(tm_mv, age) + 2
+                if overall > real_ovr_cap + 3:
+                    delta = overall - real_ovr_cap
+                    overall = real_ovr_cap
+                    if not is_gk:
+                        pace = max(45, pace - delta)
+                        shooting = max(35, shooting - delta)
+                        passing = max(40, passing - delta)
+                        dribbling = max(42, dribbling - delta)
+                        defending = max(30, defending - delta)
+                        physicality = max(45, physicality - delta)
+                        reflexes = max(45, reflexes - delta)
 
             def stat_or(col: str, fallback: int) -> int:
                 v = to_int(row.get(col), -1)
@@ -776,9 +828,8 @@ def main() -> None:
                 "aggression": stat_or("stat_aggression", physicality - 4),
             }
 
-            tm = tm_lookup.get(normalize_name(player_name)) or tm_lookup.get(normalize_name(full_name))
-            tm_mv = tm["market_value_eur"] if tm and tm["market_value_eur"] > 0 else 0
-            market_value_eur = tm_mv if tm_mv > 0 else estimate_market_value(overall, age)
+            est_mv = estimate_market_value(overall, age)
+            market_value_eur = tm_mv if (tm_mv > 0 and tm_mv >= est_mv * 0.25) else est_mv
             image_url = tm["image_url"] if tm and tm["image_url"] else ""
             contract_until = tm["contract_expiration"] if tm and tm["contract_expiration"] else "2028-06-30"
             wage_eur = estimate_weekly_wage(overall, market_value_eur)

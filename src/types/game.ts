@@ -172,6 +172,7 @@ export type MatchEventType =
   | "goal"
   | "chance"
   | "save"
+  | "corner"
   | "yellow_card"
   | "red_card"
   | "injury"

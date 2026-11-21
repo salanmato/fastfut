@@ -9,6 +9,8 @@ import {
   Footprints,
   Activity,
   ArrowUp,
+  ArrowDown,
+  ArrowLeftRight,
   Plus,
   Users,
   Coins,
@@ -116,6 +118,13 @@ interface ActiveCardHighlight {
   minute: number;
 }
 
+interface ActiveSubHighlight {
+  playerInId: number;
+  playerInName: string;
+  playerOutName?: string;
+  minute: number;
+}
+
 const PLAY_PHASE_LABELS: Record<PlayPhase, string> = {
   build_up: "Construção",
   progression: "Progressão",
@@ -129,6 +138,8 @@ interface EventBanner {
     | "goal"
     | "save"
     | "chance"
+    | "corner"
+    | "substitution"
     | "yellow_card"
     | "red_card"
     | "injury"
@@ -208,6 +219,32 @@ function computeTrajectoryCurve(
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
+}
+
+export interface SofascoreRatingStyle {
+  bg: string;
+  text: string;
+  border: string;
+  glow?: string;
+}
+
+export function getSofascoreRatingColor(rating: number): SofascoreRatingStyle {
+  if (rating >= 9.0) {
+    return { bg: "#2563eb", text: "#ffffff", border: "#60a5fa", glow: "rgba(37,99,235,0.4)" };
+  }
+  if (rating >= 8.0) {
+    return { bg: "#0284c7", text: "#ffffff", border: "#38bdf8", glow: "rgba(2,132,199,0.4)" };
+  }
+  if (rating >= 7.0) {
+    return { bg: "#16a34a", text: "#ffffff", border: "#4ade80", glow: "rgba(22,163,74,0.4)" };
+  }
+  if (rating >= 6.5) {
+    return { bg: "#d97706", text: "#ffffff", border: "#fbbf24", glow: "rgba(217,119,6,0.4)" };
+  }
+  if (rating >= 6.0) {
+    return { bg: "#ea580c", text: "#ffffff", border: "#fb923c", glow: "rgba(234,88,12,0.4)" };
+  }
+  return { bg: "#dc2626", text: "#ffffff", border: "#f87171", glow: "rgba(220,38,38,0.4)" };
 }
 
 function isLightColor(hex: string): boolean {
@@ -313,16 +350,15 @@ function computeRoleAttackTarget(
   const ballOnMyFlank = Math.abs(localBallX - baseX) < 28;
 
   if (label === "CB") {
-    // When ball is in own half (localBallY > 55): CB stays behind ball (localBallY + 14)
-    // When ball is in opponent half: CB steps up to halfway line / midfield (localBallY + 22)
-    const baseOffset = localBallY > 55 ? 14 : 22;
+    // CBs maintain their left/right/center lane while stepping up cleanly behind the ball
+    const baseOffset = localBallY > 55 ? 14 : 23;
     const attY = clamp(
-      localBallY + baseOffset - mentalityShift * 0.6 - pressShift * 0.5,
-      46,
+      localBallY + baseOffset - mentalityShift * 0.55 - pressShift * 0.45,
+      48,
       88
     );
-    const spreadX = localBallY > 58 ? sideSign * 4.5 : 0;
-    const flankX = clamp(baseX * 0.85 + localBallX * 0.15 + spreadX, 20, 80);
+    const spreadX = localBallY > 58 ? sideSign * 3.5 : 0;
+    const flankX = clamp(baseX + (localBallX - 50) * 0.12 + spreadX, 18, 82);
     return { x: flankX, y: attY };
   }
 
@@ -338,17 +374,17 @@ function computeRoleAttackTarget(
       );
     } else {
       // Weak-side fullback stays behind the ball for rest defense
-      attY = clamp(localBallY + 10 - mentalityShift * 0.4, 32, 86);
+      attY = clamp(localBallY + 10 - mentalityShift * 0.4, 34, 86);
     }
-    const wideBias = ballOnMyFlank ? sideSign * 4 : -sideSign * 2;
-    const flankX = clamp(baseX + wideBias, 7, 93);
+    const wideBias = ballOnMyFlank ? sideSign * 4 : -sideSign * 1.5;
+    const flankX = clamp(baseX + wideBias, 8, 92);
     return { x: flankX, y: attY };
   }
 
   if (label === "CDM") {
-    // Anchors strictly BEHIND the ball as the pivot to recycle play
+    // Anchors strictly BEHIND the ball as the pivot to recycle play, preserving left/right pivot lane
     const anchorY = clamp(localBallY + 9 - mentalityShift * 0.4, 28, 78);
-    const flankX = clamp(baseX * 0.66 + localBallX * 0.34, 22, 78);
+    const flankX = clamp(baseX + (localBallX - 50) * 0.16, 20, 80);
     return { x: flankX, y: anchorY };
   }
 
@@ -356,27 +392,23 @@ function computeRoleAttackTarget(
     const isCam = label === "CAM" || player?.primaryPosition === "CAM";
     let attY: number;
     if (isCam) {
-      // CAM plays in the hole: connects closely with the ball rather than sprinting into the net
+      // CAM plays in the hole between opponent midfield and defense
       if (localBallY > 60) {
-        // Deep build-up: CAM drops toward center circle (48-54) to link play
         attY = clamp(localBallY - 12 - mentalityShift * 0.6, 44, 65);
       } else if (localBallY > 30) {
-        // Midfield progression
-        attY = clamp(localBallY - 8 - mentalityShift * 0.8 - counterBoost * 0.5, 20, 50);
+        attY = clamp(localBallY - 9 - mentalityShift * 0.8 - counterBoost * 0.5, 20, 50);
       } else {
-        // Final third: arrives at the edge of the penalty box
         attY = clamp(18 - mentalityShift * 0.5, 14, 26);
       }
     } else {
-      // CM: supports level or slightly behind for recycling, or makes late box arrivals
-      const isBoxToBox = slot.x < 50;
-      if (isBoxToBox && (attackProgress > 0.65 || playPhase === "counter")) {
-        attY = clamp(localBallY - 8 - mentalityShift * 0.6, 18, 60);
+      // CM: ball-side CM steps up to support/arrive in box, far-side CM balances the midfield line
+      if (ballOnMyFlank && (attackProgress > 0.52 || playPhase === "counter")) {
+        attY = clamp(localBallY - 6 - mentalityShift * 0.6, 18, 62);
       } else {
-        attY = clamp(localBallY + 3 - mentalityShift * 0.5, 26, 75);
+        attY = clamp(localBallY + 2 - mentalityShift * 0.5, 25, 74);
       }
     }
-    const flankX = clamp(baseX * 0.68 + localBallX * 0.32, 18, 82);
+    const flankX = clamp(baseX + (localBallX - 50) * 0.16, 16, 84);
     return { x: flankX, y: attY };
   }
 
@@ -389,50 +421,40 @@ function computeRoleAttackTarget(
       // Progression: stay 8 to 12 units ahead of ball
       attY = clamp(localBallY - 10 - mentalityShift * 0.8 - counterBoost, 18, 48);
     } else {
-      // Final third: ball-side attacks byline, weak-side attacks far post inside 6-yard box!
+      // Final third: ball-side attacks byline, weak-side attacks far post
       attY = ballOnMyFlank
-        ? clamp(localBallY - 4, 6.5, 22)
-        : clamp(localBallY - 5, 5.5, 15);
+        ? clamp(localBallY - 4, 7.5, 22)
+        : clamp(localBallY - 5, 6.5, 16);
     }
 
-    // Ball-side winger stretches wide; weak-side winger cuts inside aggressively towards far post
-    const cutInFactor = !ballOnMyFlank && attackProgress > 0.45 ? 0.62 : 0.08;
-    const stretchX = ballOnMyFlank ? sideSign * 4 : 0;
-    const flankX = clamp(baseX * (1 - cutInFactor) + (50 - sideSign * 14) * cutInFactor + stretchX, 8, 92);
+    const cutInFactor = !ballOnMyFlank && attackProgress > 0.48 ? 0.45 : 0.06;
+    const stretchX = ballOnMyFlank ? sideSign * 3.5 : 0;
+    const flankX = clamp(baseX * (1 - cutInFactor) + (50 - sideSign * 16) * cutInFactor + stretchX, 8, 92);
     return { x: flankX, y: attY };
   }
 
   // Striker (ST / CF):
-  // CONNECTED TO BALL: Leads the line and relentlessly attacks the goalmouth in final third!
+  // Preserves horizontal spacing in 2-striker setups (e.g. 4-4-2 / 3-5-2) while attacking the box
+  const isTwoStrikerSide = Math.abs(baseX - 50) > 5;
+  const stLaneOffset = isTwoStrikerSide ? (baseX - 50) * 0.78 : 0;
   let attY: number;
   let flankX: number;
   if (localBallY > 65) {
-    // Team in defensive third: ST drops towards halfway line (48-56) as pivot / target man
     attY = clamp(localBallY - 16 + (tactics.passingStyle === "Short" ? 4 : 0), 46, 60);
-    const channelShift = (localBallX - 50) * 0.25;
-    flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
+    flankX = clamp(50 + stLaneOffset + (localBallX - 50) * 0.16, 24, 76);
   } else if (localBallY > 38) {
-    // Midfield: ST stays 10 to 14 units ahead on the shoulder of CBs
     const lead = tactics.passingStyle === "Direct" ? 14 : tactics.passingStyle === "Short" ? 9 : 12;
     attY = clamp(localBallY - lead - mentalityShift * 0.6 - counterBoost * 0.6, 20, 46);
-    const channelShift = (localBallX - 50) * 0.25;
-    flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
+    flankX = clamp(50 + stLaneOffset + (localBallX - 50) * 0.18, 24, 76);
   } else if (localBallY > 22) {
-    // Final third approach: ST works between the CBs (7 to 10 units ahead), attacking space
-    attY = clamp(localBallY - 8 - mentalityShift * 0.6, 8, 24);
-    const channelShift = (localBallX - 50) * 0.25;
-    flankX = clamp(baseX * 0.65 + (50 + channelShift) * 0.35, 30, 70);
+    const staggerY = isTwoStrikerSide ? (ballOnMyFlank ? -1.5 : 1.5) : 0;
+    attY = clamp(localBallY - 8 - mentalityShift * 0.6 + staggerY, 8, 24);
+    flankX = clamp(50 + stLaneOffset * 0.88 + (localBallX - 50) * 0.18, 26, 74);
   } else {
-    // Inside the box / danger area: ST NEVER retreats! Attacking the 6-yard box and near/far post!
-    if (Math.abs(localBallX - 50) > 16) {
-      // Ball is on flank: ST charges the goalmouth / near post for cross/tap-in/header
-      attY = clamp(localBallY - 4, 5.5, 13);
-      flankX = clamp(50 + (localBallX > 50 ? 5 : -5), 34, 66);
-    } else {
-      // Ball is central: ST stays in front of goal, ready to finish
-      attY = clamp(localBallY - 6, 5.5, 14);
-      flankX = clamp(50 + (localBallX - 50) * 0.35, 36, 64);
-    }
+    // Inside the penalty box: stagger near post vs penalty spot in 2-striker formations
+    const staggerY = isTwoStrikerSide ? (ballOnMyFlank ? -1.8 : 1.8) : 0;
+    attY = clamp(localBallY - 5 + staggerY, 6, 15);
+    flankX = clamp(50 + stLaneOffset * 0.82 + (localBallX - 50) * 0.16, 28, 72);
   }
 
   return { x: flankX, y: attY };
@@ -454,21 +476,29 @@ function computeRoleDefendTarget(
 
   const baseX = clamp(slot.x, 10, 90);
   const pressBias =
-    tactics.pressing === "High" ? -7 : tactics.pressing === "Low" ? 7 : -1;
+    tactics.pressing === "High" ? -6 : tactics.pressing === "Low" ? 6 : 0;
   const mentBias =
-    tactics.mentality === "Attacking" ? -5 : tactics.mentality === "Defensive" ? 6 : 0;
-  const counterRetreat = isCounter ? 6 : 0;
+    tactics.mentality === "Attacking" ? -4 : tactics.mentality === "Defensive" ? 5 : 0;
+  const counterRetreat = isCounter ? 5 : 0;
 
-  // Higher depthNorm means further up towards the opponent when defending
-  const depthNorm = clamp((92 - slot.y) / 80, 0.15, 0.96);
-  // Keep block compact between own goal (100) and the ball
-  const ballAnchor = clamp(localBallY * 0.72 + 28 + pressBias + mentBias + counterRetreat, 32, 88);
-  const blockSpan = tactics.pressing === "Low" ? 22 : tactics.pressing === "High" ? 32 : 27;
+  // In local coords: 100 = own goal, 0 = opponent goal.
+  // Defenders (depthNorm ~0.22) sit on the backline closest to own goal (100).
+  // Midfielders (depthNorm ~0.50) sit 10-13 units ahead of the backline.
+  // Attackers (depthNorm ~0.92) sit 22-27 units ahead of the backline toward halfway line.
+  const depthNorm = clamp((92 - slot.y) / 80, 0.18, 0.95);
+  const roleForwardOffset = clamp((depthNorm - 0.21) / 0.72, 0, 1);
 
-  const attY = clamp(ballAnchor - (1 - depthNorm) * blockSpan, 24, 89);
-  // Zonal lateral shift toward ball side
-  const compressX = slot.label === "CB" ? 0.28 : 0.36;
-  const flankX = clamp(baseX * (1 - compressX) + localBallX * compressX, 10, 90);
+  const backlineY = clamp(
+    Math.max(localBallY + 7, 60 + localBallY * 0.28 + pressBias + mentBias + counterRetreat),
+    55,
+    89
+  );
+  const blockSpan = tactics.pressing === "Low" ? 21 : tactics.pressing === "High" ? 28 : 24;
+
+  const attY = clamp(backlineY - roleForwardOffset * blockSpan, 30, 89.5);
+  // Subtle zonal lateral shift toward ball side while keeping horizontal formation lanes intact
+  const shiftFactor = slot.label === "CB" ? 0.12 : 0.16;
+  const flankX = clamp(baseX + (localBallX - 50) * shiftFactor, 9, 91);
   return { x: flankX, y: attY };
 }
 
@@ -584,7 +614,7 @@ function computeTeamTargets(
   }
 
   // Lightweight anti-clumping repulsion between outfield teammates
-  const minSep = 6.2;
+  const minSep = 7.4;
   const outfieldIds = activeIds.filter((id) => playerMap.get(id)?.roleCategory !== "GK");
   for (let i = 0; i < outfieldIds.length; i++) {
     for (let j = i + 1; j < outfieldIds.length; j++) {
@@ -771,8 +801,38 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   const [showOffsideLine, setShowOffsideLine] = useState(true);
   const [offsideMark, setOffsideMark] = useState<OffsideMark | null>(null);
   const [showNames, setShowNames] = useState(true);
-  const [showRatings, setShowRatings] = useState(false);
+  const [showRatings, setShowRatings] = useState(true);
   const [showKits, setShowKits] = useState(true);
+
+  // Sofascore Player of the Match (MOTM - Highest rating >= 7.0), Goals per player & Subbed-in tracker
+  const { topRatedPlayerId, playerGoalsMap, subbedInMap } = useMemo(() => {
+    let highestRating = 0;
+    let topId: number | null = null;
+    const goalsMap = new Map<number, number>();
+    const subsMap = new Map<number, { minute: number; outName?: string }>();
+
+    for (const ev of session.events) {
+      if (ev.type === "goal" && !ev.disallowedGoal && ev.playerId) {
+        goalsMap.set(ev.playerId, (goalsMap.get(ev.playerId) ?? 0) + 1);
+      } else if (ev.type === "substitution" && ev.playerId) {
+        subsMap.set(ev.playerId, { minute: ev.minute, outName: ev.assistPlayerName });
+      }
+    }
+
+    for (const [pid, rating] of Object.entries(session.playerRatings)) {
+      const numPid = Number(pid);
+      if (rating > highestRating) {
+        highestRating = rating;
+        topId = numPid;
+      }
+    }
+
+    return {
+      topRatedPlayerId: highestRating >= 7.0 ? topId : null,
+      playerGoalsMap: goalsMap,
+      subbedInMap: subsMap,
+    };
+  }, [session.events, session.playerRatings]);
 
   const [ballPos, setBallPos] = useState<Coord>({ x: 50, y: 50 });
   const [ballVisual, setBallVisual] = useState<BallVisualState>({
@@ -782,6 +842,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     isAerial: false,
   });
   const [cardHighlight, setCardHighlight] = useState<ActiveCardHighlight | null>(null);
+  const [subHighlight, setSubHighlight] = useState<ActiveSubHighlight | null>(null);
   const flightRafRef = useRef<number | null>(null);
 
   const triggerBallFlight = (
@@ -1350,6 +1411,106 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         minute: latest.minute,
       });
       setHighlightPause(1800, 1200);
+    } else if (latest.type === "corner") {
+      const attackingHome = isHomeEvent;
+      const cornerClub = isHomeEvent ? homeClub : awayClub;
+      const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
+      const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
+
+      // Randomly pick left or right corner flag
+      const cornerLeft = Math.random() < 0.5;
+      const cornerFlagX = cornerLeft ? 4.5 : 95.5;
+      const cornerFlagY = attackingHome ? 3.5 : 96.5;
+
+      const targetBoxX = 45 + Math.random() * 10;
+      const targetBoxY = attackingHome ? 10 + Math.random() * 5 : 90 - Math.random() * 5;
+
+      const updatedCoords: Record<number, Coord> = { ...curCoords };
+
+      // Position the corner kick taker right at the corner flag
+      updatedCoords[latest.playerId] = {
+        x: cornerFlagX + (cornerLeft ? 1.5 : -1.5),
+        y: cornerFlagY + (attackingHome ? 1.2 : -1.2),
+      };
+
+      // Position defending goalkeeper on line in center and defenders in box
+      for (const id of defIds) {
+        const p = playerMap.get(id);
+        if (p?.roleCategory === "GK") {
+          updatedCoords[id] = { x: 50, y: attackingHome ? 4.5 : 95.5 };
+        } else if (p) {
+          const base = updatedCoords[id] ?? { x: 50, y: 50 };
+          updatedCoords[id] = {
+            x: clamp(base.x * 0.4 + (40 + Math.random() * 20) * 0.6, 26, 74),
+            y: clamp(attackingHome ? 8 + Math.random() * 9 : 92 - Math.random() * 9, 5, 95),
+          };
+        }
+      }
+
+      // Attacking team pushes tall players (CBs / ST) into the penalty box for header
+      for (const id of attIds) {
+        if (id === latest.playerId) continue;
+        const p = playerMap.get(id);
+        if (!p || p.roleCategory === "GK") continue;
+        const isTall = p.roleCategory === "ATT" || p.roleCategory === "DEF";
+        const boxY = isTall
+          ? (attackingHome ? 9 + Math.random() * 7 : 91 - Math.random() * 7)
+          : (attackingHome ? 22 + Math.random() * 4 : 78 - Math.random() * 4);
+        updatedCoords[id] = {
+          x: clamp(32 + Math.random() * 36, 24, 76),
+          y: clamp(boxY, 6, 94),
+        };
+      }
+
+      setLiveCoords(updatedCoords);
+
+      const { curveX, curveY } = computeTrajectoryCurve(
+        cornerFlagX,
+        cornerFlagY,
+        targetBoxX,
+        targetBoxY,
+        true,
+        "cross"
+      );
+
+      setPlayPhase("final_third");
+      setCarrierId(latest.playerId);
+      setCarrierClubId(latest.clubId);
+      setTrail({
+        x1: cornerFlagX,
+        y1: cornerFlagY,
+        x2: targetBoxX,
+        y2: targetBoxY,
+        kind: "cross",
+        isAerial: true,
+        maxAltitude: 1.15,
+        curveX,
+        curveY,
+      });
+
+      // Ball starts at corner flag, then flights high into the box
+      setBallPos({ x: cornerFlagX, y: cornerFlagY });
+      triggerBallFlight(
+        cornerFlagX,
+        cornerFlagY,
+        targetBoxX,
+        targetBoxY,
+        curveX,
+        curveY,
+        true,
+        1.15,
+        750
+      );
+
+      setBanner({
+        text: "ESCANTEIO",
+        tone: "corner",
+        minute: latest.minute,
+        clubName: cornerClub.name,
+        clubColor: cornerClub.primaryColor,
+        scorerName: `${latest.playerName} (${cornerClub.shortName})`,
+      });
+      setHighlightPause(2200, 1500);
     } else if (latest.type === "offside") {
       const attackingHome = isHomeEvent;
       const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
@@ -1453,6 +1614,28 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         scorerName: `+${extraMins} Minuto${extraMins > 1 ? "s" : ""} de Acréscimo`,
       });
       setHighlightPause(2200, 1200);
+    } else if (latest.type === "substitution") {
+      const subClub = isHomeEvent ? homeClub : awayClub;
+      const playerIn = playerMap.get(latest.playerId);
+      const playerOut = latest.assistPlayerId ? playerMap.get(latest.assistPlayerId) : undefined;
+      setBanner({
+        text: "SUBSTITUIÇÃO",
+        tone: "substitution",
+        minute: latest.minute,
+        clubName: subClub.name,
+        clubColor: subClub.primaryColor,
+        scorerName: latest.playerName,
+        scorerShirt: playerIn?.shirtNumber,
+        assistName: latest.assistPlayerName,
+        assistShirt: playerOut?.shirtNumber,
+      });
+      setSubHighlight({
+        playerInId: latest.playerId,
+        playerInName: latest.playerName,
+        playerOutName: latest.assistPlayerName,
+        minute: latest.minute,
+      });
+      setHighlightPause(1900, 1200);
     } else if (latest.type === "whistle") {
       if (session.finished) {
         setBanner({
@@ -1479,7 +1662,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   useEffect(() => {
     if (!banner) return;
     if (banner.tone === "halftime" && isHalftime) return;
-    const durationMs = banner.tone === "goal" ? 2600 : banner.tone === "stoppage" ? 2400 : 1800;
+    const durationMs =
+      banner.tone === "goal"
+        ? 2600
+        : banner.tone === "stoppage" || banner.tone === "substitution" || banner.tone === "corner"
+        ? 2400
+        : 1800;
     const t = window.setTimeout(() => {
       setBanner(null);
       setTrail(null);
@@ -1500,6 +1688,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     const t = window.setTimeout(() => setCardHighlight(null), 2500);
     return () => window.clearTimeout(t);
   }, [cardHighlight]);
+
+  // Clear substitution highlight after duration
+  useEffect(() => {
+    if (!subHighlight) return;
+    const t = window.setTimeout(() => setSubHighlight(null), 3200);
+    return () => window.clearTimeout(t);
+  }, [subHighlight]);
 
   // Sub-tick continuous tactical movement, active runs, dribbling & progressive passing (220ms)
   useEffect(() => {
@@ -1933,6 +2128,40 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         nextCarrierId
       );
 
+      // Shoulder-to-shoulder cross-team separation so opposing badges never overlap on the exact same pixel
+      const minOppSep = 4.6;
+      for (const hId of cur.session.homeActiveIds) {
+        if (cur.playerMap.get(hId)?.roleCategory === "GK") continue;
+        const hPos = homeTargets.get(hId);
+        if (!hPos) continue;
+        for (const aId of cur.session.awayActiveIds) {
+          if (cur.playerMap.get(aId)?.roleCategory === "GK") continue;
+          const aPos = awayTargets.get(aId);
+          if (!aPos) continue;
+          const dx = hPos.x - aPos.x;
+          const dy = hPos.y - aPos.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < minOppSep) {
+            const safeDist = Math.max(0.1, dist);
+            const push = (minOppSep - safeDist) * 0.45;
+            const nx = dist < 0.1 ? 0.7 : dx / safeDist;
+            const ny = dist < 0.1 ? 0.7 : dy / safeDist;
+            if (hId !== nextCarrierId) {
+              homeTargets.set(hId, {
+                x: clamp(hPos.x + nx * push, 7, 93),
+                y: clamp(hPos.y + ny * push, 6, 94),
+              });
+            }
+            if (aId !== nextCarrierId) {
+              awayTargets.set(aId, {
+                x: clamp(aPos.x - nx * push, 7, 93),
+                y: clamp(aPos.y - ny * push, 6, 94),
+              });
+            }
+          }
+        }
+      }
+
       // Smoothly move each player toward their dynamic tactical target based on pace & stamina
       const nextCoords: Record<number, Coord> = {};
       const stepPlayers = (ids: number[], targetMap: Map<number, Coord>) => {
@@ -2177,14 +2406,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
           <button
             onClick={() => setShowRatings((v) => !v)}
-            title="Mostrar/Ocultar notas em tempo real"
+            title="Mostrar/Ocultar notas em tempo real (Padrão Sofascore)"
             className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition ${
               showRatings
-                ? "border-amber-500/40 bg-amber-500/20 text-amber-300"
+                ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300 shadow-sm"
                 : "border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300"
             }`}
           >
-            <Star className="h-3 w-3" />
+            <Star className={`h-3 w-3 ${showRatings ? "fill-emerald-400 text-emerald-400" : ""}`} />
             <span className="hidden xl:inline">Notas</span>
           </button>
         </div>
@@ -2193,7 +2422,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       {/* Vertical 2D Pitch Arena Container - Perfectly fits inside available height without clipping */}
       <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden py-0.5">
         <div
-          className={`relative overflow-hidden rounded-2xl border-2 border-emerald-900/60 select-none shadow-[inset_0_0_80px_rgba(0,0,0,0.65),0_8px_30px_rgba(0,0,0,0.5)] transition-all duration-300 ${
+          className={`relative overflow-hidden rounded-2xl border-2 border-emerald-950/80 select-none shadow-[inset_0_0_60px_rgba(0,0,0,0.45),0_8px_30px_rgba(0,0,0,0.5)] transition-all duration-300 ${
             activePitchSize === "normal"
               ? "aspect-[3/4]"
               : activePitchSize === "large"
@@ -2206,7 +2435,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             maxHeight: "100%",
             maxWidth: "100%",
             backgroundImage:
-              "repeating-linear-gradient(180deg, #0d5433 0%, #0d5433 8.333%, #105e3a 8.333%, #105e3a 16.666%)",
+              "repeating-linear-gradient(180deg, #1b633e 0%, #1b633e 8.333%, #226f46 8.333%, #226f46 16.666%)",
           }}
         >
         {/* SVG Field Lines, Offside Line & Ball Trail */}
@@ -2216,7 +2445,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           className="pointer-events-none absolute inset-0 h-full w-full"
         >
           {/* Real-world proportions (105x68m) with non-scaling strokes so circles stay round */}
-          <g fill="none" stroke="rgba(255,255,255,0.42)" strokeWidth={1.4} vectorEffect="non-scaling-stroke">
+          <g fill="none" stroke="rgba(255,255,255,0.58)" strokeWidth={1.5} vectorEffect="non-scaling-stroke">
             <rect x="4" y="3" width="92" height="94" vectorEffect="non-scaling-stroke" />
             <line x1="4" y1="50" x2="96" y2="50" vectorEffect="non-scaling-stroke" />
             <ellipse cx="50" cy="50" rx="12.4" ry="8.4" vectorEffect="non-scaling-stroke" />
@@ -2514,6 +2743,74 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               </div>
             </div>
+          ) : banner.tone === "corner" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 animate-bounce">
+              <div className="flex items-center gap-3 rounded-xl border border-cyan-400/70 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(34,211,238,0.45)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-400 text-slate-950 font-black shadow-md">
+                  <Flag className="h-4 w-4 fill-current" />
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-cyan-300 font-bold">
+                    Escanteio • Bola Parada ({banner.minute}')
+                  </div>
+                  <div className="text-xs font-black text-white">
+                    Cobrança: {banner.scorerName || banner.text}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "substitution" ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 w-[86%] max-w-[300px] -translate-x-1/2">
+              <div className="overflow-hidden rounded-xl border-2 border-emerald-400/70 bg-slate-950/95 backdrop-blur-md text-white shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3 py-1">
+                  <div className="flex items-center gap-1.5">
+                    <ArrowLeftRight className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-300">
+                      Substituição • {banner.clubName}
+                    </span>
+                  </div>
+                  {banner.minute !== undefined && (
+                    <span className="rounded bg-slate-800 px-1.5 py-0.2 font-mono text-[10px] font-black text-amber-300">
+                      {banner.minute}'
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-1 p-2">
+                  <div className="flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="inline-flex items-center gap-0.5 rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black text-slate-950">
+                        <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> ENTRA
+                      </span>
+                      {banner.scorerShirt !== undefined && (
+                        <span className="font-mono text-[11px] font-black text-emerald-300">
+                          #{banner.scorerShirt}
+                        </span>
+                      )}
+                      <span className="truncate text-xs font-black text-white">
+                        {banner.scorerName}
+                      </span>
+                    </div>
+                  </div>
+                  {banner.assistName && (
+                    <div className="flex items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="inline-flex items-center gap-0.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+                          <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAI
+                        </span>
+                        {banner.assistShirt !== undefined && (
+                          <span className="font-mono text-[11px] font-black text-rose-300">
+                            #{banner.assistShirt}
+                          </span>
+                        )}
+                        <span className="truncate text-xs font-bold text-rose-100">
+                          {banner.assistName}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2">
               <div
@@ -2532,7 +2829,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             </div>
           ))}
 
-        {/* 22 Active Players */}
+        {/* 22 Active Players (Sofascore Official Layout) */}
         {Array.from(playerPositions.entries()).map(([playerId, info]) => {
           const player = playerMap.get(playerId);
           if (!player) return null;
@@ -2547,8 +2844,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           const hasYellow = session.yellowCardedIds.includes(playerId);
           const isInjured = session.injuredIds.includes(playerId);
           const isCardTarget = cardHighlight?.playerId === playerId;
+          const isSubTarget = subHighlight?.playerInId === playerId;
+          const subbedInInfo = subbedInMap.get(playerId);
           const stamina = Math.round(session.playerStamina[playerId] ?? player.stamina);
-          const rating = (session.playerRatings[playerId] ?? 6.5).toFixed(1);
+          const numRating = session.playerRatings[playerId] ?? 6.5;
+          const rating = numRating.toFixed(1);
+          const sofascoreStyle = getSofascoreRatingColor(numRating);
+          const isTopRated = topRatedPlayerId === playerId;
+          const goalsCount = playerGoalsMap.get(playerId) ?? 0;
           const surname = getPlayerDisplayName(player.name);
 
           return (
@@ -2557,7 +2860,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               type="button"
               disabled={!isUserPlayer || session.finished}
               onClick={() => isUserPlayer && !session.finished && onSelectSubOut(playerId)}
-              title={`${player.name} (${player.primaryPosition}) • Nota ${rating} • Energia ${stamina}%`}
+              title={`${player.name} (${player.primaryPosition}) • Nota Sofascore ${rating}${
+                isTopRated ? " ★ Melhor em Campo" : ""
+              }${subbedInInfo ? ` • Entrou aos ${subbedInInfo.minute}'` : ""} • Energia ${stamina}%`}
               style={{
                 left: `${info.coord.x}%`,
                 top: `${info.coord.y}%`,
@@ -2597,7 +2902,41 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               )}
 
-              {/* Token: Kit SVG or Circle */}
+              {/* Floating Substitution-In Notification over Newly Entered Player */}
+              {isSubTarget && subHighlight && (
+                <div className="pointer-events-none absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center animate-bounce">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-400 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-slate-950 ring-2 ring-white shadow-[0_0_15px_rgba(16,185,129,0.9)]">
+                    <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> ENTROU ({subHighlight.minute}')
+                  </span>
+                  {subHighlight.playerOutName && (
+                    <span className="mt-0.5 whitespace-nowrap rounded bg-slate-950/95 px-1.5 py-0.2 text-[7px] font-bold text-rose-300 ring-1 ring-rose-500/40">
+                      Saiu: {getPlayerDisplayName(subHighlight.playerOutName)}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Floating Tag when Manager Selects Player to Sub Out */}
+              {isSubSelected && !isSubTarget && (
+                <div className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center animate-pulse">
+                  <span className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-md bg-amber-400 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-slate-950 ring-2 ring-white shadow-[0_0_14px_rgba(251,191,36,0.9)]">
+                    <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> VAI SAIR
+                  </span>
+                </div>
+              )}
+
+              {/* Sofascore Goal Scorer Football Badge on Top of Token */}
+              {goalsCount > 0 && (
+                <span
+                  title={`${goalsCount} gol(s) na partida`}
+                  className="pointer-events-none -mb-1.5 z-30 inline-flex items-center gap-0.5 rounded-full bg-white px-1 py-0.2 text-[8px] font-black leading-none text-slate-950 ring-1 ring-slate-900 shadow-md"
+                >
+                  <span>⚽</span>
+                  {goalsCount > 1 && <span>{goalsCount}</span>}
+                </span>
+              )}
+
+              {/* Token: Kit SVG or Sofascore Circle */}
               {showKits ? (
                 <div
                   className={`relative rounded-lg transition-transform ${
@@ -2605,10 +2944,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                       ? "ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-120 animate-pulse"
                       : isCardTarget && cardHighlight?.type === "red_card"
                       ? "ring-4 ring-rose-600 shadow-[0_0_25px_#e11d48] scale-120 animate-pulse"
+                      : isSubTarget
+                      ? "ring-4 ring-emerald-400 shadow-[0_0_22px_#10b981] scale-120 animate-pulse"
                       : isSubSelected
-                      ? "ring-2 ring-amber-400 bg-amber-400/30 scale-115"
+                      ? "ring-3 ring-amber-400 bg-amber-400/30 scale-115 shadow-[0_0_16px_rgba(251,191,36,0.7)]"
                       : isCarrier
-                      ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-950 scale-110 shadow-lg"
+                      ? "ring-2 ring-white ring-offset-1 ring-offset-emerald-700 scale-110 shadow-lg"
                       : ""
                   }`}
                 >
@@ -2621,23 +2962,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   {hasYellow && (
                     <span
                       title="Cartão Amarelo"
-                      className="absolute -left-1 -top-1 z-20 flex h-3 w-2 items-center justify-center rounded-[1px] bg-amber-400 border border-amber-600 shadow"
+                      className="absolute -left-1 -top-1 z-20 flex h-3 w-2 items-center justify-center rounded-[1px] bg-amber-400 border border-amber-700 shadow"
                     />
                   )}
-                  {isInjured && (
-                    <span className="absolute -left-1 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white ring-1 ring-white">
-                      +
+                  {subbedInInfo && (
+                    <span
+                      title={`Entrou aos ${subbedInInfo.minute}'${
+                        subbedInInfo.outName ? ` no lugar de ${subbedInInfo.outName}` : ""
+                      }`}
+                      className="absolute -right-1.5 -top-1 z-20 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-slate-950 ring-1 ring-white shadow"
+                    >
+                      <ArrowUp className="h-2.5 w-2.5 stroke-[3]" />
                     </span>
                   )}
-                  {(showRatings || session.finished) && (
-                    <span
-                      className={`absolute -right-1.5 -top-1 rounded-full px-1 py-0.2 text-[8px] font-black leading-none shadow-sm ${
-                        session.finished
-                          ? "bg-amber-400 text-slate-950"
-                          : "bg-slate-950/90 text-amber-300 ring-1 ring-amber-400/40"
-                      }`}
-                    >
-                      {rating}
+                  {isInjured && (
+                    <span className="absolute -left-1 -bottom-0.5 z-20 flex h-3 w-3 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white ring-1 ring-white">
+                      +
                     </span>
                   )}
                 </div>
@@ -2654,10 +2994,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                       ? "ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-120 animate-pulse"
                       : isCardTarget && cardHighlight?.type === "red_card"
                       ? "ring-4 ring-rose-600 shadow-[0_0_25px_#e11d48] scale-120 animate-pulse"
+                      : isSubTarget
+                      ? "ring-4 ring-emerald-400 shadow-[0_0_22px_#10b981] scale-120 animate-pulse"
                       : isSubSelected
-                      ? "ring-2 ring-amber-400 scale-115"
+                      ? "ring-3 ring-amber-400 scale-115 shadow-[0_0_16px_rgba(251,191,36,0.7)]"
                       : isCarrier
-                      ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-950 scale-110"
+                      ? "ring-2 ring-white ring-offset-1 ring-offset-emerald-700 scale-110"
                       : "ring-1 ring-black/60"
                   }`}
                   style={{
@@ -2672,39 +3014,55 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   {hasYellow && (
                     <span
                       title="Cartão Amarelo"
-                      className="absolute -left-1 -top-1 z-20 flex h-3 w-2 items-center justify-center rounded-[1px] bg-amber-400 border border-amber-600 shadow"
+                      className="absolute -left-1 -top-1 z-20 flex h-3 w-2 items-center justify-center rounded-[1px] bg-amber-400 border border-amber-700 shadow"
                     />
                   )}
-                  {isInjured && (
-                    <span className="absolute -left-1 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white ring-1 ring-white">
-                      +
+                  {subbedInInfo && (
+                    <span
+                      title={`Entrou aos ${subbedInInfo.minute}'${
+                        subbedInInfo.outName ? ` no lugar de ${subbedInInfo.outName}` : ""
+                      }`}
+                      className="absolute -right-1.5 -top-1 z-20 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-slate-950 ring-1 ring-white shadow"
+                    >
+                      <ArrowUp className="h-2.5 w-2.5 stroke-[3]" />
                     </span>
                   )}
-
-                  {(showRatings || session.finished) && (
-                    <span
-                      className={`absolute -right-1.5 -top-1 rounded-full px-1 py-0.2 text-[8px] font-black leading-none shadow-sm ${
-                        session.finished
-                          ? "bg-amber-400 text-slate-950"
-                          : "bg-slate-950/90 text-amber-300 ring-1 ring-amber-400/40"
-                      }`}
-                    >
-                      {rating}
+                  {isInjured && (
+                    <span className="absolute -left-1 -bottom-0.5 z-20 flex h-3 w-3 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white ring-1 ring-white">
+                      +
                     </span>
                   )}
                 </div>
               )}
 
-              {/* Clean Player Surname Capsule - Drop-shadow, sleek, no clutter */}
+              {/* Official Sofascore Rectangular Rating Badge coupled directly beneath the player token */}
+              {(showRatings || session.finished) && (
+                <div
+                  style={{
+                    backgroundColor: sofascoreStyle.bg,
+                    color: sofascoreStyle.text,
+                    borderColor: sofascoreStyle.border,
+                    boxShadow: sofascoreStyle.glow ? `0 2px 6px ${sofascoreStyle.glow}` : undefined,
+                  }}
+                  className={`-mt-1.5 z-20 inline-flex items-center justify-center gap-0.5 rounded-[3px] border px-1.5 py-0.2 font-mono text-[9px] font-black leading-tight shadow-md ${
+                    isTopRated ? "ring-1 ring-amber-300 scale-105" : ""
+                  }`}
+                >
+                  {isTopRated && (
+                    <Star className="h-2 w-2 fill-amber-300 text-amber-300 inline shrink-0" />
+                  )}
+                  <span>{rating}</span>
+                </div>
+              )}
+
+              {/* Sofascore Clean Player Name with crisp drop-shadow + micro stamina bar */}
               {showNames && (
                 <div className="mt-0.5 flex flex-col items-center pointer-events-none">
-                  <span
-                    className="max-w-[68px] truncate rounded bg-slate-950/75 backdrop-blur-[2px] px-1 py-0.2 text-[9px] font-bold leading-tight text-white tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
-                  >
+                  <span className="max-w-[72px] truncate px-1 text-[9px] sm:text-[10px] font-bold leading-tight text-white tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.98)]">
                     {surname}
                   </span>
                   {!session.finished && (
-                    <div className="mt-0.5 h-0.5 w-5 overflow-hidden rounded-full bg-slate-950/80">
+                    <div className="mt-0.5 h-0.5 w-5 overflow-hidden rounded-full bg-slate-950/85">
                       <div
                         className={`h-full ${getStaminaColor(stamina)}`}
                         style={{ width: `${stamina}%` }}
@@ -2775,7 +3133,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 shrink-0">
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 shrink-0">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <Users className="h-3 w-3 text-slate-400" />
@@ -2793,11 +3151,31 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             <strong className="text-amber-300">+{session.homeAdvantagePct.toFixed(1)}% Casa</strong>
           </span>
         </div>
-        {!session.finished && (
-          <span className="text-slate-500 text-[10px]">
-            Toque em um atleta do <strong className="text-slate-300">{userClubId === homeClub.id ? homeClub.shortName : awayClub.shortName}</strong> para substituir
+
+        {/* Sofascore Official Rating Legend */}
+        <div className="flex items-center gap-1 text-[8px] font-mono">
+          <span className="text-slate-400 mr-0.5 font-sans font-bold uppercase tracking-wider">
+            Sofascore:
           </span>
-        )}
+          <span className="rounded-[2px] bg-[#dc2626] px-1 py-0.2 font-black text-white">
+            &lt;6.0
+          </span>
+          <span className="rounded-[2px] bg-[#ea580c] px-1 py-0.2 font-black text-white">
+            6.0
+          </span>
+          <span className="rounded-[2px] bg-[#d97706] px-1 py-0.2 font-black text-white">
+            6.5
+          </span>
+          <span className="rounded-[2px] bg-[#16a34a] px-1 py-0.2 font-black text-white">
+            7.0+
+          </span>
+          <span className="rounded-[2px] bg-[#0284c7] px-1 py-0.2 font-black text-white">
+            8.0+
+          </span>
+          <span className="rounded-[2px] bg-[#2563eb] px-1 py-0.2 font-black text-white">
+            9.0+
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -256,7 +256,81 @@ export const App: React.FC = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<RawDatabase>;
       })
-      .then((data) => setRawDb(data))
+      .then((data) => {
+        setRawDb(data);
+        setSave((prevSave) => {
+          if (!prevSave) return null;
+          const canonByEaId = new Map<number, Player>();
+          for (const cp of data.players) {
+            if (cp.eaId < 800000) {
+              canonByEaId.set(cp.eaId, cp);
+            }
+          }
+          let changed = false;
+          const cleanedPlayers: Player[] = [];
+          for (const sp of prevSave.players) {
+            // Filter out female players from FC27 (< 800000) that are not in canonical men's DB
+            if (sp.eaId > 0 && sp.eaId < 800000 && !canonByEaId.has(sp.eaId)) {
+              changed = true;
+              continue;
+            }
+            const canon = canonByEaId.get(sp.eaId);
+            if (
+              canon &&
+              (Math.abs(sp.overall - canon.overall) >= 8 ||
+                sp.primaryPosition !== canon.primaryPosition)
+            ) {
+              changed = true;
+              cleanedPlayers.push({
+                ...sp,
+                overall: canon.overall,
+                potential: canon.potential,
+                primaryPosition: canon.primaryPosition,
+                positions: canon.positions,
+                roleCategory: canon.roleCategory,
+                faceStats: canon.faceStats,
+                stats: canon.stats,
+                marketValueEur: canon.marketValueEur,
+                wageEur: canon.wageEur,
+              });
+            } else {
+              cleanedPlayers.push(sp);
+            }
+          }
+          if (!changed) return prevSave;
+
+          // Ensure clubs that lost removed records still have valid tactics lineups
+          const validIdsByClub = new Map<number, Set<number>>();
+          for (const p of cleanedPlayers) {
+            if (p.clubId === null) continue;
+            if (!validIdsByClub.has(p.clubId)) validIdsByClub.set(p.clubId, new Set());
+            validIdsByClub.get(p.clubId)!.add(p.id);
+          }
+          const nextTacticsByClub: Record<number, Tactics> = { ...prevSave.tacticsByClub };
+          for (const club of prevSave.clubs) {
+            const validSet = validIdsByClub.get(club.id) ?? new Set<number>();
+            const tac = nextTacticsByClub[club.id];
+            if (!tac) continue;
+            const hasInvalid =
+              tac.starters.some((id) => !validSet.has(id)) ||
+              tac.bench.some((id) => !validSet.has(id));
+            if (hasInvalid) {
+              const clubSquad = cleanedPlayers.filter((p) => p.clubId === club.id);
+              const picked = autoPickLineup(clubSquad, tac.formation);
+              nextTacticsByClub[club.id] = {
+                ...tac,
+                starters: picked.starters,
+                bench: picked.bench,
+              };
+            }
+          }
+          return hydrateSave({
+            ...prevSave,
+            players: cleanedPlayers,
+            tacticsByClub: nextTacticsByClub,
+          });
+        });
+      })
       .catch((err) => setLoadError(String(err)));
   }, []);
 

@@ -17,6 +17,8 @@ import {
   Users,
   Sparkles,
   Clock,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import type {
   Club,
@@ -42,7 +44,7 @@ import { formatMoney, getPlayerDisplayName, getStaminaColor } from "../utils/for
 import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
 import { ClubKit } from "./ClubKit";
-import { LivePitch2D, type PitchSize } from "./LivePitch2D";
+import { LivePitch2D, getSofascoreRatingColor, type PitchSize } from "./LivePitch2D";
 import type { ClubSynergyTracker } from "../types/game";
 import {
   calculateTeamSynergy,
@@ -1173,16 +1175,26 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
 
                 {/* Sub Out banner */}
                 {subOutId !== null && (
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200">
-                    <span className="truncate">
-                      Saindo: <strong className="text-white">{getPlayerDisplayName(playerMap.get(subOutId)?.name)}</strong>
-                    </span>
-                    <button
-                      onClick={() => setSubOutId(null)}
-                      className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-200 hover:bg-slate-700"
-                    >
-                      Cancelar
-                    </button>
+                  <div className="flex flex-col gap-1 rounded-xl border-2 border-amber-400/70 bg-amber-500/15 px-3 py-2 text-xs text-amber-200 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 truncate font-bold">
+                        <span className="inline-flex items-center gap-0.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+                          <ArrowDown className="h-2.5 w-2.5 stroke-[3]" /> SAI
+                        </span>
+                        <strong className="text-white">
+                          {getPlayerDisplayName(playerMap.get(subOutId)?.name)}
+                        </strong>
+                      </span>
+                      <button
+                        onClick={() => setSubOutId(null)}
+                        className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-200 hover:bg-slate-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    <div className="text-[10px] font-semibold text-emerald-300">
+                      ▲ Selecione abaixo no Banco de Reservas quem vai ENTRAR
+                    </div>
                   </div>
                 )}
 
@@ -1197,9 +1209,14 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       const p = playerMap.get(id);
                       if (!p) return null;
                       const stam = Math.round(userSession.playerStamina[id] ?? p.stamina);
-                      const rating = (userSession.playerRatings[id] ?? 6.5).toFixed(1);
+                      const numRating = userSession.playerRatings[id] ?? 6.5;
+                      const rating = numRating.toFixed(1);
+                      const sofaColor = getSofascoreRatingColor(numRating);
                       const isSelected = subOutId === id;
                       const isInjured = userSession.injuredIds.includes(id);
+                      const subInEv = userSession.events.find(
+                        (e) => e.type === "substitution" && e.playerId === id
+                      );
                       return (
                         <button
                           key={id}
@@ -1213,19 +1230,32 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                               : "border-slate-800 bg-slate-950/70 hover:border-amber-500/40 disabled:opacity-60"
                           }`}
                         >
-                          <span className="truncate font-semibold text-white">
-                            <span className="mr-1.5 inline-block w-6 text-[10px] font-bold text-slate-400">
+                          <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-white">
+                            <span className="inline-block w-6 shrink-0 text-[10px] font-bold text-slate-400">
                               {p.primaryPosition}
                             </span>
-                            {getPlayerDisplayName(p.name)}
+                            <span className="truncate">{getPlayerDisplayName(p.name)}</span>
+                            {subInEv && (
+                              <span
+                                title={`Entrou aos ${subInEv.minute}' no lugar de ${subInEv.assistPlayerName}`}
+                                className="ml-1 inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-500/20 px-1 py-0.2 text-[9px] font-black text-emerald-300 ring-1 ring-emerald-500/40"
+                              >
+                                <ArrowUp className="h-2.5 w-2.5 stroke-[3]" />
+                                {subInEv.minute}'
+                              </span>
+                            )}
                             {isInjured && (
-                              <span className="ml-1.5 rounded bg-rose-600 px-1 py-0.2 text-[9px] font-black text-white">
+                              <span className="ml-1 shrink-0 rounded bg-rose-600 px-1 py-0.2 text-[9px] font-black text-white">
                                 +LESÃO
                               </span>
                             )}
                           </span>
-                          <span className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] text-slate-400" title="Nota na partida">
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              style={{ backgroundColor: sofaColor.bg, color: sofaColor.text }}
+                              className="rounded-[3px] px-1.5 py-0.2 font-mono text-[10px] font-black leading-tight shadow-sm"
+                              title="Nota Sofascore em tempo real"
+                            >
                               {rating}
                             </span>
                             {renderOvrStamina(p.overall, stam, "text-slate-200")}
@@ -1264,31 +1294,87 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                           onClick={() => handleLiveSub(id)}
                           className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
                             ready
-                              ? "border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 cursor-pointer shadow-sm"
+                              ? "border-emerald-500/60 bg-emerald-500/15 hover:bg-emerald-500/25 cursor-pointer shadow-sm ring-1 ring-emerald-500/30"
                               : "border-slate-800/80 bg-slate-950/40 text-slate-400 opacity-75 cursor-default"
                           }`}
                         >
-                          <span className="truncate font-semibold text-white">
+                          <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-white">
                             <span
-                              className={`mr-1.5 inline-block w-6 text-[10px] font-bold ${
+                              className={`inline-block w-6 shrink-0 text-[10px] font-bold ${
                                 ready ? "text-emerald-300" : "text-slate-500"
                               }`}
                             >
                               {p.primaryPosition}
                             </span>
-                            {getPlayerDisplayName(p.name)}
+                            <span className="truncate">{getPlayerDisplayName(p.name)}</span>
                           </span>
-                          {renderOvrStamina(
-                            p.overall,
-                            stam,
-                            ready ? "text-emerald-300" : "text-slate-300",
-                            ready ? "• Entrar" : undefined
-                          )}
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            {renderOvrStamina(
+                              p.overall,
+                              stam,
+                              ready ? "text-emerald-300" : "text-slate-300"
+                            )}
+                            {ready && (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black text-slate-950">
+                                <ArrowUp className="h-2.5 w-2.5 stroke-[3]" /> ENTRAR
+                              </span>
+                            )}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
+
+                {/* Subbed Out History */}
+                {(isUserHome ? userSession.homeSubbedOutIds : userSession.awaySubbedOutIds).length > 0 && (
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-rose-400">
+                      <span>
+                        Substituídos (
+                        {(isUserHome ? userSession.homeSubbedOutIds : userSession.awaySubbedOutIds).length}
+                        )
+                      </span>
+                      <span>Fora de Jogo</span>
+                    </div>
+                    <div className="space-y-1">
+                      {(isUserHome ? userSession.homeSubbedOutIds : userSession.awaySubbedOutIds).map(
+                        (outId) => {
+                          const p = playerMap.get(outId);
+                          if (!p) return null;
+                          const numRating = userSession.playerRatings[outId] ?? 6.5;
+                          const sofaColor = getSofascoreRatingColor(numRating);
+                          const subOutEv = userSession.events.find(
+                            (e) => e.type === "substitution" && e.assistPlayerId === outId
+                          );
+                          return (
+                            <div
+                              key={outId}
+                              className="flex w-full items-center justify-between rounded-lg border border-slate-800/70 bg-slate-950/40 px-2.5 py-1 text-xs opacity-75"
+                            >
+                              <span className="flex min-w-0 items-center gap-1 truncate text-slate-300">
+                                <span className="inline-block w-6 shrink-0 text-[10px] font-bold text-slate-500">
+                                  {p.primaryPosition}
+                                </span>
+                                <span className="truncate">{getPlayerDisplayName(p.name)}</span>
+                                <span className="ml-1 inline-flex shrink-0 items-center gap-0.5 rounded bg-rose-500/20 px-1 py-0.2 text-[9px] font-black text-rose-300 ring-1 ring-rose-500/40">
+                                  <ArrowDown className="h-2.5 w-2.5 stroke-[3]" />
+                                  {subOutEv ? `${subOutEv.minute}'` : "SAIU"}
+                                </span>
+                              </span>
+                              <span
+                                style={{ backgroundColor: sofaColor.bg, color: sofaColor.text }}
+                                className="rounded-[3px] px-1.5 py-0.2 font-mono text-[10px] font-black leading-tight"
+                              >
+                                {numRating.toFixed(1)}
+                              </span>
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1317,8 +1403,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                       ? "border-amber-400/60 bg-amber-500/15 text-amber-200 font-bold"
                       : ev.type === "whistle"
                       ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-bold"
+                      : ev.type === "corner"
+                      ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-200 font-bold"
                       : ev.type === "substitution"
-                      ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
+                      ? "border-emerald-500/40 bg-slate-900/90 text-slate-200"
                       : ev.type === "offside"
                       ? "border-orange-500/40 bg-orange-500/10 text-orange-200"
                       : "border-slate-800 bg-slate-950/60 text-slate-300";
@@ -1343,7 +1431,9 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   } else if (ev.type === "offside") {
                     eventIconNode = <Flag className="h-4 w-4 text-orange-400" />;
                   } else if (ev.type === "substitution") {
-                    eventIconNode = <ArrowLeftRight className="h-4 w-4 text-sky-400" />;
+                    eventIconNode = <ArrowLeftRight className="h-4 w-4 text-emerald-400" />;
+                  } else if (ev.type === "corner") {
+                    eventIconNode = <Flag className="h-4 w-4 text-cyan-400 fill-cyan-400" />;
                   } else if (ev.type === "save") {
                     eventIconNode = <Shield className="h-4 w-4 text-indigo-400" />;
                   }
@@ -1353,6 +1443,36 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     minDisplay = `45+${ev.minute - 45}'`;
                   } else if (ev.minute > 90) {
                     minDisplay = `90+${ev.minute - 90}'`;
+                  }
+
+                  if (ev.type === "substitution") {
+                    const subClub = ev.clubId === homeClub.id ? homeClub : awayClub;
+                    return (
+                      <div
+                        key={ev.id}
+                        className={`flex flex-col gap-1.5 rounded-xl border px-2.5 py-2 text-xs ${badgeStyle}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1.5 font-black text-emerald-300 text-[10px] uppercase tracking-wider">
+                            <ArrowLeftRight className="h-3.5 w-3.5" />
+                            Substituição • {subClub.shortName}
+                          </span>
+                          <span className="font-black text-slate-100 font-mono">{minDisplay}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-200">
+                            <ArrowUp className="h-3 w-3 text-emerald-400 stroke-[3]" />
+                            ENTRA: <strong className="text-white">{ev.playerName}</strong>
+                          </span>
+                          {ev.assistPlayerName && (
+                            <span className="inline-flex items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold text-rose-200">
+                              <ArrowDown className="h-3 w-3 text-rose-400 stroke-[3]" />
+                              SAI: <strong className="text-white">{ev.assistPlayerName}</strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
                   }
 
                   return (
