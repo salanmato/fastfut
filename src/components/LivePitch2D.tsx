@@ -748,16 +748,17 @@ function buildFormationSeedCoords(
   awaySlots: FormationSlot[],
   slotIndexMap: Map<number, number>,
   homeTactics: Tactics,
-  awayTactics: Tactics
+  awayTactics: Tactics,
+  forceNeutral = false
 ): Record<number, Coord> {
   const seed: Record<number, Coord> = {};
   homeIds.forEach((id, idx) => {
     const slot = homeSlots[Math.min(slotIndexMap.get(id) ?? idx, homeSlots.length - 1)];
-    seed[id] = getBaseVerticalCoord(slot.x, slot.y, true, homeTactics);
+    seed[id] = getBaseVerticalCoord(slot.x, slot.y, true, homeTactics, forceNeutral);
   });
   awayIds.forEach((id, idx) => {
     const slot = awaySlots[Math.min(slotIndexMap.get(id) ?? idx, awaySlots.length - 1)];
-    seed[id] = getBaseVerticalCoord(slot.x, slot.y, false, awayTactics);
+    seed[id] = getBaseVerticalCoord(slot.x, slot.y, false, awayTactics, forceNeutral);
   });
   return seed;
 }
@@ -1083,6 +1084,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   ]);
 
   const lastHandledEventIdRef = useRef<string | null>(null);
+  const lastHandledEventCountRef = useRef<number>(0);
+  const pendingKickoffHomeRef = useRef<boolean | null>(null);
+  const kickoffTimeoutRef = useRef<number | null>(null);
   const highlightPauseUntilRef = useRef<number>(0);
   const speedRef = useRef<number>(speedMs);
   speedRef.current = speedMs;
@@ -1128,10 +1132,101 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     playerMap,
   };
 
+  // Reset all 22 players to their neutral halves and place the ball at the center circle (50, 50) for kickoff
+  const resetToCenterKickoff = (kickoffIsHome: boolean) => {
+    if (flightRafRef.current !== null) {
+      cancelAnimationFrame(flightRafRef.current);
+      flightRafRef.current = null;
+    }
+    const cur = latestSimRef.current;
+    const seed = buildFormationSeedCoords(
+      cur.session.homeActiveIds,
+      cur.session.awayActiveIds,
+      cur.homeSlots,
+      cur.awaySlots,
+      slotIndexRef.current,
+      cur.homeTactics,
+      cur.awayTactics,
+      true
+    );
+
+    const koIds = kickoffIsHome ? cur.session.homeActiveIds : cur.session.awayActiveIds;
+    const oppIds = kickoffIsHome ? cur.session.awayActiveIds : cur.session.homeActiveIds;
+    const koOutfield = koIds.filter((id) => cur.playerMap.get(id)?.roleCategory !== "GK");
+    const koForwards = koOutfield.filter((id) => cur.playerMap.get(id)?.roleCategory === "ATT");
+    const kickoffTakerId =
+      koForwards[0] ?? koOutfield[koOutfield.length - 1] ?? koIds[koIds.length - 1] ?? null;
+    const kickoffSupportId =
+      koForwards[1] ??
+      koOutfield.find((id) => id !== kickoffTakerId && cur.playerMap.get(id)?.roleCategory === "MID") ??
+      koOutfield.find((id) => id !== kickoffTakerId) ??
+      null;
+
+    if (kickoffTakerId !== null) {
+      seed[kickoffTakerId] = { x: 50, y: kickoffIsHome ? 50.4 : 49.6 };
+    }
+    if (kickoffSupportId !== null) {
+      seed[kickoffSupportId] = { x: 43.5, y: kickoffIsHome ? 52.5 : 47.5 };
+    }
+
+    const oppForwardId =
+      oppIds.filter((id) => cur.playerMap.get(id)?.roleCategory === "ATT")[0] ??
+      oppIds[oppIds.length - 1];
+    if (oppForwardId) {
+      seed[oppForwardId] = { x: 50, y: kickoffIsHome ? 41.5 : 58.5 };
+    }
+
+    activeRunsRef.current.clear();
+    counterUntilTickRef.current = 0;
+
+    const kickoffClubId = kickoffIsHome ? cur.homeClubId : cur.awayClubId;
+    setLiveCoords(seed);
+    liveCoordsRef.current = seed;
+    setBallPos({ x: 50, y: 50 });
+    ballPosRef.current = { x: 50, y: 50 };
+    setBallVisual({ x: 50, y: 50, altitude: 0, isAerial: false });
+    setTrail(null);
+    setOffsideMark(null);
+    setPlayPhase("build_up");
+    playPhaseRef.current = "build_up";
+    if (kickoffTakerId !== null) {
+      setCarrierId(kickoffTakerId);
+      carrierIdRef.current = kickoffTakerId;
+    }
+    setCarrierClubId(kickoffClubId);
+    carrierClubIdRef.current = kickoffClubId;
+  };
+
   // React immediately to real match events (goal, save, chance, cards) with area choreography
   useEffect(() => {
-    if (session.events.length === 0) return;
-    const latest: MatchEvent = session.events[session.events.length - 1];
+    if (session.events.length === 0) {
+      lastHandledEventCountRef.current = 0;
+      return;
+    }
+    const prevCount = lastHandledEventCountRef.current;
+    const newEvents =
+      session.events.length > prevCount
+        ? session.events.slice(prevCount)
+        : [session.events[session.events.length - 1]];
+    lastHandledEventCountRef.current = session.events.length;
+
+    const EVENT_PRIORITY: Record<MatchEvent["type"], number> = {
+      goal: 100,
+      red_card: 90,
+      whistle: 85,
+      offside: 80,
+      corner: 70,
+      save: 65,
+      chance: 60,
+      substitution: 55,
+      injury: 50,
+      yellow_card: 45,
+      stoppage_time: 40,
+    };
+    const latest: MatchEvent = [...newEvents].sort(
+      (a, b) => (EVENT_PRIORITY[b.type] ?? 0) - (EVENT_PRIORITY[a.type] ?? 0)
+    )[0];
+
     if (latest.id === lastHandledEventIdRef.current) return;
     lastHandledEventIdRef.current = latest.id;
 
@@ -1269,7 +1364,26 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ? (session.playerRatings[latest.assistPlayerId] ?? 7.1).toFixed(1)
           : undefined,
       });
-      setHighlightPause(2400, 1600);
+      setHighlightPause(2800, 1800);
+
+      // Schedule post-goal center circle kickoff restart for the team that conceded
+      const concedingIsHome = !isHomeEvent;
+      pendingKickoffHomeRef.current = concedingIsHome;
+      if (kickoffTimeoutRef.current !== null) {
+        window.clearTimeout(kickoffTimeoutRef.current);
+      }
+      const koDelay = Math.max(
+        850,
+        Math.round(1350 * clamp(speedRef.current / 1200, 0.4, 1.4))
+      );
+      kickoffTimeoutRef.current = window.setTimeout(() => {
+        kickoffTimeoutRef.current = null;
+        if (pendingKickoffHomeRef.current !== null) {
+          const koHome = pendingKickoffHomeRef.current;
+          pendingKickoffHomeRef.current = null;
+          resetToCenterKickoff(koHome);
+        }
+      }, koDelay);
     } else if (latest.type === "save") {
       // On "save", latest.clubId is the keeper's club; opposing side took the shot
       const attackingHome = !isHomeEvent;
@@ -1702,6 +1816,13 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
     const timer = window.setInterval(() => {
       if (Date.now() < highlightPauseUntilRef.current) return;
+
+      if (pendingKickoffHomeRef.current !== null) {
+        const koHome = pendingKickoffHomeRef.current;
+        pendingKickoffHomeRef.current = null;
+        resetToCenterKickoff(koHome);
+        return;
+      }
 
       tickCountRef.current += 1;
       const tick = tickCountRef.current;

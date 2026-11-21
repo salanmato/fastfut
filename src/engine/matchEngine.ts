@@ -1252,23 +1252,26 @@ export function stepLiveMatchMinute(
     return true;
   };
 
+  const prevTotalGoals = session.homeGoals + session.awayGoals;
   const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
-  const awayOffside = checkOffside(false, awayActive, homeActive, awayTactics, homeTactics, awayClub.shortName);
-
   const homeAttack = !homeOffside && resolveAttack(true, homePower, awayPower, homeActive, awayActive, homeTactics, homeClub.shortName);
-  const awayAttack = !awayOffside && resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
-
-  // Additional realistic corners from wing progression & blocked crosses (adds ~1-2 per team)
   if (!homeOffside && !homeAttack) {
     const isAtt = homeTactics.mentality === "Attacking";
     if (Math.random() < (isAtt ? 0.046 : 0.032)) {
       triggerCornerKick(true);
     }
   }
-  if (!awayOffside && !awayAttack) {
-    const isAtt = awayTactics.mentality === "Attacking";
-    if (Math.random() < (isAtt ? 0.046 : 0.032)) {
-      triggerCornerKick(false);
+
+  // Only simulate away attack in the same minute if home didn't just score a goal (which triggers center kickoff)
+  const homeJustScored = session.homeGoals + session.awayGoals > prevTotalGoals;
+  if (!homeJustScored) {
+    const awayOffside = checkOffside(false, awayActive, homeActive, awayTactics, homeTactics, awayClub.shortName);
+    const awayAttack = !awayOffside && resolveAttack(false, awayPower, homePower, awayActive, homeActive, awayTactics, awayClub.shortName);
+    if (!awayOffside && !awayAttack) {
+      const isAtt = awayTactics.mentality === "Attacking";
+      if (Math.random() < (isAtt ? 0.046 : 0.032)) {
+        triggerCornerKick(false);
+      }
     }
   }
 
