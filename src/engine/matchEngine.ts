@@ -884,7 +884,7 @@ export function stepLiveMatchMinute(
     const clubId = isHome ? session.homeClubId : session.awayClubId;
     const clubName = isHome ? homeClub.shortName : awayClub.shortName;
     const teamInjuriesCount = session.injuries.filter((i) => i.clubId === clubId).length;
-    if (teamInjuriesCount >= 2) return false;
+    if (teamInjuriesCount >= 1) return false;
 
     const candidates = active.filter(
       (p) => p.roleCategory !== "GK" && !session.injuredIds.includes(p.id)
@@ -894,11 +894,13 @@ export function stepLiveMatchMinute(
     const avgStam =
       candidates.reduce((sum, p) => sum + (session.playerStamina[p.id] ?? 100), 0) /
       candidates.length;
-    const fatigueRisk = avgStam < 58 ? 0.0028 : avgStam < 72 ? 0.0014 : 0.0007;
-    const pressMult = tactics.pressing === "High" ? 1.35 : tactics.pressing === "Low" ? 0.8 : 1.0;
+    const fatigueRisk = avgStam < 55 ? 0.0008 : avgStam < 68 ? 0.0003 : 0.0001;
+    const pressMult = tactics.pressing === "High" ? 1.25 : tactics.pressing === "Low" ? 0.8 : 1.0;
     const turfMult = isHome ? homeTurfFactor : 1.0;
-    const foulMult = fromFoul ? 2.4 : 1.0;
-    const injuryProb = (0.0022 * pressMult * turfMult + fatigueRisk) * foulMult;
+    // Hard fouls only cause an injury ~3.5% of the time; non-foul muscular injuries are rare (~8-10% per match)
+    const injuryProb = fromFoul
+      ? 0.035 * turfMult
+      : (0.00045 * pressMult + fatigueRisk) * turfMult;
 
     if (Math.random() > injuryProb) return false;
 
@@ -1402,9 +1404,9 @@ export function stepLiveMatchMinute(
       1.85
     );
 
-    // 2. Injury check on the active duel participants (higher risk if fouled!)
+    // 2. Injury check: only hard carded fouls have a small (~3.5%) chance of contact injury; otherwise rare muscular fatigue check
     let injuryStopped = false;
-    if (foulRes.fouled) {
+    if (foulRes.cardIssued) {
       injuryStopped = checkInjury(
         possIsHome,
         attTeam,
@@ -1413,10 +1415,15 @@ export function stepLiveMatchMinute(
         foulRes.offender ?? closestDefender,
         true
       );
-    } else {
-      injuryStopped =
-        checkInjury(possIsHome, attTeam, attTactics, carrier, closestDefender, false) ||
-        checkInjury(!possIsHome, defTeam, defTactics, closestDefender, carrier, false);
+    } else if (!foulRes.fouled) {
+      injuryStopped = checkInjury(
+        possIsHome,
+        attTeam,
+        attTactics,
+        carrier,
+        closestDefender,
+        false
+      );
     }
 
     // 3. If no card/injury stoppage interrupted play, resolve attacking progression from current pitch zone
@@ -1463,8 +1470,8 @@ export function stepLiveMatchMinute(
     // Background AI matches / Instant Simulate-to-End fallback (causal roles preserved in events)
     const homeFoul = checkFoul(true, homeActive, homeTactics, awayActive);
     const awayFoul = checkFoul(false, awayActive, awayTactics, homeActive);
-    checkInjury(true, homeActive, homeTactics, awayFoul.victim, awayFoul.offender, awayFoul.fouled);
-    checkInjury(false, awayActive, awayTactics, homeFoul.victim, homeFoul.offender, homeFoul.fouled);
+    checkInjury(true, homeActive, homeTactics, awayFoul.victim, awayFoul.offender, awayFoul.cardIssued);
+    checkInjury(false, awayActive, awayTactics, homeFoul.victim, homeFoul.offender, homeFoul.cardIssued);
 
     const prevTotalGoals = session.homeGoals + session.awayGoals;
     const homeOffside = checkOffside(true, homeActive, awayActive, homeTactics, awayTactics, homeClub.shortName);
