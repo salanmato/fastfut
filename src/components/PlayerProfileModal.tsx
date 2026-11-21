@@ -19,7 +19,8 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowRight,
-  Package,
+  RefreshCw,
+  Tag,
 } from "lucide-react";
 import type { Club, Player } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
@@ -56,6 +57,7 @@ interface PlayerProfileModalProps {
   onBuyPlayer?: (player: Player) => void;
   onStartNegotiation?: (player: Player) => void;
   onToggleTransferListed?: (playerId: number) => void;
+  onToggleLoanListed?: (playerId: number) => void;
   onOfferPlayerToMarket?: (playerId: number) => void;
   onSellPlayer?: (player: Player) => void;
   onPromoteYouth?: (playerId: number) => void;
@@ -79,6 +81,7 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
   onBuyPlayer,
   onStartNegotiation,
   onToggleTransferListed,
+  onToggleLoanListed,
   onOfferPlayerToMarket,
   onSellPlayer,
   onPromoteYouth,
@@ -494,6 +497,48 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
               {/* Buying perspective: show player interest and negotiation CTA */}
               {canBuy && (
                 <div className="space-y-3">
+                  {(player.isTransferListed || player.isLoanListed) && (
+                    <div
+                      className={`flex items-start gap-3 rounded-xl border p-3.5 text-xs ${
+                        player.isTransferListed
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                          : "border-purple-500/40 bg-purple-500/10 text-purple-200"
+                      }`}
+                    >
+                      {player.isTransferListed ? (
+                        <Tag className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 shrink-0 text-purple-400 mt-0.5" />
+                      )}
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>
+                            {player.isTransferListed
+                              ? `Colocado à Venda pelo ${sellerClub?.name || player.clubName}`
+                              : `Disponível para Empréstimo pelo ${sellerClub?.name || player.clubName}`}
+                          </span>
+                          {player.listingReasonLabel && (
+                            <span
+                              className={`rounded px-1.5 py-0.2 text-[10px] font-black uppercase ${
+                                player.isTransferListed
+                                  ? "bg-amber-400/20 text-amber-300 border border-amber-400/40"
+                                  : "bg-purple-400/20 text-purple-300 border border-purple-400/40"
+                              }`}
+                            >
+                              {player.listingReasonLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          {player.listingReasonText ||
+                            (player.isTransferListed
+                              ? "O clube está aberto a negociar este atleta."
+                              : "O clube busca um destino de empréstimo para o atleta ganhar rodagem.")}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {playerInterest && (
                     <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-2">
                       <div className="flex items-center justify-between">
@@ -634,21 +679,31 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                 </div>
               )}
 
-              {/* Selling perspective: transfer list, offer to clubs, or quick-sell */}
+              {/* Selling perspective: transfer list, loan list, offer to clubs, or quick-sell */}
               {canSell && (
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-bold text-slate-300">Situação no Mercado:</span>
                       {player.isTransferListed ? (
                         <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 px-2 py-0.5 text-xs font-black uppercase text-amber-300 border border-amber-400/40">
-                          <Package className="h-3 w-3" />
-                          <span>Na Lista de Transferências</span>
+                          <Tag className="h-3 w-3" />
+                          <span>{player.listingReasonLabel || "Na Lista de Transferências"}</span>
+                        </span>
+                      ) : player.isLoanListed ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 px-2 py-0.5 text-xs font-black uppercase text-purple-300 border border-purple-500/40">
+                          <RefreshCw className="h-3 w-3" />
+                          <span>{player.listingReasonLabel || "Disponível p/ Empréstimo"}</span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
                           <Shield className="h-3 w-3" />
                           <span>No Elenco (Não Listado)</span>
+                        </span>
+                      )}
+                      {player.listingReasonText && (
+                        <span className="text-[11px] text-amber-300/80">
+                          • {player.listingReasonText}
                         </span>
                       )}
                     </div>
@@ -664,8 +719,23 @@ export const PlayerProfileModal: React.FC<PlayerProfileModalProps> = ({
                           }`}
                         >
                           {player.isTransferListed
-                            ? "Retirar da Lista de Transferências"
-                            : "Colocar na Lista de Transferências"}
+                            ? "Retirar de Transferências"
+                            : "Listar para Venda"}
+                        </button>
+                      )}
+
+                      {onToggleLoanListed && (
+                        <button
+                          onClick={() => onToggleLoanListed(player.id)}
+                          className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                            player.isLoanListed
+                              ? "border-slate-700 bg-slate-800 text-slate-300 hover:text-white"
+                              : "border-purple-400/50 bg-purple-400/10 text-purple-300 hover:bg-purple-400/20"
+                          }`}
+                        >
+                          {player.isLoanListed
+                            ? "Retirar de Empréstimo"
+                            : "Listar para Empréstimo"}
                         </button>
                       )}
 

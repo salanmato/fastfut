@@ -165,6 +165,15 @@ export interface Player {
   squadCategory?: "first_team" | "youth";
   loan?: LoanInfo;
   isTransferListed?: boolean;
+  isLoanListed?: boolean;
+  listingReason?:
+    | "lack_of_playtime"
+    | "out_of_position"
+    | "development_loan"
+    | "surplus_depth"
+    | "user_listed";
+  listingReasonLabel?: string;
+  listingReasonText?: string;
   askingPriceEur?: number;
 }
 

@@ -17,11 +17,12 @@ import {
   XCircle,
   Building,
   Send,
-  Package,
   MessageSquare,
   SlidersHorizontal,
   RotateCcw,
   ArrowUpDown,
+  RefreshCw,
+  Tag,
 } from "lucide-react";
 import type { Club, Player, RoleCategory, TransferOffer, WorldTransfer } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
@@ -47,6 +48,7 @@ interface TransferMarketProps {
   onBuyPlayer: (player: Player) => void;
   onStartNegotiation?: (player: Player) => void;
   onToggleTransferListed?: (playerId: number) => void;
+  onToggleLoanListed?: (playerId: number) => void;
   onOfferPlayerToMarket?: (playerId: number) => void;
   onSellPlayer: (player: Player) => void;
   onSelectPlayer: (player: Player) => void;
@@ -88,7 +90,10 @@ type AvailabilityFilter =
   | "ALL"
   | "affordable"
   | "available_now"
-  | "transfer_listed";
+  | "transfer_listed"
+  | "loan_listed"
+  | "lack_of_playtime"
+  | "out_of_position";
 
 export const TransferMarket: React.FC<TransferMarketProps> = ({
   userClub,
@@ -102,6 +107,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
   onBuyPlayer,
   onStartNegotiation,
   onToggleTransferListed,
+  onToggleLoanListed,
   onOfferPlayerToMarket,
   onSellPlayer,
   onSelectPlayer,
@@ -266,6 +272,22 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
       return false;
     }
     if (availabilityFilter === "transfer_listed" && !p.isTransferListed) {
+      return false;
+    }
+    if (availabilityFilter === "loan_listed" && !p.isLoanListed) {
+      return false;
+    }
+    if (
+      availabilityFilter === "lack_of_playtime" &&
+      p.listingReason !== "lack_of_playtime" &&
+      p.listingReason !== "development_loan"
+    ) {
+      return false;
+    }
+    if (
+      availabilityFilter === "out_of_position" &&
+      p.listingReason !== "out_of_position"
+    ) {
       return false;
     }
     if (
@@ -439,9 +461,36 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                   <span>Rival</span>
                 </span>
               )}
+
+              {/* Transfer Listed Badge */}
+              {p.isTransferListed && (
+                <span
+                  title={p.listingReasonText || "Colocado na lista de transferências"}
+                  className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-300"
+                >
+                  <Tag className="h-2.5 w-2.5" />
+                  <span>{p.listingReasonLabel || "À Venda"}</span>
+                </span>
+              )}
+
+              {/* Loan Listed Badge */}
+              {p.isLoanListed && (
+                <span
+                  title={p.listingReasonText || "Disponível para empréstimo"}
+                  className="inline-flex items-center gap-1 rounded border border-purple-500/40 bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-purple-300"
+                >
+                  <RefreshCw className="h-2.5 w-2.5" />
+                  <span>{p.listingReasonLabel || "Empréstimo"}</span>
+                </span>
+              )}
             </div>
             <div className="truncate text-xs text-slate-400">
               {p.clubName} ({p.league}) • <span className="text-slate-300">{p.nationality}</span> • {p.age} anos • {footLabel}
+              {p.listingReasonText && (
+                <span className="ml-1 text-[11px] text-amber-300/80">
+                  • {p.listingReasonText}
+                </span>
+              )}
             </div>
           </div>
         </button>
@@ -922,7 +971,10 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                 No Orçamento (≤ {formatMoney(userClub.transferBudgetEur)})
               </option>
               <option value="available_now">Livres de Empréstimo</option>
-              <option value="transfer_listed">Listados p/ Transferência</option>
+              <option value="transfer_listed">À Venda (Transferência)</option>
+              <option value="loan_listed">Disponíveis p/ Empréstimo</option>
+              <option value="lack_of_playtime">Pouco Usado / Sem Minutagem</option>
+              <option value="out_of_position">Fora da Posição Almejada</option>
             </select>
 
             <select
@@ -1402,8 +1454,13 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                         )}
                       </div>
                       <div className="text-xs text-slate-400">
-                        {p.age} anos • {p.seasonAppearances}J {p.seasonGoals}G {p.seasonAssists}A
+                        {p.age} anos • {p.seasonAppearances ?? 0}J {p.seasonGoals ?? 0}G {p.seasonAssists ?? 0}A
                         {isLoaned && ` • Pertence ao ${p.loan?.parentClubName}`}
+                        {p.listingReasonText && (
+                          <span className="ml-1 text-amber-300/90 font-medium">
+                            • {p.listingReasonText}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -1417,11 +1474,22 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                       {p.overall}
                     </span>
 
-                    {/* Transfer Listed Status Badge */}
+                    {/* Transfer / Loan Listed Status Badge */}
                     {p.isTransferListed ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300 border border-amber-400/40">
-                        <Package className="h-2.5 w-2.5" />
-                        <span>Listado</span>
+                      <span
+                        title={p.listingReasonText}
+                        className="inline-flex items-center gap-1 rounded bg-amber-400/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300 border border-amber-400/40"
+                      >
+                        <Tag className="h-2.5 w-2.5" />
+                        <span>{p.listingReasonLabel || "À Venda"}</span>
+                      </span>
+                    ) : p.isLoanListed ? (
+                      <span
+                        title={p.listingReasonText}
+                        className="inline-flex items-center gap-1 rounded bg-purple-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-purple-300 border border-purple-500/40"
+                      >
+                        <RefreshCw className="h-2.5 w-2.5" />
+                        <span>{p.listingReasonLabel || "Empréstimo"}</span>
                       </span>
                     ) : (
                       <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-400">
@@ -1451,7 +1519,26 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({
                             : "border-amber-400/50 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20"
                         }`}
                       >
-                        {p.isTransferListed ? "Deslistar" : "Listar"}
+                        {p.isTransferListed ? "Deslistar" : "Listar Venda"}
+                      </button>
+                    )}
+
+                    {/* Toggle Loan List Button */}
+                    {onToggleLoanListed && !isLoaned && (
+                      <button
+                        onClick={() => onToggleLoanListed(p.id)}
+                        title={
+                          p.isLoanListed
+                            ? "Retirar atleta da lista de empréstimos"
+                            : "Disponibilizar atleta para empréstimo para ganhar rodagem"
+                        }
+                        className={`rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                          p.isLoanListed
+                            ? "border-slate-700 bg-slate-800 text-slate-300 hover:text-white"
+                            : "border-purple-400/50 bg-purple-400/10 text-purple-300 hover:bg-purple-400/20"
+                        }`}
+                      >
+                        {p.isLoanListed ? "Deslistar Emp." : "Listar Empréstimo"}
                       </button>
                     )}
 

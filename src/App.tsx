@@ -89,6 +89,7 @@ import {
   loanOutPlayer,
   exerciseBuyOption,
 } from "./engine/youthAndLoansEngine";
+import { updateLeagueTransferAndLoanListings } from "./engine/squadAvailabilityEngine";
 import {
   generateAiOffersForUser,
   respondToTransferOffer,
@@ -142,9 +143,16 @@ function hydrateSave(parsed: SaveState): SaveState {
   ).map((p) =>
     p.roleCategory === "GK" && p.stamina < 95 ? { ...p, stamina: 98 } : p
   );
+  const playersWithListings = updateLeagueTransferAndLoanListings(
+    parsed.clubs,
+    hydratedPlayers,
+    parsed.tacticsByClub ?? {},
+    parsed.currentMatchweek ?? 1,
+    parsed.userClubId
+  );
   return {
     ...parsed,
-    players: hydratedPlayers,
+    players: playersWithListings,
     stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
     kitTheme: parsed.kitTheme ?? "home",
     autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
@@ -408,6 +416,13 @@ export const App: React.FC = () => {
       clubId,
       tacticsByClub[clubId]?.starters ?? []
     );
+    const playersWithListings = updateLeagueTransferAndLoanListings(
+      clubs,
+      players,
+      tacticsByClub,
+      1,
+      clubId
+    );
     const chosenDivision = chosenClub.league ?? chosenClub.division ?? "Premier League";
     const fixtures =
       chosenDivision !== "Premier League"
@@ -430,7 +445,7 @@ export const App: React.FC = () => {
       seasonFinished: false,
       clubs,
       referees,
-      players,
+      players: playersWithListings,
       fixtures,
       tacticsByClub,
       stadiumByClub: ensureStadiumMap(clubs),
@@ -879,6 +894,14 @@ export const App: React.FC = () => {
     // Update team synergy for all clubs that played this round (quanto mais jogam juntos, melhoram)
     const nextSynergyByClub = recordMatchweekSynergy(save, results);
 
+    finalPlayers = updateLeagueTransferAndLoanListings(
+      finalClubs,
+      finalPlayers,
+      nextTacticsByClub,
+      nextMwValue,
+      save.userClubId
+    );
+
     setSave({
       ...save,
       clubs: finalClubs,
@@ -1182,6 +1205,10 @@ export const App: React.FC = () => {
             wageEur,
             squadCategory: "first_team" as const,
             isTransferListed: false,
+            isLoanListed: false,
+            listingReason: undefined,
+            listingReasonLabel: undefined,
+            listingReasonText: undefined,
             shirtNumber: undefined,
           }
         : p
@@ -1261,8 +1288,17 @@ export const App: React.FC = () => {
     const target = save.players.find((p) => p.id === playerId);
     if (!target) return;
     const nextStatus = !target.isTransferListed;
-    const nextPlayers = save.players.map((p) =>
-      p.id === playerId ? { ...p, isTransferListed: nextStatus } : p
+    const nextPlayers: Player[] = save.players.map((p) =>
+      p.id === playerId
+        ? {
+            ...p,
+            isTransferListed: nextStatus,
+            isLoanListed: nextStatus ? false : p.isLoanListed,
+            listingReason: nextStatus ? ("user_listed" as const) : undefined,
+            listingReasonLabel: nextStatus ? "Colocado à Venda" : undefined,
+            listingReasonText: nextStatus ? "Colocado na lista de transferências pelo treinador." : undefined,
+          }
+        : p
     );
     const nextSave: SaveState = { ...save, players: nextPlayers };
     setSave(nextSave);
@@ -1270,6 +1306,32 @@ export const App: React.FC = () => {
       nextStatus
         ? `${target.name} colocado na Lista de Transferências! Clubes enviarão mais propostas.`
         : `${target.name} retirado da Lista de Transferências.`
+    );
+  };
+
+  const handleToggleLoanListed = (playerId: number) => {
+    if (!save) return;
+    const target = save.players.find((p) => p.id === playerId);
+    if (!target) return;
+    const nextStatus = !target.isLoanListed;
+    const nextPlayers: Player[] = save.players.map((p) =>
+      p.id === playerId
+        ? {
+            ...p,
+            isLoanListed: nextStatus,
+            isTransferListed: nextStatus ? false : p.isTransferListed,
+            listingReason: nextStatus ? ("user_listed" as const) : undefined,
+            listingReasonLabel: nextStatus ? "Disponível p/ Empréstimo" : undefined,
+            listingReasonText: nextStatus ? "Colocado na lista de empréstimos pelo treinador para ganhar rodagem." : undefined,
+          }
+        : p
+    );
+    const nextSave: SaveState = { ...save, players: nextPlayers };
+    setSave(nextSave);
+    setToast(
+      nextStatus
+        ? `${target.name} colocado na Lista de Empréstimos! Clubes interessados em rodagem farão propostas.`
+        : `${target.name} retirado da Lista de Empréstimos.`
     );
   };
 
@@ -1957,6 +2019,7 @@ export const App: React.FC = () => {
             onBuyPlayer={handleBuyPlayer}
             onStartNegotiation={handleStartNegotiation}
             onToggleTransferListed={handleToggleTransferListed}
+            onToggleLoanListed={handleToggleLoanListed}
             onOfferPlayerToMarket={handleOfferPlayerToMarket}
             onSellPlayer={handleSellPlayer}
             onSelectPlayer={setInspectedPlayer}
@@ -2017,6 +2080,7 @@ export const App: React.FC = () => {
         onBuyPlayer={handleBuyPlayer}
         onStartNegotiation={handleStartNegotiation}
         onToggleTransferListed={handleToggleTransferListed}
+        onToggleLoanListed={handleToggleLoanListed}
         onOfferPlayerToMarket={handleOfferPlayerToMarket}
         onSellPlayer={handleSellPlayer}
         onPromoteYouth={handlePromoteYouth}

@@ -470,7 +470,16 @@ export function evaluatePlayerInterest(
   // 4. Squad status in current club
   if (player.isTransferListed) {
     score += 25;
-    positiveFactors.push("Listado para transferência: busca novos ares com urgência (+25%)");
+    if (player.listingReason === "lack_of_playtime") {
+      positiveFactors.push("Pouca minutagem no clube atual: prioriza jogar com urgência (+25%)");
+    } else if (player.listingReason === "out_of_position") {
+      positiveFactors.push("Deslocado no clube atual: quer atuar na sua posição primária (+25%)");
+    } else {
+      positiveFactors.push("Listado para transferência: busca novos ares com urgência (+25%)");
+    }
+  } else if (player.isLoanListed) {
+    score += 22;
+    positiveFactors.push("Disponível para empréstimo: prioriza minutagem e protagonismo imediato (+22%)");
   } else if (sellerClub && player.overall >= (sellerClub.avgOverall ?? 72) + 4) {
     score -= 15;
     negativeFactors.push("Atleta é o grande astro do time atual (-15%)");
@@ -584,8 +593,19 @@ export function evaluateClubValuation(
   const rivalry = areRivals(buyerClub, sellerClub);
 
   if (player.isTransferListed) {
-    multiplier = 0.92;
-    statusText = "Listado para transferência! Clube vendedor tem pressa em negociar.";
+    if (player.listingReason === "lack_of_playtime") {
+      multiplier = 0.88;
+      statusText = "Pouco usado no elenco: o clube vendedor quer liberar folha salarial com urgência.";
+    } else if (player.listingReason === "out_of_position") {
+      multiplier = 0.90;
+      statusText = "Fora da posição almejada: o atleta pediu para ser negociado e o clube facilita a saída.";
+    } else {
+      multiplier = 0.92;
+      statusText = "Listado para transferência! Clube vendedor tem pressa em negociar.";
+    }
+  } else if (player.isLoanListed) {
+    multiplier = 0.94;
+    statusText = "Disponível para empréstimo! Clube vendedor prioriza rodagem e minutagem imediata.";
   } else if (rivalry.isRival) {
     multiplier = 1.95;
     statusText = `Taxa de Rivalidade (${rivalry.reason})! O clube adversário cobra pedida astronômica.`;
