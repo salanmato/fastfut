@@ -1029,13 +1029,15 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             {homeGoalEvents.map((g) => (
               <span key={g.id} className="text-emerald-300 flex items-center gap-1">
                 <Award className="h-3 w-3 text-emerald-400 shrink-0" />
-                {getPlayerDisplayName(g.playerName)} ({g.minute}')
+                {getPlayerDisplayName(g.playerName)}
+                {g.isPenalty ? " (P)" : ""} ({g.minute}')
               </span>
             ))}
             {awayGoalEvents.map((g) => (
               <span key={g.id} className="text-sky-300 flex items-center gap-1">
                 <Award className="h-3 w-3 text-sky-400 shrink-0" />
-                {getPlayerDisplayName(g.playerName)} ({g.minute}')
+                {getPlayerDisplayName(g.playerName)}
+                {g.isPenalty ? " (P)" : ""} ({g.minute}')
               </span>
             ))}
           </div>
@@ -1335,6 +1337,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 const badgeStyle =
                   ev.type === "goal"
                     ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+                    : ev.type === "penalty_miss"
+                    ? "border-amber-500/60 bg-amber-500/15 text-amber-100 font-semibold"
                     : ev.type === "woodwork"
                     ? "border-amber-400/70 bg-amber-500/15 text-amber-100 font-semibold"
                     : ev.type === "red_card"
@@ -1360,6 +1364,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                 let eventIconNode: React.ReactNode = <span className="text-slate-500">•</span>;
                 if (ev.type === "goal") {
                   eventIconNode = <Award className="h-4 w-4 text-emerald-400" />;
+                } else if (ev.type === "penalty_miss") {
+                  eventIconNode = <Shield className="h-4 w-4 text-amber-400" />;
                 } else if (ev.type === "woodwork") {
                   eventIconNode = <Flame className="h-4 w-4 text-amber-400" />;
                 } else if (ev.type === "stoppage_time") {
@@ -1466,6 +1472,13 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   `${userSession.awayStats.shots} (${userSession.awayStats.shotsOnTarget})`,
                   userSession.homeStats.shots,
                   userSession.awayStats.shots,
+                ],
+                [
+                  "Pênaltis (Convertidos)",
+                  `${userSession.homeStats.penaltiesAwarded ?? 0} (${userSession.homeStats.penaltiesScored ?? 0})`,
+                  `${userSession.awayStats.penaltiesAwarded ?? 0} (${userSession.awayStats.penaltiesScored ?? 0})`,
+                  userSession.homeStats.penaltiesAwarded ?? 0,
+                  userSession.awayStats.penaltiesAwarded ?? 0,
                 ],
                 [
                   "Bolas na Trave",

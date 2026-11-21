@@ -170,6 +170,7 @@ export interface Player {
 
 export type MatchEventType =
   | "goal"
+  | "penalty_miss"
   | "woodwork"
   | "chance"
   | "save"
@@ -194,6 +195,8 @@ export interface MatchEvent {
   assistPlayerName?: string;
   text: string;
   disallowedGoal?: boolean;
+  isPenalty?: boolean;
+  penaltyOutcome?: "goal" | "saved" | "woodwork" | "wide";
 }
 
 export interface MatchTeamStats {
@@ -208,6 +211,8 @@ export interface MatchTeamStats {
   redCards: number;
   offsides?: number;
   woodwork?: number;
+  penaltiesAwarded?: number;
+  penaltiesScored?: number;
 }
 
 export interface MatchInjury {

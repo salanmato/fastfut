@@ -1002,6 +1002,8 @@ export function initLiveMatchSession(
       redCards: 0,
       offsides: 0,
       woodwork: 0,
+      penaltiesAwarded: 0,
+      penaltiesScored: 0,
     },
     awayStats: {
       possession: 50,
@@ -1015,6 +1017,8 @@ export function initLiveMatchSession(
       redCards: 0,
       offsides: 0,
       woodwork: 0,
+      penaltiesAwarded: 0,
+      penaltiesScored: 0,
     },
     events: [],
     homeActiveIds,
@@ -1742,6 +1746,184 @@ export function stepLiveMatchMinute(
     });
   };
 
+  // Penalty Kick (Cobrança de Pênalti) specialist picker & resolution handler
+  const pickPenaltyTaker = (team: Player[]): Player => {
+    const outfield = team.filter((p) => p.roleCategory !== "GK");
+    if (outfield.length === 0) return team[0] || homeActive[0];
+    return [...outfield].sort((a, b) => {
+      const aRoleBonus =
+        a.roleCategory === "ATT" ? 5 : a.primaryPosition === "CAM" ? 3.5 : a.roleCategory === "MID" ? 1.5 : 0;
+      const bRoleBonus =
+        b.roleCategory === "ATT" ? 5 : b.primaryPosition === "CAM" ? 3.5 : b.roleCategory === "MID" ? 1.5 : 0;
+      const aSkill =
+        a.stats.finishing * 0.45 + a.stats.composure * 0.35 + a.stats.shotPower * 0.2 + aRoleBonus;
+      const bSkill =
+        b.stats.finishing * 0.45 + b.stats.composure * 0.35 + b.stats.shotPower * 0.2 + bRoleBonus;
+      return bSkill - aSkill;
+    })[0];
+  };
+
+  const resolvePenaltyKick = (
+    isPenHome: boolean,
+    attTeam: Player[],
+    defTeam: Player[],
+    victim?: Player,
+    offender?: Player
+  ): boolean => {
+    const penClubId = isPenHome ? session.homeClubId : session.awayClubId;
+    const penClubName = isPenHome ? homeClub.shortName : awayClub.shortName;
+    const penStats = isPenHome ? session.homeStats : session.awayStats;
+    const defStats = isPenHome ? session.awayStats : session.homeStats;
+
+    const taker = pickPenaltyTaker(attTeam);
+    const keeper = defTeam.find((p) => p.roleCategory === "GK");
+    const defOutfield = defTeam.filter((p) => p.roleCategory !== "GK");
+    const penaltyOffender =
+      offender && offender.roleCategory !== "GK"
+        ? offender
+        : defOutfield.find((p) => p.roleCategory === "DEF") ?? defOutfield[0];
+    const penaltyVictim =
+      victim && victim.roleCategory !== "GK"
+        ? victim
+        : attTeam.find((p) => p.roleCategory === "ATT") ?? taker;
+
+    penStats.penaltiesAwarded = (penStats.penaltiesAwarded ?? 0) + 1;
+    penStats.shots += 1;
+    // Official Opta/StatsBomb xG value of a penalty kick is 0.76
+    penStats.xg = Math.round((penStats.xg + 0.76) * 100) / 100;
+    defStats.fouls += 1;
+
+    if (penaltyOffender) {
+      session.playerRatings[penaltyOffender.id] = Math.max(
+        4.0,
+        (session.playerRatings[penaltyOffender.id] ?? 6.5) - 0.45
+      );
+    }
+    if (penaltyVictim) {
+      session.playerRatings[penaltyVictim.id] = Math.min(
+        10.0,
+        (session.playerRatings[penaltyVictim.id] ?? 6.5) + 0.25
+      );
+    }
+
+    const takerShirtMult = evaluateShirtNumberAffinity(taker).multiplier;
+    const takerPenSkill =
+      (taker.stats.finishing * 0.45 +
+        taker.stats.composure * 0.35 +
+        taker.stats.shotPower * 0.2) *
+      takerShirtMult;
+    const gkPenSkill = keeper
+      ? (keeper.faceStats.reflexes * 0.55 +
+          keeper.stats.reactions * 0.25 +
+          keeper.stats.composure * 0.2) *
+        evaluateShirtNumberAffinity(keeper).multiplier
+      : 65;
+
+    // Realistic penalty conversion rate (~77%), scaled by Taker vs GK duel
+    const convertProb = Math.max(
+      0.66,
+      Math.min(0.86, 0.77 + (takerPenSkill - gkPenSkill) * 0.0035)
+    );
+    const roll = Math.random();
+
+    if (roll < convertProb) {
+      // 1. PENALTY GOAL!
+      penStats.shotsOnTarget += 1;
+      penStats.penaltiesScored = (penStats.penaltiesScored ?? 0) + 1;
+      if (isPenHome) session.homeGoals += 1;
+      else session.awayGoals += 1;
+
+      session.playerRatings[taker.id] = Math.min(
+        10.0,
+        (session.playerRatings[taker.id] ?? 6.5) + 0.95
+      );
+
+      session.events.push({
+        id: `pen-goal-${session.fixtureId}-${min}-${taker.id}-${penStats.shots}`,
+        minute: min,
+        type: "goal",
+        clubId: penClubId,
+        playerId: taker.id,
+        playerName: taker.name,
+        assistPlayerId: penaltyVictim?.id !== taker.id ? penaltyVictim?.id : undefined,
+        assistPlayerName: penaltyVictim?.id !== taker.id ? penaltyVictim?.name : undefined,
+        isPenalty: true,
+        penaltyOutcome: "goal",
+        text: `🎯 GOOOOL DE PÊNALTI do ${penClubName}! ${penaltyOffender?.name ?? "A defesa"} derruba ${penaltyVictim?.name ?? taker.name} dentro da área, o árbitro aponta a marca da cal e ${taker.name} converte com categoria!`,
+      });
+      return true;
+    } else if (roll < convertProb + 0.14 && keeper) {
+      // 2. PENALTY SAVED BY GOALKEEPER!
+      penStats.shotsOnTarget += 1;
+      session.playerRatings[keeper.id] = Math.min(
+        10.0,
+        (session.playerRatings[keeper.id] ?? 6.5) + 0.9
+      );
+      session.playerRatings[taker.id] = Math.max(
+        4.0,
+        (session.playerRatings[taker.id] ?? 6.5) - 0.55
+      );
+
+      session.events.push({
+        id: `pen-save-${session.fixtureId}-${min}-${taker.id}-${penStats.shots}`,
+        minute: min,
+        type: "penalty_miss",
+        clubId: penClubId,
+        playerId: taker.id,
+        playerName: taker.name,
+        assistPlayerId: keeper.id,
+        assistPlayerName: keeper.name,
+        isPenalty: true,
+        penaltyOutcome: "saved",
+        text: `🧤 DEFENDEU O PÊNALTI! Pênalti marcado em ${penaltyVictim?.name ?? taker.name}, mas ${keeper.name} voa no canto certo e espalma a cobrança de ${taker.name} (${penClubName})!`,
+      });
+      return true;
+    } else if (roll < convertProb + 0.195) {
+      // 3. PENALTY HITS THE POST / CROSSBAR!
+      penStats.woodwork = (penStats.woodwork ?? 0) + 1;
+      session.playerRatings[taker.id] = Math.max(
+        4.2,
+        (session.playerRatings[taker.id] ?? 6.5) - 0.45
+      );
+
+      session.events.push({
+        id: `pen-woodwork-${session.fixtureId}-${min}-${taker.id}-${penStats.shots}`,
+        minute: min,
+        type: "woodwork",
+        clubId: penClubId,
+        playerId: taker.id,
+        playerName: taker.name,
+        assistPlayerId: penaltyVictim?.id,
+        assistPlayerName: penaltyVictim?.name,
+        isPenalty: true,
+        penaltyOutcome: "woodwork",
+        text: `💥 PÊNALTI NA TRAVE! ${taker.name} (${penClubName}) solta uma bomba da marca da cal, desloca o goleiro, mas a bola explode no poste!`,
+      });
+      return true;
+    } else {
+      // 4. PENALTY MISSED WIDE / OVER!
+      session.playerRatings[taker.id] = Math.max(
+        4.0,
+        (session.playerRatings[taker.id] ?? 6.5) - 0.6
+      );
+
+      session.events.push({
+        id: `pen-wide-${session.fixtureId}-${min}-${taker.id}-${penStats.shots}`,
+        minute: min,
+        type: "penalty_miss",
+        clubId: penClubId,
+        playerId: taker.id,
+        playerName: taker.name,
+        assistPlayerId: penaltyVictim?.id,
+        assistPlayerName: penaltyVictim?.name,
+        isPenalty: true,
+        penaltyOutcome: "wide",
+        text: `😱 PÊNALTI PARA FORA! ${taker.name} (${penClubName}) bate mal na marca da cal e manda a bola por cima do travessão!`,
+      });
+      return true;
+    }
+  };
+
   // Causal Attacking chance generation (uses live 2D pitch ball carrier & passer when available)
   const resolveAttack = (
     isHome: boolean,
@@ -1831,6 +2013,36 @@ export function stepLiveMatchMinute(
             const finishingBlend = 0.38 + styleFinishSkill / 100;
             return roleMult * finishingBlend * staminaReadiness * evaluateShirtNumberAffinity(p).multiplier;
           });
+
+    // Causal Penalty Check: Attacker dribbling/cutting inside the 18-yard box can be fouled for a Penalty!
+    const defBackline = defTeam.filter((p) => p.roleCategory === "DEF" || p.primaryPosition === "CDM");
+    const boxDefender =
+      defBackline.length > 0
+        ? weightedPick(defBackline, (p) => 0.7 + (p.stats.aggression / 100) * 0.8)
+        : defTeam.find((p) => p.roleCategory !== "GK");
+    const attackerElusiveness =
+      shooter.stats.dribbling * 0.42 +
+      shooter.stats.agility * 0.33 +
+      shooter.stats.acceleration * 0.25;
+    const defenderTackleDiscipline = boxDefender
+      ? boxDefender.stats.standingTackle * 0.45 +
+        boxDefender.stats.defensiveAwareness * 0.35 +
+        boxDefender.stats.composure * 0.2 -
+        (boxDefender.stats.aggression - 70) * 0.22
+      : 70;
+    const penBoxProb = Math.max(
+      0.008,
+      Math.min(
+        0.032,
+        0.0175 +
+          (attackerElusiveness - defenderTackleDiscipline) * 0.00045 +
+          (attTactics.passingStyle === "Short" ? 0.003 : 0) +
+          (defTacticsActive.pressing === "High" ? 0.0025 : 0)
+      )
+    );
+    if (Math.random() < penBoxProb) {
+      return resolvePenaltyKick(isHome, attTeam, defTeam, shooter, boxDefender);
+    }
 
     const possibleAssisters = attackers.filter((p) => p.id !== shooter.id);
     const assistProb =

@@ -140,6 +140,7 @@ interface EventBanner {
   text: string;
   tone:
     | "goal"
+    | "penalty"
     | "woodwork"
     | "save"
     | "chance"
@@ -956,6 +957,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     clubShortName: string;
     takerName: string;
   } | null>(null);
+  const [penaltySpotMark, setPenaltySpotMark] = useState<{
+    x: number;
+    y: number;
+    clubShortName: string;
+    takerName: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!woodworkImpact) return;
@@ -968,6 +975,12 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     const t = window.setTimeout(() => setThrowInSpot(null), 1750);
     return () => window.clearTimeout(t);
   }, [throwInSpot]);
+
+  useEffect(() => {
+    if (!penaltySpotMark) return;
+    const t = window.setTimeout(() => setPenaltySpotMark(null), 2650);
+    return () => window.clearTimeout(t);
+  }, [penaltySpotMark]);
 
   const homeSlots = useMemo(
     () => getFormationSlots(homeTactics.formation),
@@ -1280,6 +1293,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     const EVENT_PRIORITY: Record<MatchEvent["type"], number> = {
       corner: 105, // Corner sequence chains any follow-up header goal/woodwork/chance in the same minute!
       goal: 100,
+      penalty_miss: 98,
       red_card: 90,
       whistle: 85,
       offside: 80,
@@ -1396,7 +1410,290 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       return { shooterCoord };
     };
 
-    if (latest.type === "goal") {
+    if (latest.isPenalty || latest.type === "penalty_miss") {
+      // 3-STAGE PENALTY KICK SEQUENCE:
+      // Stage 1 (0 -> 700ms): Foul inside the box & Referee points to the penalty spot!
+      // Stage 2 (700 -> 1450ms): All 20 other players clear the 18-yard box (line up on the edge/arc); Taker faces GK at the penalty spot!
+      // Stage 3 (1450 -> 2500ms): Taker shoots from the penalty spot (Goal / GK Save / Post / Wide)!
+      const attackingHome = isHomeEvent;
+      const penClub = isHomeEvent ? homeClub : awayClub;
+      const attIds = attackingHome ? session.homeActiveIds : session.awayActiveIds;
+      const defIds = attackingHome ? session.awayActiveIds : session.homeActiveIds;
+      const speedScale = clamp(speedRef.current / 1200, 0.45, 1.35);
+
+      const penSpotX = 50;
+      const penSpotY = attackingHome ? 12.85 : 87.15;
+      const takerStandY = attackingHome ? 14.5 : 85.5;
+      const gkLineY = attackingHome ? 3.6 : 96.4;
+
+      // Stage 1: Foul in the box -> whistle & penalty spot highlighted
+      const foulX = clamp(ballPosRef.current.x, 30, 70);
+      const foulY = attackingHome
+        ? clamp(ballPosRef.current.y, 7, 17.5)
+        : clamp(ballPosRef.current.y, 82.5, 93);
+      const stage1Coords: Record<number, Coord> = { ...curCoords };
+      const victimId =
+        latest.penaltyOutcome === "saved" ? latest.playerId : latest.assistPlayerId ?? latest.playerId;
+      stage1Coords[victimId] = { x: foulX, y: foulY };
+      setLiveCoords(stage1Coords);
+      liveCoordsRef.current = stage1Coords;
+      setBallPos({ x: foulX, y: foulY });
+      ballPosRef.current = { x: foulX, y: foulY };
+      setBallVisual({ x: foulX, y: foulY, altitude: 0, isAerial: false });
+      setTrail(null);
+      setPlayPhase("final_third");
+
+      setPenaltySpotMark({
+        x: penSpotX,
+        y: penSpotY,
+        clubShortName: penClub.shortName,
+        takerName: getPlayerDisplayName(latest.playerName),
+      });
+      setBanner({
+        text: "PÊNALTI MARCADO!",
+        tone: "penalty",
+        minute: latest.minute,
+        clubName: penClub.name,
+        scorerName: `${getPlayerDisplayName(latest.playerName)} vai para a bola!`,
+      });
+      setHighlightPause(latest.penaltyOutcome === "goal" ? 3900 : 2850, 2100);
+
+      // Stage 2: Clear the 18-yard box; line up players outside the box & place Taker at the penalty spot
+      const stage2Delay = Math.max(480, Math.round(720 * speedScale));
+      window.setTimeout(() => {
+        const penBoxCoords: Record<number, Coord> = { ...liveCoordsRef.current };
+        const boxEdgeY = attackingHome ? 19.2 : 80.8;
+        const dirOut = attackingHome ? 1 : -1;
+
+        const nonTakerAtt = attIds.filter(
+          (id) => id !== latest.playerId && playerMap.get(id)?.roleCategory !== "GK"
+        );
+        nonTakerAtt.forEach((id, idx) => {
+          const p = playerMap.get(id);
+          if (p?.roleCategory === "DEF") {
+            penBoxCoords[id] = {
+              x: 24 + (idx % 4) * 17,
+              y: attackingHome ? 45 + (idx % 2) * 4 : 55 - (idx % 2) * 4,
+            };
+          } else {
+            const arcX = 27 + (idx % 6) * 9.2;
+            penBoxCoords[id] = {
+              x: clamp(arcX, 24, 76),
+              y: boxEdgeY + dirOut * (0.8 + (idx % 2) * 2.2),
+            };
+          }
+        });
+
+        defIds.forEach((id, idx) => {
+          const p = playerMap.get(id);
+          if (p?.roleCategory === "GK") {
+            penBoxCoords[id] = { x: 50, y: gkLineY };
+          } else {
+            const arcX = 25 + (idx % 7) * 8.3;
+            penBoxCoords[id] = {
+              x: clamp(arcX, 23, 77),
+              y: boxEdgeY + dirOut * (1.2 + (idx % 2) * 2.5),
+            };
+          }
+        });
+
+        // Penalty taker right behind the ball on the penalty spot
+        penBoxCoords[latest.playerId] = { x: penSpotX, y: takerStandY };
+
+        setLiveCoords(penBoxCoords);
+        liveCoordsRef.current = penBoxCoords;
+        setCarrierId(latest.playerId);
+        carrierIdRef.current = latest.playerId;
+        setCarrierClubId(latest.clubId);
+        carrierClubIdRef.current = latest.clubId;
+        setBallPos({ x: penSpotX, y: penSpotY });
+        ballPosRef.current = { x: penSpotX, y: penSpotY };
+        setBallVisual({ x: penSpotX, y: penSpotY, altitude: 0, isAerial: false });
+        setTrail(null);
+      }, stage2Delay);
+
+      // Stage 3: Taker strikes the penalty kick!
+      const stage3Delay = stage2Delay + Math.max(480, Math.round(740 * speedScale));
+      window.setTimeout(() => {
+        const chooseLeftCorner = Math.random() < 0.5;
+        const gkId = defIds.find((id) => playerMap.get(id)?.roleCategory === "GK");
+        const outcome = latest.penaltyOutcome ?? (latest.type === "goal" ? "goal" : "wide");
+
+        if (outcome === "goal") {
+          const goalX = chooseLeftCorner ? 46.1 : 53.9;
+          const goalY = attackingHome ? 1.6 : 98.4;
+          const gkDiveX = Math.random() < 0.65 ? (chooseLeftCorner ? 53.2 : 46.8) : (chooseLeftCorner ? 47.4 : 52.6);
+          if (gkId !== undefined) {
+            setLiveCoords((prev) => ({
+              ...prev,
+              [gkId]: { x: gkDiveX, y: gkLineY },
+              [latest.playerId]: { x: penSpotX, y: penSpotY },
+            }));
+          }
+
+          setTrail({
+            x1: penSpotX,
+            y1: penSpotY,
+            x2: goalX,
+            y2: goalY,
+            kind: "goal",
+            isAerial: true,
+            maxAltitude: 0.35,
+            curveX: (penSpotX + goalX) / 2,
+            curveY: (penSpotY + goalY) / 2,
+          });
+          setBallPos({ x: goalX, y: goalY });
+          ballPosRef.current = { x: goalX, y: goalY };
+          triggerBallFlight(
+            penSpotX,
+            penSpotY,
+            goalX,
+            goalY,
+            (penSpotX + goalX) / 2,
+            (penSpotY + goalY) / 2,
+            true,
+            0.35,
+            340
+          );
+
+          const scorer = playerMap.get(latest.playerId);
+          setBanner({
+            text: "GOOOOL DE PÊNALTI!",
+            tone: "goal",
+            minute: latest.minute,
+            clubName: `${penClub.name} (Pênalti)`,
+            clubColor: penClub.primaryColor,
+            scorerName: `${latest.playerName} (P)`,
+            scorerShirt: scorer?.shirtNumber,
+            scorerRating: (session.playerRatings[latest.playerId] ?? 7.7).toFixed(1),
+            assistName: latest.assistPlayerName
+              ? `Sofreu o pênalti: ${latest.assistPlayerName}`
+              : undefined,
+          });
+
+          const concedingIsHome = !attackingHome;
+          pendingKickoffHomeRef.current = concedingIsHome;
+          if (kickoffTimeoutRef.current !== null) {
+            window.clearTimeout(kickoffTimeoutRef.current);
+          }
+          kickoffTimeoutRef.current = window.setTimeout(() => {
+            kickoffTimeoutRef.current = null;
+            if (pendingKickoffHomeRef.current !== null) {
+              const koHome = pendingKickoffHomeRef.current;
+              pendingKickoffHomeRef.current = null;
+              resetToCenterKickoff(koHome);
+            }
+          }, Math.max(750, Math.round(1150 * speedScale)));
+        } else if (outcome === "saved") {
+          const saveX = chooseLeftCorner ? 46.6 : 53.4;
+          const saveY = attackingHome ? 3.8 : 96.2;
+          if (gkId !== undefined) {
+            setLiveCoords((prev) => ({
+              ...prev,
+              [gkId]: { x: saveX, y: saveY },
+              [latest.playerId]: { x: penSpotX, y: penSpotY },
+            }));
+            setCarrierId(gkId);
+            carrierIdRef.current = gkId;
+            setCarrierClubId(attackingHome ? awayClub.id : homeClub.id);
+            carrierClubIdRef.current = attackingHome ? awayClub.id : homeClub.id;
+          }
+          setTrail({
+            x1: penSpotX,
+            y1: penSpotY,
+            x2: saveX,
+            y2: saveY,
+            kind: "shot",
+            isAerial: true,
+            maxAltitude: 0.3,
+            curveX: (penSpotX + saveX) / 2,
+            curveY: (penSpotY + saveY) / 2,
+          });
+          setBallPos({ x: saveX, y: saveY });
+          ballPosRef.current = { x: saveX, y: saveY };
+          triggerBallFlight(
+            penSpotX,
+            penSpotY,
+            saveX,
+            saveY,
+            (penSpotX + saveX) / 2,
+            (penSpotY + saveY) / 2,
+            true,
+            0.3,
+            330
+          );
+          setBanner({
+            text: `🧤 PÊNALTI DEFENDIDO! ${getPlayerDisplayName(latest.assistPlayerName ?? "Goleiro")} (${latest.minute}')`,
+            tone: "save",
+          });
+        } else if (outcome === "woodwork") {
+          const postX = chooseLeftCorner ? 45.05 : 54.95;
+          const postY = attackingHome ? 3.0 : 97.0;
+          setTrail({
+            x1: penSpotX,
+            y1: penSpotY,
+            x2: postX,
+            y2: postY,
+            kind: "shot",
+            isAerial: true,
+            maxAltitude: 0.4,
+            curveX: (penSpotX + postX) / 2,
+            curveY: (penSpotY + postY) / 2,
+          });
+          setBallPos({ x: postX, y: postY });
+          ballPosRef.current = { x: postX, y: postY };
+          triggerBallFlight(
+            penSpotX,
+            penSpotY,
+            postX,
+            postY,
+            (penSpotX + postX) / 2,
+            (penSpotY + postY) / 2,
+            true,
+            0.4,
+            320
+          );
+          setWoodworkImpact({ x: postX, y: postY, kind: "post" });
+          setBanner({
+            text: `💥 PÊNALTI NA TRAVE! ${getPlayerDisplayName(latest.playerName)} (${latest.minute}')`,
+            tone: "woodwork",
+            minute: latest.minute,
+            clubName: penClub.shortName,
+          });
+        } else {
+          const wideX = chooseLeftCorner ? 41.5 : 58.5;
+          const wideY = attackingHome ? 1.2 : 98.8;
+          setTrail({
+            x1: penSpotX,
+            y1: penSpotY,
+            x2: wideX,
+            y2: wideY,
+            kind: "shot",
+            isAerial: true,
+            maxAltitude: 0.65,
+            curveX: (penSpotX + wideX) / 2,
+            curveY: (penSpotY + wideY) / 2,
+          });
+          setBallPos({ x: wideX, y: wideY });
+          ballPosRef.current = { x: wideX, y: wideY };
+          triggerBallFlight(
+            penSpotX,
+            penSpotY,
+            wideX,
+            wideY,
+            (penSpotX + wideX) / 2,
+            (penSpotY + wideY) / 2,
+            true,
+            0.65,
+            340
+          );
+          setBanner({
+            text: `😱 PÊNALTI PARA FORA! ${getPlayerDisplayName(latest.playerName)} (${latest.minute}')`,
+            tone: "chance",
+          });
+        }
+      }, stage3Delay);
+    } else if (latest.type === "goal") {
       const goalX = 50 + (Math.random() * 4 - 2);
       const goalY = isHomeEvent ? 1.6 : 98.4;
       const { shooterCoord } = choreographBoxAction(
@@ -3601,6 +3898,19 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           </div>
         )}
 
+        {/* Penalty Spot Marker when a Penalty Kick is awarded */}
+        {penaltySpotMark && (
+          <div
+            className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 animate-pulse"
+            style={{ left: `${penaltySpotMark.x}%`, top: `${penaltySpotMark.y}%` }}
+          >
+            <div className="h-5 w-5 rounded-full border-2 border-white bg-amber-400 ring-4 ring-amber-400/40 shadow-[0_0_20px_#fbbf24]" />
+            <span className="whitespace-nowrap rounded-md border border-amber-300 bg-slate-950/95 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300 shadow-lg">
+              🎯 Pênalti • {penaltySpotMark.takerName} ({penaltySpotMark.clubShortName})
+            </span>
+          </div>
+        )}
+
 
 
         {/* Event Banner Overlay */}
@@ -3729,7 +4039,23 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               </div>
             </div>
-          ) : banner.tone === "halftime" ? null : banner.tone === "woodwork" ? (
+          ) : banner.tone === "halftime" ? null : banner.tone === "penalty" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 animate-bounce">
+              <div className="flex items-center gap-3 rounded-xl border-2 border-amber-400 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_32px_rgba(251,191,36,0.75)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 text-sm font-black shadow-md">
+                  🎯
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-amber-300 font-black">
+                    {banner.text} • {banner.clubName} ({banner.minute}')
+                  </div>
+                  <div className="text-xs font-black text-white">
+                    {banner.scorerName}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : banner.tone === "woodwork" ? (
             <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 animate-bounce">
               <div className="flex items-center gap-3 rounded-xl border-2 border-amber-400 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(251,191,36,0.65)]">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 text-sm font-black shadow-md">
