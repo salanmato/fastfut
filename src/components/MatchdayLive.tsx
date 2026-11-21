@@ -1398,6 +1398,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     ? "border-teal-500/40 bg-teal-500/10 text-teal-200"
                     : ev.type === "substitution"
                     ? "border-emerald-500/40 bg-slate-900/90 text-slate-200"
+                    : ev.type === "foul"
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
                     : ev.type === "offside"
                     ? "border-orange-500/40 bg-orange-500/10 text-orange-200"
                     : "border-slate-800 bg-slate-950/60 text-slate-300";
@@ -1423,6 +1425,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   );
                 } else if (ev.type === "injury") {
                   eventIconNode = <HeartPulse className="h-4 w-4 text-rose-400" />;
+                } else if (ev.type === "foul") {
+                  eventIconNode = <AlertTriangle className="h-4 w-4 text-amber-400" />;
                 } else if (ev.type === "offside") {
                   eventIconNode = <Flag className="h-4 w-4 text-orange-400" />;
                 } else if (ev.type === "substitution") {

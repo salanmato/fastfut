@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -56,6 +56,33 @@ interface LivePitch2DProps {
 }
 
 const ACTION_EVERY = 4; // pitch ticks per ball action (pass / dribble / turnover)
+
+export interface LivePitchAction {
+  type:
+    | "possession"
+    | "pass"
+    | "long_pass"
+    | "cross"
+    | "dribble"
+    | "turnover"
+    | "tackle"
+    | "foul"
+    | "card"
+    | "penalty"
+    | "shot"
+    | "save"
+    | "corner"
+    | "throw_in"
+    | "woodwork"
+    | "offside"
+    | "goal";
+  label: string;
+  playerName: string;
+  secondaryPlayerName?: string;
+  clubId?: number;
+  badgeTone?: "emerald" | "sky" | "amber" | "rose" | "purple" | "teal";
+  timestamp: number;
+}
 
 interface OffsideMark {
   lineY: number;
@@ -963,6 +990,33 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     clubShortName: string;
     takerName: string;
   } | null>(null);
+  const [liveAction, setLiveAction] = useState<LivePitchAction | null>(null);
+  const liveActionTimeoutRef = useRef<number | null>(null);
+
+  const triggerActionIndicator = useCallback(
+    (action: Omit<LivePitchAction, "timestamp">, durationMs = 2400) => {
+      if (liveActionTimeoutRef.current !== null) {
+        window.clearTimeout(liveActionTimeoutRef.current);
+      }
+      setLiveAction({ ...action, timestamp: Date.now() });
+      liveActionTimeoutRef.current = window.setTimeout(() => {
+        setLiveAction(null);
+        liveActionTimeoutRef.current = null;
+      }, durationMs);
+    },
+    []
+  );
+
+  const triggerActionIndicatorRef = useRef(triggerActionIndicator);
+  triggerActionIndicatorRef.current = triggerActionIndicator;
+
+  useEffect(() => {
+    return () => {
+      if (liveActionTimeoutRef.current !== null) {
+        window.clearTimeout(liveActionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!woodworkImpact) return;
@@ -1133,6 +1187,28 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
     }
     setCarrierClubId(kickoffClubId);
     carrierClubIdRef.current = kickoffClubId;
+
+    if (liveActionTimeoutRef.current !== null) {
+      window.clearTimeout(liveActionTimeoutRef.current);
+      liveActionTimeoutRef.current = null;
+    }
+    const koCarrier = kickoffTakerId ? cur.playerMap.get(kickoffTakerId) : undefined;
+    if (koCarrier) {
+      setLiveAction({
+        type: "possession",
+        label: "Saída de Bola",
+        playerName: getPlayerDisplayName(koCarrier.name),
+        clubId: kickoffClubId,
+        badgeTone: "emerald",
+        timestamp: Date.now(),
+      });
+      liveActionTimeoutRef.current = window.setTimeout(() => {
+        setLiveAction(null);
+        liveActionTimeoutRef.current = null;
+      }, 2400);
+    } else {
+      setLiveAction(null);
+    }
   };
 
   // Update slot index mapping and initialize subbed-in player position whenever substitutions occur
@@ -1288,6 +1364,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       throw_in: 52,
       injury: 50,
       yellow_card: 45,
+      foul: 43,
       stoppage_time: 40,
     };
     const latest: MatchEvent = [...newEvents].sort(
@@ -1440,6 +1517,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         clubName: penClub.name,
         scorerName: `${getPlayerDisplayName(latest.playerName)} vai para a bola!`,
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "penalty",
+          label: "Pênalti Marcado!",
+          playerName: getPlayerDisplayName(latest.playerName),
+          clubId: latest.clubId,
+          badgeTone: "amber",
+        },
+        3500
+      );
       setHighlightPause(latest.penaltyOutcome === "goal" ? 3900 : 2850, 2100);
 
       // Stage 2: Clear the 18-yard box; line up players outside the box & place Taker at the penalty spot
@@ -1740,6 +1827,19 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ? (session.playerRatings[latest.assistPlayerId] ?? 7.1).toFixed(1)
           : undefined,
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "goal",
+          label: "GOL!",
+          playerName: getPlayerDisplayName(latest.playerName),
+          secondaryPlayerName: latest.assistPlayerName
+            ? `Assistência: ${getPlayerDisplayName(latest.assistPlayerName)}`
+            : undefined,
+          clubId: latest.clubId,
+          badgeTone: "emerald",
+        },
+        4000
+      );
       setHighlightPause(2800, 1800);
 
       // Schedule post-goal center circle kickoff restart for the team that conceded
@@ -1817,6 +1917,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         text: `DEFESAÇA! ${latest.playerName} (${latest.minute}')`,
         tone: "save",
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "save",
+          label: "Defesa do Goleiro",
+          playerName: getPlayerDisplayName(latest.playerName),
+          clubId: latest.clubId,
+          badgeTone: "sky",
+        },
+        2500
+      );
       setHighlightPause(1300);
     } else if (latest.type === "woodwork") {
       // 2-Stage Woodwork Animation:
@@ -1882,6 +1992,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         clubName: (isHomeEvent ? homeClub : awayClub).shortName,
         scorerName: latest.playerName,
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "woodwork",
+          label: isCrossbar ? "NO TRAVESSÃO!" : "BOLA NA TRAVE!",
+          playerName: getPlayerDisplayName(latest.playerName),
+          clubId: latest.clubId,
+          badgeTone: "amber",
+        },
+        2700
+      );
       setHighlightPause(1950, 1250);
 
       // Stage 2: Impact flash on post/crossbar + sharp ricochet rebound back into play
@@ -1992,9 +2112,24 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         text: `QUASE! ${latest.playerName} (${latest.minute}')`,
         tone: "chance",
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "shot",
+          label: "Finalização Perigosa",
+          playerName: getPlayerDisplayName(latest.playerName),
+          clubId: latest.clubId,
+          badgeTone: "amber",
+        },
+        2300
+      );
       setHighlightPause(1100);
-    } else if (latest.type === "yellow_card" || latest.type === "red_card") {
+    } else if (
+      latest.type === "yellow_card" ||
+      latest.type === "red_card" ||
+      latest.type === "foul"
+    ) {
       const isRed = latest.type === "red_card";
+      const isYellow = latest.type === "yellow_card";
       const foulSpot: Coord = {
         x: clamp(ballPosRef.current.x, 10, 90),
         y: clamp(ballPosRef.current.y, 12, 88),
@@ -2015,20 +2150,46 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       setBallVisual({ x: foulSpot.x, y: foulSpot.y, altitude: 0, isAerial: false });
       setTrail(null);
 
+      const victimName = latest.assistPlayerName
+        ? getPlayerDisplayName(latest.assistPlayerName)
+        : undefined;
+      const offenderName = getPlayerDisplayName(latest.playerName);
+
       setBanner({
         text: isRed
-          ? `EXPULSO! ${latest.playerName} (${latest.minute}')`
-          : `CARTÃO AMARELO • ${latest.playerName} (${latest.minute}')`,
-        tone: isRed ? "red_card" : "yellow_card",
+          ? `EXPULSO! ${offenderName} (${latest.minute}')`
+          : isYellow
+          ? `CARTÃO AMARELO • ${offenderName} (${latest.minute}')`
+          : victimName
+          ? `FALTA! ${offenderName} sobre ${victimName} (${latest.minute}')`
+          : `FALTA! ${offenderName} (${latest.minute}')`,
+        tone: isRed ? "red_card" : isYellow ? "yellow_card" : "chance",
         minute: latest.minute,
       });
-      setCardHighlight({
-        playerId: latest.playerId,
-        playerName: latest.playerName,
-        type: isRed ? "red_card" : "yellow_card",
-        minute: latest.minute,
-      });
-      setHighlightPause(isRed ? 2400 : 1900, 1250);
+      if (isRed || isYellow) {
+        setCardHighlight({
+          playerId: latest.playerId,
+          playerName: latest.playerName,
+          type: isRed ? "red_card" : "yellow_card",
+          minute: latest.minute,
+        });
+      }
+      triggerActionIndicatorRef.current(
+        {
+          type: isRed || isYellow ? "card" : "foul",
+          label: isRed
+            ? "Falta / Cartão Vermelho"
+            : isYellow
+            ? "Falta / Cartão Amarelo"
+            : "Falta",
+          playerName: offenderName,
+          secondaryPlayerName: victimName ? `sobre ${victimName}` : undefined,
+          clubId: latest.clubId,
+          badgeTone: isRed ? "rose" : "amber",
+        },
+        isRed ? 3200 : isYellow ? 2800 : 2500
+      );
+      setHighlightPause(isRed ? 2400 : isYellow ? 1900 : 1300, 1000);
 
       // Stage 2: Free kick taken from the exact spot of the foul by the fouled team!
       const fouledHome = !isHomeEvent;
@@ -2036,7 +2197,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const fkActiveIds = fouledHome ? session.homeActiveIds : session.awayActiveIds;
       const fkDelay = Math.max(
         700,
-        Math.round((isRed ? 1300 : 1000) * clamp(speedRef.current / 1200, 0.45, 1.4))
+        Math.round(
+          (isRed ? 1300 : isYellow ? 1000 : 800) * clamp(speedRef.current / 1200, 0.45, 1.4)
+        )
       );
       window.setTimeout(() => {
         const fkTakerId =
@@ -2133,6 +2296,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         type: "injury",
         minute: latest.minute,
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "foul",
+          label: "Falta / Lesão",
+          playerName: getPlayerDisplayName(latest.playerName),
+          clubId: latest.clubId,
+          badgeTone: "rose",
+        },
+        3000
+      );
       setHighlightPause(1900, 1200);
     } else if (latest.type === "corner") {
       const attackingHome = isHomeEvent;
@@ -2291,6 +2464,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           clubColor: cornerClub.primaryColor,
           scorerName: `${latest.playerName} (${cornerClub.shortName})`,
         });
+        triggerActionIndicatorRef.current(
+          {
+            type: "corner",
+            label: "Cobrança de Escanteio",
+            playerName: getPlayerDisplayName(latest.playerName),
+            clubId: latest.clubId,
+            badgeTone: "purple",
+          },
+          2800
+        );
       }, stage2Delay);
 
       // STAGE 3 (~1680ms): Header in the box (Goal, dangerous header chance, or defensive clearance)
@@ -2594,6 +2777,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           : `IMPEDIMENTO! ${latest.playerName} (${latest.minute}')`,
         tone: "offside",
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "offside",
+          label: latest.disallowedGoal ? "Gol Anulado / Impedimento" : "Impedimento",
+          playerName: getPlayerDisplayName(latest.playerName),
+          clubId: latest.clubId,
+          badgeTone: "amber",
+        },
+        2600
+      );
       setHighlightPause(latest.disallowedGoal ? 2400 : 1700, 1100);
 
       // After the whistle: free kick for the defending side, taken by their best-placed defender/keeper
@@ -2726,6 +2919,19 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         clubName: throwClub.name,
         scorerName: `${getPlayerDisplayName(latest.playerName)} (${throwClub.shortName})`,
       });
+      triggerActionIndicatorRef.current(
+        {
+          type: "throw_in",
+          label: isLongThrow ? "Cobrança de Lateral Longo" : "Cobrança de Lateral",
+          playerName: getPlayerDisplayName(latest.playerName),
+          secondaryPlayerName: latest.assistPlayerName
+            ? getPlayerDisplayName(latest.assistPlayerName)
+            : undefined,
+          clubId: latest.clubId,
+          badgeTone: "teal",
+        },
+        2500
+      );
       setHighlightPause(1550, 1000);
 
       // Stage 2: Taker throws the ball overhead from the touchline to receiver
@@ -3039,6 +3245,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           progressNorm >= minProgressForShot && goalDistY < 28 && Math.random() < shootProb;
 
         if (takeTickShot) {
+          triggerActionIndicatorRef.current(
+            {
+              type: "shot",
+              label: "Finalização",
+              playerName: getPlayerDisplayName(carrierPlayer?.name ?? "Atacante"),
+              clubId: prevIsHome ? cur.homeClubId : cur.awayClubId,
+              badgeTone: "amber",
+            },
+            2200
+          );
           // Position the ball carrier inside/at edge of the box ready for stepLiveMatchMinute to fire the official shot!
           const shootSpot: Coord = {
             x: clamp(nextBallPos.x * 0.7 + 50 * 0.3, 28, 72),
@@ -3081,6 +3297,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
 
           // Attackers drive with pace into the box right up to 0.94 progress!
           if (progressNorm < 0.94 && Math.random() < dribbleRate) {
+            triggerActionIndicatorRef.current(
+              {
+                type: "dribble",
+                label: progressNorm > 0.65 ? "Infiltração" : "Arrancada",
+                playerName: getPlayerDisplayName(carrierPlayer?.name ?? "Jogador"),
+                clubId: prevIsHome ? cur.homeClubId : cur.awayClubId,
+                badgeTone: "emerald",
+              },
+              1800
+            );
             // Dribble progression along vertical axis: carrier drives forward or cuts inside
             const paceBoost = (carrierDribbleSkill - 66) * 0.085;
             const stepY = (4.8 + Math.random() * 5.2 + Math.max(0, paceBoost)) * dirY;
@@ -3164,6 +3390,36 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             if (receiverId !== currentCarrierId) {
               lastPasserIdRef.current = currentCarrierId;
             }
+            const receiverPlayer = cur.playerMap.get(receiverId);
+            const passLabel = isCross
+              ? "Cruzamento"
+              : isLongSwitch || forceAerial
+              ? "Lançamento"
+              : "Passe";
+            const passType = isCross
+              ? "cross"
+              : isLongSwitch || forceAerial
+              ? "long_pass"
+              : "pass";
+
+            triggerActionIndicatorRef.current(
+              {
+                type: passType,
+                label: passLabel,
+                playerName: getPlayerDisplayName(carrierPlayer?.name ?? "Jogador"),
+                secondaryPlayerName: receiverPlayer
+                  ? getPlayerDisplayName(receiverPlayer.name)
+                  : undefined,
+                clubId: prevIsHome ? cur.homeClubId : cur.awayClubId,
+                badgeTone: isCross
+                  ? "purple"
+                  : isLongSwitch || forceAerial
+                  ? "sky"
+                  : "emerald",
+              },
+              1900
+            );
+
             nextBallPos = targetBall;
             nextCarrierId = receiverId;
           }
@@ -3213,6 +3469,31 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         if (flightRafRef.current === null) {
           setBallVisual({ x: meetBall.x, y: meetBall.y, altitude: 0, isAerial: false });
         }
+
+        const interceptorPlayer = cur.playerMap.get(bestInterceptor);
+        const prevCarrierPlayer = carrierPlayer;
+        const distToBall = Math.hypot(
+          interceptorCoord.x - nextBallPos.x,
+          interceptorCoord.y - nextBallPos.y
+        );
+        const isTackle = distToBall < 8;
+        const turnoverLabel = isTackle ? "Desarme" : "Roubada de Bola";
+
+        triggerActionIndicatorRef.current(
+          {
+            type: isTackle ? "tackle" : "turnover",
+            label: turnoverLabel,
+            playerName: interceptorPlayer
+              ? getPlayerDisplayName(interceptorPlayer.name)
+              : "Defensor",
+            secondaryPlayerName: prevCarrierPlayer
+              ? `sobre ${getPlayerDisplayName(prevCarrierPlayer.name)}`
+              : undefined,
+            clubId: nextIsHome ? cur.homeClubId : cur.awayClubId,
+            badgeTone: "rose",
+          },
+          2200
+        );
 
         const newProgress = nextIsHome
           ? (92 - nextBallPos.y) / 84
@@ -3527,8 +3808,69 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </button>
               )}
             </div>
+          ) : liveAction ? (
+            <div className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-950/90 px-2.5 py-1 text-[11px] text-slate-300 shadow-sm transition-all duration-150">
+              <span
+                className="h-2 w-2 rounded-full animate-pulse shrink-0"
+                style={{
+                  backgroundColor:
+                    liveAction.badgeTone === "rose"
+                      ? "#f43f5e"
+                      : liveAction.badgeTone === "amber"
+                      ? "#f59e0b"
+                      : liveAction.badgeTone === "sky"
+                      ? "#38bdf8"
+                      : liveAction.badgeTone === "purple"
+                      ? "#c084fc"
+                      : liveAction.badgeTone === "teal"
+                      ? "#2dd4bf"
+                      : liveAction.clubId === homeClub.id
+                      ? homeKitColors.primary
+                      : liveAction.clubId === awayClub.id
+                      ? awayKitColors.primary
+                      : "#10b981",
+                }}
+              />
+              <span
+                className={`font-semibold shrink-0 text-[10px] tracking-wide uppercase ${
+                  liveAction.badgeTone === "rose"
+                    ? "text-rose-400"
+                    : liveAction.badgeTone === "amber"
+                    ? "text-amber-400"
+                    : liveAction.badgeTone === "sky"
+                    ? "text-sky-300"
+                    : liveAction.badgeTone === "purple"
+                    ? "text-purple-300"
+                    : liveAction.badgeTone === "teal"
+                    ? "text-teal-300"
+                    : "text-emerald-400"
+                }`}
+              >
+                {liveAction.label}:
+              </span>
+              <strong className="text-white max-w-[100px] truncate">
+                {liveAction.playerName}
+              </strong>
+              {liveAction.secondaryPlayerName && (
+                <>
+                  <span className="text-slate-500 text-[10px]">
+                    {liveAction.type === "pass" ||
+                    liveAction.type === "long_pass" ||
+                    liveAction.type === "cross"
+                      ? "➔"
+                      : liveAction.secondaryPlayerName.startsWith("sobre") ||
+                        liveAction.secondaryPlayerName.startsWith("Assistência")
+                      ? ""
+                      : "➔"}
+                  </span>
+                  <span className="text-slate-300 max-w-[120px] truncate font-medium">
+                    {liveAction.secondaryPlayerName}
+                  </span>
+                </>
+              )}
+            </div>
           ) : carrierPlayer ? (
-            <div className="hidden lg:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-2 py-0.5 text-[11px] text-slate-300">
+            <div className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-2 py-0.5 text-[11px] text-slate-300">
               <span
                 className="h-2 w-2 rounded-full animate-pulse shrink-0"
                 style={{

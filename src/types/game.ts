@@ -191,7 +191,8 @@ export type MatchEventType =
   | "substitution"
   | "offside"
   | "stoppage_time"
-  | "whistle";
+  | "whistle"
+  | "foul";
 
 export interface MatchEvent {
   id: string;

@@ -1583,6 +1583,21 @@ export function stepLiveMatchMinute(
         return { fouled: true, cardIssued: true, offender, victim };
       }
     }
+    if (session.pitchContext) {
+      session.events.push({
+        id: `foul-${session.fixtureId}-${min}-${offender.id}-${Math.floor(Math.random() * 1000)}`,
+        minute: min,
+        type: "foul",
+        clubId,
+        playerId: offender.id,
+        playerName: offender.name,
+        assistPlayerId: victim?.id,
+        assistPlayerName: victim?.name,
+        text: victim
+          ? `Falta: ${offender.name} (${defClubName}) comete falta sobre ${victim.name}.`
+          : `Falta de ${offender.name} (${defClubName}) na disputa de bola.`,
+      });
+    }
     return { fouled: true, cardIssued: false, offender, victim };
   };
 
@@ -2556,8 +2571,8 @@ export function stepLiveMatchMinute(
       );
     }
 
-    // 3. If no card/injury stoppage interrupted play, resolve attacking progression or flank throw-in
-    if (!foulRes.cardIssued && !injuryStopped) {
+    // 3. If no card/injury/foul stoppage interrupted play, resolve attacking progression or flank throw-in
+    if (!foulRes.cardIssued && !injuryStopped && !foulRes.fouled) {
       const prevEvCount = session.events.length;
       const inAttackingHalf = ctx.attackProgress >= 0.42 || Boolean(ctx.pendingVisualShot);
       if (inAttackingHalf) {
@@ -2661,6 +2676,7 @@ export function stepLiveMatchMinute(
       "chance",
       "penalty_miss",
       "stoppage_time",
+      "foul",
     ].includes(e.type)
   );
 
@@ -2672,7 +2688,7 @@ export function stepLiveMatchMinute(
         ? "escanteio"
         : deadBallEvent.type === "goal"
         ? "após o gol"
-        : deadBallEvent.type === "yellow_card" || deadBallEvent.type === "red_card"
+        : deadBallEvent.type === "yellow_card" || deadBallEvent.type === "red_card" || deadBallEvent.type === "foul"
         ? "falta"
         : deadBallEvent.type === "injury"
         ? "atendimento médico"
