@@ -42,6 +42,11 @@ import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
 import { ClubKit } from "./ClubKit";
 import { LivePitch2D, type PitchSize } from "./LivePitch2D";
+import type { ClubSynergyTracker } from "../types/game";
+import {
+  calculateTeamSynergy,
+  getOrCreateClubSynergyTracker,
+} from "../engine/synergyEngine";
 
 interface MatchdayLiveProps {
   matchweek: number;
@@ -52,6 +57,7 @@ interface MatchdayLiveProps {
   referees: Referee[];
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub: Record<number, StadiumConfig>;
+  synergyByClub?: Record<number, ClubSynergyTracker>;
   userKitVariant?: "home" | "away";
   autoOpenFormationOnRedCard?: boolean;
   onToggleAutoFormationOnRedCard?: () => void;
@@ -88,6 +94,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   referees,
   tacticsByClub,
   stadiumByClub,
+  synergyByClub,
   userKitVariant = "home",
   autoOpenFormationOnRedCard = true,
   onToggleAutoFormationOnRedCard,
@@ -145,16 +152,34 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       const ref = refMap.get(fx.refereeId) ?? referees[0];
       const hClub = clubMap.get(fx.homeClubId);
       const aClub = clubMap.get(fx.awayClubId);
+
+      const hTactics = liveTacticsByClub[fx.homeClubId];
+      const aTactics = liveTacticsByClub[fx.awayClubId];
+      const hTracker = getOrCreateClubSynergyTracker(
+        { clubs, players, currentMatchweek: matchweek, tacticsByClub: liveTacticsByClub, synergyByClub },
+        fx.homeClubId
+      );
+      const aTracker = getOrCreateClubSynergyTracker(
+        { clubs, players, currentMatchweek: matchweek, tacticsByClub: liveTacticsByClub, synergyByClub },
+        fx.awayClubId
+      );
+      const hStarters = hTactics.starters.map((id) => playerMap.get(id)).filter(Boolean) as Player[];
+      const aStarters = aTactics.starters.map((id) => playerMap.get(id)).filter(Boolean) as Player[];
+      const hSynergy = calculateTeamSynergy(hStarters, hTactics, hTracker);
+      const aSynergy = calculateTeamSynergy(aStarters, aTactics, aTracker);
+
       return initLiveMatchSession(
         fx,
         homePlayers,
         awayPlayers,
-        liveTacticsByClub[fx.homeClubId],
-        liveTacticsByClub[fx.awayClubId],
+        hTactics,
+        aTactics,
         ref,
         hClub,
         aClub,
-        stadiumByClub[fx.homeClubId]
+        stadiumByClub[fx.homeClubId],
+        hSynergy,
+        aSynergy
       );
     });
   }
@@ -361,6 +386,31 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
       ? Math.round(awayStarters.reduce((acc, p) => acc + p.overall, 0) / awayStarters.length)
       : awayClub.avgOverall;
 
+  const homeTracker = useMemo(
+    () =>
+      getOrCreateClubSynergyTracker(
+        { clubs, players, currentMatchweek: matchweek, tacticsByClub: liveTacticsByClub, synergyByClub },
+        homeClub.id
+      ),
+    [clubs, players, matchweek, liveTacticsByClub, synergyByClub, homeClub.id]
+  );
+  const awayTracker = useMemo(
+    () =>
+      getOrCreateClubSynergyTracker(
+        { clubs, players, currentMatchweek: matchweek, tacticsByClub: liveTacticsByClub, synergyByClub },
+        awayClub.id
+      ),
+    [clubs, players, matchweek, liveTacticsByClub, synergyByClub, awayClub.id]
+  );
+  const homeSynergy = useMemo(
+    () => calculateTeamSynergy(homeStarters, liveTacticsByClub[homeClub.id], homeTracker),
+    [homeStarters, liveTacticsByClub, homeClub.id, homeTracker]
+  );
+  const awaySynergy = useMemo(
+    () => calculateTeamSynergy(awayStarters, liveTacticsByClub[awayClub.id], awayTracker),
+    [awayStarters, liveTacticsByClub, awayClub.id, awayTracker]
+  );
+
   // --- PRE-MATCH / FORMATION PRESENTATION MODAL / SCREEN ---
   if (isPreMatch) {
     return (
@@ -427,6 +477,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     <span>Mandante</span>
                     <span>•</span>
                     <span className="font-bold text-emerald-400">OVR Médio: {homeAvgOvr}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1 text-[11px]">
+                    <Flame className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="text-slate-300 font-semibold">
+                      Sinergia: <strong className={homeSynergy.tierColor}>{homeSynergy.overallScore}%</strong> ({homeSynergy.bonusPercentFormatted})
+                    </span>
                   </div>
                 </div>
               </div>
@@ -639,6 +695,12 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                     <span>Visitante</span>
                     <span>•</span>
                     <span className="font-bold text-sky-400">OVR Médio: {awayAvgOvr}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1 text-[11px]">
+                    <Flame className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="text-slate-300 font-semibold">
+                      Sinergia: <strong className={awaySynergy.tierColor}>{awaySynergy.overallScore}%</strong> ({awaySynergy.bonusPercentFormatted})
+                    </span>
                   </div>
                 </div>
               </div>

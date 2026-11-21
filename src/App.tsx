@@ -95,6 +95,10 @@ import {
   simulateAiWorldTransfers,
 } from "./engine/transfersEngine";
 import { offerPlayerToMarket } from "./engine/transferNegotiationEngine";
+import {
+  getOrCreateClubSynergyTracker,
+  recordMatchweekSynergy,
+} from "./engine/synergyEngine";
 
 const SAVE_KEY = "fm2627_pl_save_v1";
 
@@ -787,6 +791,9 @@ export const App: React.FC = () => {
       }
     }
 
+    // Update team synergy for all clubs that played this round (quanto mais jogam juntos, melhoram)
+    const nextSynergyByClub = recordMatchweekSynergy(save, results);
+
     setSave({
       ...save,
       clubs: finalClubs,
@@ -797,6 +804,7 @@ export const App: React.FC = () => {
       players: finalPlayers,
       tacticsByClub: nextTacticsByClub,
       stadiumByClub: nextStadiumByClub,
+      synergyByClub: nextSynergyByClub,
       faCup: activeCup,
       transferOffers: nextTransferOffers,
       worldTransfers: nextWorldTransfers,
@@ -1741,6 +1749,7 @@ export const App: React.FC = () => {
             club={userClub}
             players={userSquad}
             tactics={userTactics}
+            synergyTracker={getOrCreateClubSynergyTracker(save, userClub.id)}
             onChangeTactics={(next) =>
               setSave({
                 ...save,
@@ -1773,6 +1782,7 @@ export const App: React.FC = () => {
             players={save.players}
             fixtures={save.fixtures}
             tactics={userTactics}
+            synergyTracker={getOrCreateClubSynergyTracker(save, userClub.id)}
             currentMatchweek={save.currentMatchweek}
             currentSeason={save.season ?? "2026/27"}
             onSelectPlayer={setInspectedPlayer}
@@ -1802,6 +1812,7 @@ export const App: React.FC = () => {
             referees={save.referees}
             tacticsByClub={save.tacticsByClub}
             stadiumByClub={stadiumByClub}
+            synergyByClub={save.synergyByClub}
             userKitVariant={kitTheme}
             autoOpenFormationOnRedCard={save.autoOpenFormationOnRedCard ?? true}
             onToggleAutoFormationOnRedCard={() =>

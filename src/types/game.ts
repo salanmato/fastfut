@@ -404,6 +404,14 @@ export interface ClubValuationEvaluation {
   suggestedSellOnPct: number;
 }
 
+export interface ClubSynergyTracker {
+  clubId: number;
+  pairMatches: Record<string, number>;
+  lastFormation: Formation;
+  consecutiveMatchesWithFormation: number;
+  totalMatchesTracked: number;
+}
+
 export interface SaveState {
   version: number;
   managerName: string;
@@ -419,6 +427,7 @@ export interface SaveState {
   fixtures: Fixture[];
   tacticsByClub: Record<number, Tactics>;
   stadiumByClub?: Record<number, StadiumConfig>;
+  synergyByClub?: Record<number, ClubSynergyTracker>;
   kitTheme?: "home" | "away";
   autoOpenFormationOnRedCard?: boolean;
   currentDate?: string;

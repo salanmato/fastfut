@@ -6,9 +6,25 @@ import {
   ArrowRight,
   Award,
   Footprints,
+  Flame,
+  Link2,
+  Users,
+  Compass,
+  CheckCircle2,
+  BarChart3,
 } from "lucide-react";
-import type { Club, Fixture, Player, Tactics } from "../types/game";
-import { getOverallColor, getRoleBadgeClass, getStaminaColor } from "../utils/format";
+import type { Club, ClubSynergyTracker, Fixture, Player, Tactics } from "../types/game";
+import {
+  getOverallColor,
+  getPlayerDisplayName,
+  getRoleBadgeClass,
+  getStaminaColor,
+} from "../utils/format";
+import {
+  calculateTeamSynergy,
+  getOrCreateClubSynergyTracker,
+  getPartnershipStrength,
+} from "../engine/synergyEngine";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { ClubBadge } from "./ClubBadge";
 
@@ -17,6 +33,7 @@ interface SquadPerformanceAnalysisProps {
   players: Player[];
   fixtures: Fixture[];
   tactics: Tactics;
+  synergyTracker?: ClubSynergyTracker;
   currentMatchweek: number;
   currentSeason?: string;
   onSelectPlayer: (p: Player) => void;
@@ -38,11 +55,13 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
   userClub,
   players,
   tactics,
+  synergyTracker,
   currentMatchweek,
   currentSeason = "2026/27",
   onSelectPlayer,
   onNavigateToTactics,
 }) => {
+  const [mainTab, setMainTab] = useState<"performance" | "synergy">("performance");
   const [sectorFilter, setSectorFilter] = useState<SectorFilter>("ALL");
   const [sortField, setSortField] = useState<SortField>("rating");
   const [sortAsc, setSortAsc] = useState<boolean>(false);
@@ -53,6 +72,70 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
     () => players.filter((p) => p.clubId === userClub.id),
     [players, userClub.id]
   );
+
+  const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+
+  const starters = useMemo(
+    () => tactics.starters.map((id) => playerMap.get(id)).filter(Boolean) as Player[],
+    [tactics.starters, playerMap]
+  );
+
+  const tracker = useMemo(
+    () =>
+      synergyTracker ??
+      getOrCreateClubSynergyTracker(
+        {
+          clubs: [userClub],
+          players,
+          currentMatchweek,
+          tacticsByClub: { [userClub.id]: tactics },
+        },
+        userClub.id
+      ),
+    [synergyTracker, userClub, players, currentMatchweek, tactics]
+  );
+
+  const synergy = useMemo(
+    () => calculateTeamSynergy(starters, tactics, tracker),
+    [starters, tactics, tracker]
+  );
+
+  const allSquadPartnerships = useMemo(() => {
+    const pairs: Array<{
+      pA: Player;
+      pB: Player;
+      sharedMatches: number;
+      strengthInfo: ReturnType<typeof getPartnershipStrength>;
+      sector: string;
+      isCompatriot: boolean;
+    }> = [];
+
+    for (let i = 0; i < squad.length; i++) {
+      for (let j = i + 1; j < squad.length; j++) {
+        const pA = squad[i];
+        const pB = squad[j];
+        const key = `${Math.min(pA.id, pB.id)}-${Math.max(pA.id, pB.id)}`;
+        const sharedMatches = tracker.pairMatches[key] || 0;
+        if (sharedMatches > 0) {
+          const strengthInfo = getPartnershipStrength(sharedMatches);
+          const isCompatriot = pA.nationality.toLowerCase() === pB.nationality.toLowerCase();
+          let sector = "Geral";
+          if (pA.roleCategory === "DEF" && pB.roleCategory === "DEF") sector = "Zaga";
+          else if (pA.roleCategory === "MID" && pB.roleCategory === "MID") sector = "Meio-Campo";
+          else if (pA.roleCategory === "ATT" && pB.roleCategory === "ATT") sector = "Ataque";
+          else if (
+            (pA.roleCategory === "GK" && pB.roleCategory === "DEF") ||
+            (pA.roleCategory === "DEF" && pB.roleCategory === "GK")
+          )
+            sector = "Defesa/Goleiro";
+
+          pairs.push({ pA, pB, sharedMatches, strengthInfo, sector, isCompatriot });
+        }
+      }
+    }
+
+    return pairs.sort((a, b) => b.sharedMatches - a.sharedMatches);
+  }, [squad, tracker]);
 
   const startersSet = useMemo(() => new Set(tactics.starters), [tactics.starters]);
   const benchSet = useMemo(() => new Set(tactics.bench), [tactics.bench]);
@@ -254,7 +337,295 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
         </button>
       </div>
 
-      {/* Aggregate Metrics Strip */}
+      {/* Main Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+        <button
+          onClick={() => setMainTab("performance")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+            mainTab === "performance"
+              ? "bg-emerald-500 text-slate-950 font-black shadow-md"
+              : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" /> Desempenho & Estatísticas
+        </button>
+        <button
+          onClick={() => setMainTab("synergy")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+            mainTab === "synergy"
+              ? "bg-emerald-500 text-slate-950 font-black shadow-md"
+              : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+          }`}
+        >
+          <Flame className="h-4 w-4 text-amber-400" /> Sinergia & Entrosamento ({synergy.overallScore}%)
+        </button>
+      </div>
+
+      {mainTab === "synergy" ? (
+        /* SYNERGY & COHESION HUB */
+        <div className="space-y-6">
+          {/* Main Synergy Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-amber-500/15 border border-amber-500/40 p-1.5 text-amber-400">
+                    <Flame className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Coesão & Química do Elenco
+                    </div>
+                    <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-2 mt-0.5">
+                      <span>{synergy.tierLabel}</span>
+                      <span className={`text-base font-bold ${synergy.tierColor}`}>
+                        ({synergy.overallScore}%)
+                      </span>
+                    </h2>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-slate-300">
+                  Quanto mais partidas os jogadores disputam juntos, mais automática e eficiente se torna a troca de passes, a cobertura defensiva e o aproveitamento no ataque.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Bônus Tático Coletivo
+                  </div>
+                  <div
+                    className={`text-2xl font-black ${
+                      synergy.overallMultiplier >= 1 ? "text-emerald-400" : "text-rose-400"
+                    }`}
+                  >
+                    {synergy.bonusPercentFormatted}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Progress Bar */}
+            <div className="h-3 w-full overflow-hidden rounded-full bg-slate-950 border border-slate-800">
+              <div
+                className={`h-full transition-all duration-700 ${
+                  synergy.overallScore >= 80
+                    ? "bg-gradient-to-r from-emerald-500 to-amber-400"
+                    : synergy.overallScore >= 60
+                    ? "bg-emerald-500"
+                    : synergy.overallScore >= 45
+                    ? "bg-sky-500"
+                    : "bg-rose-500"
+                }`}
+                style={{ width: `${synergy.overallScore}%` }}
+              />
+            </div>
+
+            {/* 3 Pillars Breakdown */}
+            <div className="grid gap-4 md:grid-cols-3 pt-2">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-400 uppercase text-[10px] flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-emerald-400" /> Tempo Juntos
+                  </span>
+                  <span className="font-black text-emerald-400">{synergy.sharedMatchesFactor.score}%</span>
+                </div>
+                <div className="text-lg font-black text-white">
+                  {synergy.sharedMatchesFactor.avgSharedMatches} jgs médios
+                </div>
+                <p className="text-[11px] text-slate-300">{synergy.sharedMatchesFactor.description}</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-400 uppercase text-[10px] flex items-center gap-1.5">
+                    <Compass className="h-3.5 w-3.5 text-sky-400" /> Familiaridade Tática
+                  </span>
+                  <span className="font-black text-sky-400">{synergy.tacticalFamiliarityFactor.score}%</span>
+                </div>
+                <div className="text-lg font-black text-white">
+                  {synergy.tacticalFamiliarityFactor.consecutiveMatches} rodadas ({tactics.formation})
+                </div>
+                <p className="text-[11px] text-slate-300">{synergy.tacticalFamiliarityFactor.description}</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-400 uppercase text-[10px] flex items-center gap-1.5">
+                    <Link2 className="h-3.5 w-3.5 text-indigo-400" /> Química Cultural
+                  </span>
+                  <span className="font-black text-indigo-400">{synergy.culturalChemistryFactor.score}%</span>
+                </div>
+                <div className="text-lg font-black text-white">
+                  {synergy.culturalChemistryFactor.compatriotPairsCount} conexões de idioma
+                </div>
+                <p className="text-[11px] text-slate-300">{synergy.culturalChemistryFactor.description}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sector Cohesion Breakdown */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Setor Defensivo
+                </span>
+                <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-black text-emerald-400">
+                  {synergy.sectors.defense.score}% • {synergy.sectors.defense.label}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
+                <div
+                  className="h-full bg-emerald-500"
+                  style={{ width: `${synergy.sectors.defense.score}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-300">{synergy.sectors.defense.description}</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Meio-Campo & Criação
+                </span>
+                <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-black text-sky-400">
+                  {synergy.sectors.midfield.score}% • {synergy.sectors.midfield.label}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
+                <div
+                  className="h-full bg-sky-500"
+                  style={{ width: `${synergy.sectors.midfield.score}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-300">{synergy.sectors.midfield.description}</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Ataque & Finalização
+                </span>
+                <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-black text-amber-400">
+                  {synergy.sectors.attack.score}% • {synergy.sectors.attack.label}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
+                <div
+                  className="h-full bg-amber-400"
+                  style={{ width: `${synergy.sectors.attack.score}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-300">{synergy.sectors.attack.description}</p>
+            </div>
+          </div>
+
+          {/* All Squad Partnerships Table */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm space-y-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <Link2 className="h-4 w-4 text-amber-400" />
+                  <span>Ranking de Parcerias do Elenco (Jogos Juntos)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Duplas com maior tempo de convivência e entrosamento dentro de campo.
+                </p>
+              </div>
+              <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-300">
+                {allSquadPartnerships.length} duplas consolidadas
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-slate-800 bg-slate-950/70 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="py-2.5 px-3">Parceria (Atletas)</th>
+                    <th className="py-2.5 px-3 text-center">Setor</th>
+                    <th className="py-2.5 px-3 text-center">Partidas Juntos</th>
+                    <th className="py-2.5 px-3 text-center">Nível de Entrosamento</th>
+                    <th className="py-2.5 pr-3 text-right">Afinidade Cultural</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {allSquadPartnerships.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        Nenhuma parceria com jogos registrados ainda. Conforme as rodadas forem disputadas, o entrosamento aparecerá aqui!
+                      </td>
+                    </tr>
+                  ) : (
+                    allSquadPartnerships.slice(0, 25).map((pair, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/40 transition">
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2 font-bold text-white">
+                            <span>{getPlayerDisplayName(pair.pA.name)}</span>
+                            <span className="text-slate-500 text-[10px]">({pair.pA.primaryPosition})</span>
+                            <span className="text-amber-400 text-xs">&</span>
+                            <span>{getPlayerDisplayName(pair.pB.name)}</span>
+                            <span className="text-slate-500 text-[10px]">({pair.pB.primaryPosition})</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                            {pair.sector}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-black text-emerald-400">
+                          {pair.sharedMatches} jogos
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold border ${pair.strengthInfo.strengthColor}`}
+                          >
+                            {pair.strengthInfo.strengthLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-3 text-right">
+                          {pair.isCompatriot ? (
+                            <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                              Compatriotas ({pair.pA.nationality})
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-[10px]">Multinacional</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Technical Staff Guidelines */}
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2 text-xs text-slate-200">
+            <div className="flex items-center gap-2 font-bold text-emerald-300 text-sm">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Diretrizes da Comissão Técnica para o Entrosamento</span>
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-slate-300">
+              <li>
+                <strong>Manter o time titular:</strong> Jogadores que acumulam mais de 8 a 12 partidas juntos ganham bônus expressivo de velocidade em tomadas de decisão.
+              </li>
+              <li>
+                <strong>Rodízio com critério:</strong> Trocar 5 ou mais titulares de uma só vez reduz temporariamente o entrosamento do setor afetado.
+              </li>
+              <li>
+                <strong>Estabilidade tática:</strong> Trocar de formação com frequência reinicia a familiaridade tática. Tente manter a mesma formação por pelo menos 4 a 6 jogos consecutivos.
+              </li>
+              <li>
+                <strong>Integração de reforços:</strong> Jogadores recém-contratados precisam de alguns jogos como titular ou entrando no 2º tempo para construir conexões com os companheiros.
+              </li>
+            </ul>
+          </div>
+        </div>
+      ) : (
+        /* INDIVIDUAL PERFORMANCE VIEW (EXISTING STRIP & TABLE) */
+        <>
+          {/* Aggregate Metrics Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -581,6 +952,8 @@ export const SquadPerformanceAnalysis: React.FC<SquadPerformanceAnalysisProps> =
           </table>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

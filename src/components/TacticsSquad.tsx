@@ -9,9 +9,12 @@ import {
   Shirt,
   GraduationCap,
   ChevronRight,
+  Flame,
+  Link2,
 } from "lucide-react";
 import type {
   Club,
+  ClubSynergyTracker,
   Formation,
   Mentality,
   PassingStyle,
@@ -20,6 +23,10 @@ import type {
   Tactics,
 } from "../types/game";
 import { autoPickLineup, computeTeamPower } from "../engine/matchEngine";
+import {
+  calculateTeamSynergy,
+  getOrCreateClubSynergyTracker,
+} from "../engine/synergyEngine";
 import {
   getFormationSlots,
   getOverallColor,
@@ -36,6 +43,7 @@ interface TacticsSquadProps {
   club: Club;
   players: Player[];
   tactics: Tactics;
+  synergyTracker?: ClubSynergyTracker;
   onChangeTactics: (next: Tactics) => void;
   onSelectPlayer: (player: Player) => void;
   onChangeShirtNumber?: (playerId: number, newNumber: number) => void;
@@ -49,6 +57,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   club,
   players,
   tactics,
+  synergyTracker,
   onChangeTactics,
   onSelectPlayer,
   onChangeShirtNumber,
@@ -80,7 +89,37 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
     .filter((p) => !tactics.starters.includes(p.id) && !tactics.bench.includes(p.id))
     .sort((a, b) => b.overall - a.overall);
 
-  const power = computeTeamPower(starters, tactics, true, club.capacity);
+  const tracker = useMemo(
+    () =>
+      synergyTracker ??
+      getOrCreateClubSynergyTracker(
+        {
+          clubs: [club],
+          players,
+          currentMatchweek: 1,
+          tacticsByClub: { [club.id]: tactics },
+        },
+        club.id
+      ),
+    [synergyTracker, club, players, tactics]
+  );
+
+  const synergy = useMemo(
+    () => calculateTeamSynergy(starters, tactics, tracker),
+    [starters, tactics, tracker]
+  );
+
+  const power = computeTeamPower(
+    starters,
+    tactics,
+    true,
+    club.capacity,
+    0,
+    undefined,
+    undefined,
+    undefined,
+    synergy
+  );
 
   const handleFormationChange = (formation: Formation) => {
     const picked = autoPickLineup(firstTeamPlayers, formation);
@@ -452,6 +491,122 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                   <div className="text-sm font-black text-emerald-400">{val}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Team Synergy & Chemistry Card */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Flame className="h-4 w-4 text-amber-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    Entrosamento da Equipe
+                  </span>
+                  <span className={`text-xs font-black ${synergy.tierColor}`}>
+                    {synergy.tierLabel}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black text-white">{synergy.overallScore}%</span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-black ${
+                      synergy.overallMultiplier >= 1
+                        ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40"
+                        : "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40"
+                    }`}
+                  >
+                    {synergy.bonusPercentFormatted} Força Tática
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-900 border border-slate-800">
+                <div
+                  className={`h-full transition-all duration-500 ${
+                    synergy.overallScore >= 80
+                      ? "bg-gradient-to-r from-emerald-500 to-amber-400"
+                      : synergy.overallScore >= 60
+                      ? "bg-emerald-500"
+                      : synergy.overallScore >= 45
+                      ? "bg-sky-500"
+                      : "bg-rose-500"
+                  }`}
+                  style={{ width: `${synergy.overallScore}%` }}
+                />
+              </div>
+
+              {/* 3 Pillars Breakdown */}
+              <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800/80">
+                  <div className="text-[10px] font-bold text-slate-400">Jogos Juntos</div>
+                  <div className="text-xs font-black text-white">
+                    {synergy.sharedMatchesFactor.avgSharedMatches} jgs
+                  </div>
+                  <div className="text-[9px] text-emerald-400 font-semibold truncate">
+                    {synergy.sharedMatchesFactor.label}
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800/80">
+                  <div className="text-[10px] font-bold text-slate-400">Familiaridade</div>
+                  <div className="text-xs font-black text-white">
+                    {synergy.tacticalFamiliarityFactor.consecutiveMatches} rodadas
+                  </div>
+                  <div className="text-[9px] text-sky-400 font-semibold truncate">
+                    {synergy.tacticalFamiliarityFactor.label}
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800/80">
+                  <div className="text-[10px] font-bold text-slate-400">Química Cultural</div>
+                  <div className="text-xs font-black text-white">
+                    {synergy.culturalChemistryFactor.compatriotPairsCount} conexões
+                  </div>
+                  <div className="text-[9px] text-indigo-400 font-semibold truncate">
+                    {synergy.culturalChemistryFactor.label}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sector Synergy Pills */}
+              <div className="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-slate-800/80 text-[11px]">
+                <span className="text-slate-400 font-semibold">Setores:</span>
+                <span className="text-slate-300">
+                  Defesa: <strong className="text-emerald-400">{synergy.sectors.defense.score}%</strong>
+                </span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-300">
+                  Meio: <strong className="text-emerald-400">{synergy.sectors.midfield.score}%</strong>
+                </span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-300">
+                  Ataque: <strong className="text-emerald-400">{synergy.sectors.attack.score}%</strong>
+                </span>
+              </div>
+
+              {/* Top Key Partnerships in this lineup */}
+              {synergy.topPartnerships.length > 0 && (
+                <div className="pt-1.5 border-t border-slate-800/80">
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                    <Link2 className="h-3 w-3 text-amber-400" />
+                    <span>Principais Parcerias no 11 Titular</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {synergy.topPartnerships.slice(0, 3).map((pair, idx) => (
+                      <span
+                        key={idx}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold border ${pair.strengthColor}`}
+                        title={`${pair.nameA} e ${pair.nameB} disputaram ${pair.sharedMatches} jogos juntos (${pair.strengthLabel})`}
+                      >
+                        <span className="text-white font-bold">
+                          {getPlayerDisplayName(pair.nameA)} & {getPlayerDisplayName(pair.nameB)}
+                        </span>
+                        <span className="opacity-80">({pair.sharedMatches}j)</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

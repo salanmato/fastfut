@@ -13,6 +13,7 @@ import type {
 } from "../types/game";
 import { getFormationSlots } from "../utils/format";
 import { evaluateShirtNumberAffinity } from "../utils/shirtNumbers";
+import type { TeamSynergyResult } from "./synergyEngine";
 
 export interface TeamPower {
   attack: number;
@@ -20,6 +21,9 @@ export interface TeamPower {
   defense: number;
   goalkeeper: number;
   overall: number;
+  synergyScore?: number;
+  synergyMultiplier?: number;
+  synergyTierLabel?: string;
 }
 
 export interface MatchStadiumMetrics {
@@ -30,6 +34,8 @@ export interface MatchStadiumMetrics {
   gateRevenueEur: number;
   homeBoost: number;
   homeAdvantagePct: number;
+  homeSynergy?: TeamSynergyResult;
+  awaySynergy?: TeamSynergyResult;
 }
 
 export interface LiveMatchSession {
@@ -65,6 +71,8 @@ export interface LiveMatchSession {
   stadiumCapacity: number;
   gateRevenueEur: number;
   homeAdvantagePct: number;
+  homeSynergy?: TeamSynergyResult;
+  awaySynergy?: TeamSynergyResult;
 }
 
 export function autoPickLineup(
@@ -219,10 +227,20 @@ export function computeTeamPower(
   redCards = 0,
   staminaOverrides?: Record<number, number>,
   stadiumConfig?: StadiumConfig,
-  attendanceOverride?: number
+  attendanceOverride?: number,
+  synergy?: TeamSynergyResult
 ): TeamPower {
   if (activePlayers.length === 0) {
-    return { attack: 60, midfield: 60, defense: 60, goalkeeper: 60, overall: 60 };
+    return {
+      attack: 60,
+      midfield: 60,
+      defense: 60,
+      goalkeeper: 60,
+      overall: 60,
+      synergyScore: synergy?.overallScore,
+      synergyMultiplier: synergy?.overallMultiplier,
+      synergyTierLabel: synergy?.tierLabel,
+    };
   }
 
   const getEff = (p: Player, val: number) => {
@@ -323,6 +341,13 @@ export function computeTeamPower(
     }
   }
 
+  // Synergy sector multipliers (entrosamento por setor e tempo juntos)
+  if (synergy) {
+    attMod *= synergy.sectors.attack.multiplier;
+    midMod *= synergy.sectors.midfield.multiplier;
+    defMod *= synergy.sectors.defense.multiplier;
+  }
+
   let homeBoost = 1.0;
   if (isHome) {
     const effectiveAttendance = attendanceOverride ?? Math.round(stadiumCapacity * 0.92);
@@ -342,7 +367,16 @@ export function computeTeamPower(
   const goalkeeper = Math.round(gkScore * (isHome ? 1.015 : 1.0) * 10) / 10;
   const overall = Math.round(((attack + midfield + defense + goalkeeper) / 4) * 10) / 10;
 
-  return { attack, midfield, defense, goalkeeper, overall };
+  return {
+    attack,
+    midfield,
+    defense,
+    goalkeeper,
+    overall,
+    synergyScore: synergy?.overallScore,
+    synergyMultiplier: synergy?.overallMultiplier,
+    synergyTierLabel: synergy?.tierLabel,
+  };
 }
 
 function weightedPick<T>(items: T[], weightFn: (item: T) => number): T {
@@ -365,7 +399,9 @@ export function initLiveMatchSession(
   referee: Referee,
   homeClub?: Club,
   awayClub?: Club,
-  homeStadiumConfig?: StadiumConfig
+  homeStadiumConfig?: StadiumConfig,
+  homeSynergy?: TeamSynergyResult,
+  awaySynergy?: TeamSynergyResult
 ): LiveMatchSession {
   const homeActiveIds = [...homeTactics.starters];
   const awayActiveIds = [...awayTactics.starters];
@@ -443,6 +479,8 @@ export function initLiveMatchSession(
     stadiumCapacity: stadiumMetrics.stadiumCapacity,
     gateRevenueEur: stadiumMetrics.gateRevenueEur,
     homeAdvantagePct: stadiumMetrics.homeAdvantagePct,
+    homeSynergy,
+    awaySynergy,
   };
 }
 
@@ -627,7 +665,8 @@ export function stepLiveMatchMinute(
     session.homeStats.redCards,
     session.playerStamina,
     homeStadiumConfig,
-    session.attendance
+    session.attendance,
+    session.homeSynergy
   );
   const awayPower = computeTeamPower(
     awayActive,
@@ -635,7 +674,10 @@ export function stepLiveMatchMinute(
     false,
     homeClub.capacity,
     session.awayStats.redCards,
-    session.playerStamina
+    session.playerStamina,
+    undefined,
+    undefined,
+    session.awaySynergy
   );
 
   // Drain stamina (home turf level reduces home fatigue)
@@ -1132,7 +1174,9 @@ export function simulateFullMatch(
   homeTactics: Tactics,
   awayTactics: Tactics,
   referee: Referee,
-  homeStadiumConfig?: StadiumConfig
+  homeStadiumConfig?: StadiumConfig,
+  homeSynergy?: TeamSynergyResult,
+  awaySynergy?: TeamSynergyResult
 ): MatchResult {
   const playerMap = new Map<number, Player>();
   for (const p of [...homePlayers, ...awayPlayers]) {
@@ -1147,7 +1191,9 @@ export function simulateFullMatch(
     referee,
     homeClub,
     awayClub,
-    homeStadiumConfig
+    homeStadiumConfig,
+    homeSynergy,
+    awaySynergy
   );
   while (!session.finished) {
     stepLiveMatchMinute(
