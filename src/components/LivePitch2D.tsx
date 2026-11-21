@@ -375,43 +375,58 @@ function computeRoleAttackTarget(
   if (isWingerSlot(label)) {
     let attY: number;
     if (localBallY > 60) {
-      // Deep build-up: wingers drop to offer diagonal passing outlets, NOT at the opponent box!
+      // Deep build-up: wingers drop to offer diagonal passing outlets
       attY = clamp(localBallY - 12 - mentalityShift * 0.6, 38, 65);
-    } else if (localBallY > 35) {
+    } else if (localBallY > 32) {
       // Progression: stay 8 to 12 units ahead of ball
       attY = clamp(localBallY - 10 - mentalityShift * 0.8 - counterBoost, 18, 48);
     } else {
-      // Final third: attack the box or stay on byline
-      attY = clamp(localBallY - 6 - (playPhase === "final_third" ? 4 : 0), 10, 28);
+      // Final third: ball-side attacks byline, weak-side attacks far post inside 6-yard box!
+      attY = ballOnMyFlank
+        ? clamp(localBallY - 4, 6.5, 22)
+        : clamp(localBallY - 5, 5.5, 15);
     }
 
-    // Ball-side winger stretches wide; weak-side winger cuts inside towards the far post
-    const cutInFactor = !ballOnMyFlank && attackProgress > 0.45 ? 0.45 : 0.08;
+    // Ball-side winger stretches wide; weak-side winger cuts inside aggressively towards far post
+    const cutInFactor = !ballOnMyFlank && attackProgress > 0.45 ? 0.62 : 0.08;
     const stretchX = ballOnMyFlank ? sideSign * 4 : 0;
-    const flankX = clamp(baseX * (1 - cutInFactor) + 50 * cutInFactor + stretchX, 8, 92);
+    const flankX = clamp(baseX * (1 - cutInFactor) + (50 - sideSign * 14) * cutInFactor + stretchX, 8, 92);
     return { x: flankX, y: attY };
   }
 
   // Striker (ST / CF):
-  // CONNECTED TO BALL: No longer isolated 30m ahead! Drops as target man in build-up, leads line in attack
+  // CONNECTED TO BALL: Leads the line and relentlessly attacks the goalmouth in final third!
   let attY: number;
+  let flankX: number;
   if (localBallY > 65) {
     // Team in defensive third: ST drops towards halfway line (48-56) as pivot / target man
     attY = clamp(localBallY - 16 + (tactics.passingStyle === "Short" ? 4 : 0), 46, 60);
-  } else if (localBallY > 40) {
+    const channelShift = (localBallX - 50) * 0.25;
+    flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
+  } else if (localBallY > 38) {
     // Midfield: ST stays 10 to 14 units ahead on the shoulder of CBs
     const lead = tactics.passingStyle === "Direct" ? 14 : tactics.passingStyle === "Short" ? 9 : 12;
-    attY = clamp(localBallY - lead - mentalityShift * 0.6 - counterBoost * 0.6, 22, 46);
+    attY = clamp(localBallY - lead - mentalityShift * 0.6 - counterBoost * 0.6, 20, 46);
+    const channelShift = (localBallX - 50) * 0.25;
+    flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
   } else if (localBallY > 22) {
-    // Final third: ST works between the CBs (6 to 9 units ahead)
-    attY = clamp(localBallY - 7 - mentalityShift * 0.5, 12, 26);
+    // Final third approach: ST works between the CBs (7 to 10 units ahead), attacking space
+    attY = clamp(localBallY - 8 - mentalityShift * 0.6, 8, 24);
+    const channelShift = (localBallX - 50) * 0.25;
+    flankX = clamp(baseX * 0.65 + (50 + channelShift) * 0.35, 30, 70);
   } else {
-    // Very deep in opponent area (winger at byline): ST drops to penalty spot for cutback!
-    attY = clamp(localBallY + 2, 10, 18);
+    // Inside the box / danger area: ST NEVER retreats! Attacking the 6-yard box and near/far post!
+    if (Math.abs(localBallX - 50) > 16) {
+      // Ball is on flank: ST charges the goalmouth / near post for cross/tap-in/header
+      attY = clamp(localBallY - 4, 5.5, 13);
+      flankX = clamp(50 + (localBallX > 50 ? 5 : -5), 34, 66);
+    } else {
+      // Ball is central: ST stays in front of goal, ready to finish
+      attY = clamp(localBallY - 6, 5.5, 14);
+      flankX = clamp(50 + (localBallX - 50) * 0.35, 36, 64);
+    }
   }
 
-  const channelShift = (localBallX - 50) * 0.25;
-  const flankX = clamp(baseX * 0.72 + (50 + channelShift) * 0.28, 28, 72);
   return { x: flankX, y: attY };
 }
 
@@ -605,12 +620,19 @@ function selectPassTarget(
   const pool = candidates.filter((id) => id !== carrierId);
   if (pool.length === 0) return carrierId;
 
+  const ballProgress = isHome
+    ? clamp((92 - ballPos.y) / 84, 0, 1)
+    : clamp((ballPos.y - 8) / 84, 0, 1);
+  const isFinalThird = ballProgress >= 0.70 || playPhase === "final_third";
+
   const scored = pool.map((id) => {
     const pos = coords[id] ?? { x: ballPos.x, y: ballPos.y };
     const dist = Math.hypot(pos.x - ballPos.x, pos.y - ballPos.y);
     const progress = (pos.y - ballPos.y) * dirY;
     const p = playerMap.get(id);
     const isGk = p?.roleCategory === "GK";
+    const isForward = p?.roleCategory === "ATT" || p?.primaryPosition === "CAM";
+    const inBox = isHome ? pos.y <= 24 : pos.y >= 76;
 
     let minOppDist = 30;
     for (const oc of oppCoords) {
@@ -627,7 +649,7 @@ function selectPassTarget(
       score += progress > -4 ? 1.1 : 0.3;
     } else if (tactics.passingStyle === "Direct") {
       score += progress > 11 ? 3.2 : progress > 2 ? 1.4 : 0.35;
-      if (p?.roleCategory === "ATT" || p?.primaryPosition === "CAM") score += 1.4;
+      if (isForward) score += 1.6;
     } else {
       score += progress > 3 ? 2.1 : progress > -4 ? 1.1 : 0.45;
       score += dist >= 10 && dist <= 38 ? 1.2 : 0.4;
@@ -637,8 +659,38 @@ function selectPassTarget(
       score *= 1.9;
     }
 
-    // Prefer open receivers away from tight marking
-    score *= clamp(0.55 + minOppDist / 18, 0.45, 1.65);
+    // FINAL THIRD AGGRESSION:
+    // Strikers and wingers in the box are prioritized for decisive finishes and crosses!
+    if (isFinalThird) {
+      if (isForward) score += 4.5;
+      if (inBox) score += 4.0;
+
+      // Crossing opportunity: Ball is on flank and target is central in the box
+      const ballWide = Math.abs(ballPos.x - 50) > 17;
+      const receiverCentral = Math.abs(pos.x - 50) < 22;
+      if (ballWide && receiverCentral && inBox) {
+        score += 5.5; // High priority driven cross or far-post delivery
+      }
+
+      // Suppress backward recycling passes when in the attacking danger area
+      if (progress < -7) {
+        const isDefenderOrCdm = p?.roleCategory === "DEF" || p?.primaryPosition === "CDM";
+        if (isDefenderOrCdm) {
+          score *= 0.12; // Do NOT pass backwards 30m when attacking the goal!
+        } else if ((p?.primaryPosition === "CAM" || p?.primaryPosition === "CM") && dist < 18) {
+          score += 2.2; // Cutback to the edge of the box for a shot is a great option
+        } else {
+          score *= 0.35;
+        }
+      }
+    }
+
+    // In the box, attackers are naturally marked closely: do not heavily penalize them!
+    const markingMult =
+      isFinalThird && isForward
+        ? clamp(0.9 + minOppDist / 30, 0.85, 1.35)
+        : clamp(0.55 + minOppDist / 18, 0.45, 1.65);
+    score *= markingMult;
     return { id, score };
   });
 
@@ -987,16 +1039,21 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         };
       }
 
-      // Bring attackers and defenders near the penalty box
+      // Bring attackers and defenders into the penalty box
       for (const id of attIds) {
         if (id === shooterId || id === assisterId) continue;
         const p = playerMap.get(id);
         if (!p || p.roleCategory === "GK") continue;
         const base = updated[id] ?? { x: 50, y: 50 };
-        const boxPull = p.roleCategory === "ATT" || p.roleCategory === "MID" ? 0.55 : 0.25;
+        const isAtt = p.roleCategory === "ATT";
+        const isMid = p.roleCategory === "MID" || p.primaryPosition === "CAM";
+        const boxPull = isAtt ? 0.72 : isMid ? 0.55 : 0.25;
+        const targetBoxY = isAtt
+          ? (attackingHome ? 11 + Math.random() * 5 : 89 - Math.random() * 5)
+          : (attackingHome ? 22 : 78);
         updated[id] = {
-          x: clamp(base.x * 0.75 + shooterCoord.x * 0.25, 10, 90),
-          y: clamp(base.y * (1 - boxPull) + (attackingHome ? 24 : 76) * boxPull, 8, 92),
+          x: clamp(base.x * 0.65 + shooterCoord.x * 0.35 + (isAtt ? (Math.random() * 8 - 4) : 0), 12, 88),
+          y: clamp(base.y * (1 - boxPull) + targetBoxY * boxPull, 7, 93),
         };
       }
       for (const id of defIds) {
@@ -1412,76 +1469,97 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ? clamp((92 - nextBallPos.y) / 84, 0, 1)
           : clamp((nextBallPos.y - 8) / 84, 0, 1);
         const dirY = prevIsHome ? -1 : 1;
-        const dribbleRate =
-          carrierPlayer?.roleCategory === "ATT" || carrierPlayer?.primaryPosition === "CAM"
-            ? 0.42
-            : carrierPlayer?.roleCategory === "MID"
-            ? 0.34
-            : 0.22;
+        const isForward =
+          carrierPlayer?.roleCategory === "ATT" ||
+          carrierPlayer?.primaryPosition === "CAM" ||
+          ["LW", "RW", "ST", "CF"].includes(carrierPlayer?.primaryPosition ?? "");
+        const goalDistY = prevIsHome ? nextBallPos.y - 4.5 : 95.5 - nextBallPos.y;
+        const isCentered = Math.abs(nextBallPos.x - 50) < 26;
 
-        if (progressNorm < 0.85 && Math.random() < dribbleRate) {
-          // Dribble progression along vertical axis: carrier drives forward or cuts inside
-          const paceBoost = ((carrierPlayer?.faceStats.dribbling ?? 72) - 65) * 0.08;
-          const stepY = (4.8 + Math.random() * 5.2 + Math.max(0, paceBoost)) * dirY;
-          const cutCenterX =
-            progressNorm > 0.6 ? (50 - nextBallPos.x) * 0.25 : Math.random() * 10 - 5;
-          nextBallPos = {
-            x: clamp(nextBallPos.x + cutCenterX + (Math.random() * 4 - 2), 8, 92),
-            y: clamp(nextBallPos.y + stepY, 6, 94),
-          };
-          curCoords[currentCarrierId] = nextBallPos;
-          setTrail(null);
-          if (flightRafRef.current === null) {
-            setBallVisual({ x: nextBallPos.x, y: nextBallPos.y, altitude: 0, isAerial: false });
+        // IN-THE-BOX AGGRESSION:
+        // When an attacker penetrates the final 22m, they don't give up: they test the keeper with a shot!
+        const shootProb = isForward
+          ? isCentered ? 0.44 : 0.28
+          : carrierPlayer?.roleCategory === "MID" && isCentered
+          ? 0.22
+          : 0.05;
+
+        const takeTickShot =
+          progressNorm >= 0.78 && goalDistY < 24 && Math.random() < shootProb;
+
+        if (takeTickShot) {
+          // Direct strike on goal!
+          const isNearPost = Math.random() < 0.45;
+          const goalX = isNearPost
+            ? clamp(nextBallPos.x * 0.4 + 50 * 0.6, 44, 56)
+            : 45 + Math.random() * 10;
+
+          const defTeamIds = prevIsHome ? cur.session.awayActiveIds : cur.session.homeActiveIds;
+          const defGkId = defTeamIds.find((id) => cur.playerMap.get(id)?.roleCategory === "GK");
+          const shotRoll = Math.random();
+
+          let finalTargetBall: Coord;
+          let nextBallOwnerId: number | null = null;
+          let nextClubIsHome = prevIsHome;
+
+          if (shotRoll < 0.52 && defGkId) {
+            // Goalkeeper dives to save/deflect!
+            finalTargetBall = {
+              x: clamp(goalX + (Math.random() * 6 - 3), 44, 56),
+              y: prevIsHome ? 4.5 : 95.5,
+            };
+            curCoords[defGkId] = { x: finalTargetBall.x, y: finalTargetBall.y };
+
+            if (Math.random() < 0.38) {
+              // Rebound loose ball into the 6-yard box for following attackers!
+              const reboundCoord: Coord = {
+                x: clamp(goalX + (Math.random() * 16 - 8), 26, 74),
+                y: prevIsHome ? 11 + Math.random() * 5 : 89 - Math.random() * 5,
+              };
+              nextBallPos = reboundCoord;
+              nextBallOwnerId = null; // Loose ball, scrambles in box!
+            } else {
+              nextBallPos = finalTargetBall;
+              nextBallOwnerId = defGkId;
+              nextClubIsHome = !prevIsHome;
+            }
+          } else if (shotRoll < 0.78) {
+            // Deflected by defender sliding across (corner or scramble)
+            finalTargetBall = {
+              x: clamp(goalX + (nextBallPos.x < 50 ? -8 : 8), 32, 68),
+              y: prevIsHome ? 8 + Math.random() * 6 : 92 - Math.random() * 6,
+            };
+            nextBallPos = finalTargetBall;
+            nextBallOwnerId = null;
+          } else {
+            // Shot whistles just wide of post or over bar
+            const wideX = Math.random() < 0.5 ? 38 + Math.random() * 3 : 59 + Math.random() * 3;
+            finalTargetBall = {
+              x: wideX,
+              y: prevIsHome ? 2.0 : 98.0,
+            };
+            nextBallPos = finalTargetBall;
+            if (defGkId) {
+              nextBallOwnerId = defGkId;
+              nextClubIsHome = !prevIsHome;
+            }
           }
-        } else {
-          // Tactical progressive pass
-          const receiverId = selectPassTarget(
-            prevActiveIds,
-            currentCarrierId,
-            prevIsHome,
-            currentTactics,
-            nextPhase,
-            nextBallPos,
-            curCoords,
-            oppCoordsList,
-            cur.playerMap
-          );
-          const receiverCoord = curCoords[receiverId] ?? nextBallPos;
-          const receiverRun = activeRunsRef.current.get(receiverId);
-          const leadX = receiverRun ? receiverRun.vx * 0.45 : Math.random() * 6 - 3;
-          const leadY = receiverRun ? receiverRun.vy * 0.45 : dirY * (2 + Math.random() * 4);
-          const targetBall: Coord = {
-            x: clamp(receiverCoord.x + leadX, 7, 93),
-            y: clamp(receiverCoord.y + leadY, 6, 94),
-          };
-
-          const passDist = Math.hypot(targetBall.x - nextBallPos.x, targetBall.y - nextBallPos.y);
-          const isCross =
-            Math.abs(nextBallPos.x - 50) > 20 &&
-            Math.abs(targetBall.x - 50) < 22 &&
-            (prevIsHome ? targetBall.y < 32 : targetBall.y > 68);
-          const isLongSwitch = passDist > 25;
-          const forceAerial =
-            isCross ||
-            isLongSwitch ||
-            (currentTactics.passingStyle === "Direct" && passDist > 18 && Math.random() < 0.65);
 
           const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
             nextBallPos.x,
             nextBallPos.y,
-            targetBall.x,
-            targetBall.y,
-            forceAerial,
-            isCross ? "cross" : "pass"
+            finalTargetBall.x,
+            finalTargetBall.y,
+            true,
+            "shot"
           );
 
           setTrail({
             x1: nextBallPos.x,
             y1: nextBallPos.y,
-            x2: targetBall.x,
-            y2: targetBall.y,
-            kind: isCross ? "cross" : "pass",
+            x2: finalTargetBall.x,
+            y2: finalTargetBall.y,
+            kind: "shot",
             isAerial,
             maxAltitude,
             curveX,
@@ -1491,17 +1569,108 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           triggerBallFlight(
             nextBallPos.x,
             nextBallPos.y,
-            targetBall.x,
-            targetBall.y,
+            finalTargetBall.x,
+            finalTargetBall.y,
             curveX,
             curveY,
             isAerial,
             maxAltitude,
-            Math.max(220, Math.min(520, passDist * 14))
+            330
           );
 
-          nextBallPos = targetBall;
-          nextCarrierId = receiverId;
+          nextBallPos = finalTargetBall;
+          nextCarrierId = nextBallOwnerId ?? currentCarrierId;
+          nextIsHome = nextClubIsHome;
+          nextPhase = "final_third";
+        } else {
+          const dribbleRate =
+            isForward ? 0.44 : carrierPlayer?.roleCategory === "MID" ? 0.34 : 0.22;
+
+          // Attackers drive with pace into the box right up to 0.94 progress!
+          if (progressNorm < 0.94 && Math.random() < dribbleRate) {
+            // Dribble progression along vertical axis: carrier drives forward or cuts inside
+            const paceBoost = ((carrierPlayer?.faceStats.dribbling ?? 72) - 65) * 0.08;
+            const stepY = (4.8 + Math.random() * 5.2 + Math.max(0, paceBoost)) * dirY;
+            const cutCenterX =
+              progressNorm > 0.6 ? (50 - nextBallPos.x) * 0.32 : Math.random() * 10 - 5;
+            nextBallPos = {
+              x: clamp(nextBallPos.x + cutCenterX + (Math.random() * 4 - 2), 8, 92),
+              y: clamp(nextBallPos.y + stepY, 6, 94),
+            };
+            curCoords[currentCarrierId] = nextBallPos;
+            setTrail(null);
+            if (flightRafRef.current === null) {
+              setBallVisual({ x: nextBallPos.x, y: nextBallPos.y, altitude: 0, isAerial: false });
+            }
+          } else {
+            // Decisive progressive pass / cross / cutback
+            const receiverId = selectPassTarget(
+              prevActiveIds,
+              currentCarrierId,
+              prevIsHome,
+              currentTactics,
+              nextPhase,
+              nextBallPos,
+              curCoords,
+              oppCoordsList,
+              cur.playerMap
+            );
+            const receiverCoord = curCoords[receiverId] ?? nextBallPos;
+            const receiverRun = activeRunsRef.current.get(receiverId);
+            const leadX = receiverRun ? receiverRun.vx * 0.45 : Math.random() * 6 - 3;
+            const leadY = receiverRun ? receiverRun.vy * 0.45 : dirY * (2 + Math.random() * 4);
+            const targetBall: Coord = {
+              x: clamp(receiverCoord.x + leadX, 7, 93),
+              y: clamp(receiverCoord.y + leadY, 6, 94),
+            };
+
+            const passDist = Math.hypot(targetBall.x - nextBallPos.x, targetBall.y - nextBallPos.y);
+            const isCross =
+              Math.abs(nextBallPos.x - 50) > 20 &&
+              Math.abs(targetBall.x - 50) < 22 &&
+              (prevIsHome ? targetBall.y < 32 : targetBall.y > 68);
+            const isLongSwitch = passDist > 25;
+            const forceAerial =
+              isCross ||
+              isLongSwitch ||
+              (currentTactics.passingStyle === "Direct" && passDist > 18 && Math.random() < 0.65);
+
+            const { curveX, curveY, isAerial, maxAltitude } = computeTrajectoryCurve(
+              nextBallPos.x,
+              nextBallPos.y,
+              targetBall.x,
+              targetBall.y,
+              forceAerial,
+              isCross ? "cross" : "pass"
+            );
+
+            setTrail({
+              x1: nextBallPos.x,
+              y1: nextBallPos.y,
+              x2: targetBall.x,
+              y2: targetBall.y,
+              kind: isCross ? "cross" : "pass",
+              isAerial,
+              maxAltitude,
+              curveX,
+              curveY,
+            });
+
+            triggerBallFlight(
+              nextBallPos.x,
+              nextBallPos.y,
+              targetBall.x,
+              targetBall.y,
+              curveX,
+              curveY,
+              isAerial,
+              maxAltitude,
+              Math.max(220, Math.min(520, passDist * 14))
+            );
+
+            nextBallPos = targetBall;
+            nextCarrierId = receiverId;
+          }
         }
       } else {
         // Possession turnover: closest defender intercepts and springs build-up or counter
@@ -1576,13 +1745,19 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         attackIds.includes(id)
       ).length;
 
-      if (attRunners < 3 && Math.random() < 0.55) {
+      if (attRunners < 3 && Math.random() < 0.65) {
         const eligible = attackIds.filter((id) => {
           const p = cur.playerMap.get(id);
           return id !== nextCarrierId && p?.roleCategory !== "GK" && !activeRunsRef.current.has(id);
         });
         if (eligible.length > 0) {
-          const runnerId = eligible[Math.floor(Math.random() * eligible.length)];
+          // If in final third, prioritize attackers making aggressive box runs
+          const sortedEligible = [...eligible].sort((a, b) => {
+            const pa = cur.playerMap.get(a)?.roleCategory === "ATT" ? 1 : 0;
+            const pb = cur.playerMap.get(b)?.roleCategory === "ATT" ? 1 : 0;
+            return pb - pa;
+          });
+          const runnerId = sortedEligible[0];
           const slotIdx = slotIndexRef.current.get(runnerId) ?? 5;
           const slot = attackSlots[Math.min(slotIdx, attackSlots.length - 1)];
           const duration = Math.round((3 + Math.floor(Math.random() * 4)) * ACTION_EVERY * 0.6);
@@ -1598,22 +1773,28 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             vy = attDirY * (10 + Math.random() * 8);
           } else if (isWingerSlot(slot.label)) {
             runType = nextPhase === "final_third" ? "cut_inside" : "in_behind";
-            vx = runType === "cut_inside" ? (50 - runnerCoord.x) * 0.35 : 0;
-            vy = attDirY * (9 + Math.random() * 8);
+            vx = runType === "cut_inside" ? (50 - runnerCoord.x) * 0.45 : 0;
+            vy = attDirY * (11 + Math.random() * 8);
           } else if (slot.roleCategory === "ATT") {
-            const dropsToFeet = Math.random() < 0.45 && currentProgress < 0.75;
+            // In final third or deep attack (currentProgress >= 0.50), attackers NEVER drop backwards!
+            const dropsToFeet = currentProgress < 0.45 && Math.random() < 0.35;
             if (dropsToFeet) {
               runType = "support";
-              vx = (nextBallPos.x - runnerCoord.x) * 0.3;
-              vy = attDirY * (-6 - Math.random() * 4); // Drops toward the ball to offer a passing option!
+              vx = (nextBallPos.x - runnerCoord.x) * 0.25;
+              vy = attDirY * (-4 - Math.random() * 3);
+            } else if (nextPhase === "final_third" || currentProgress >= 0.68) {
+              // Relentless box crash! Strikers charge the 6-yard box or near post
+              runType = "box_crash";
+              vx = (50 - runnerCoord.x) * 0.35 + (Math.random() * 6 - 3);
+              vy = attDirY * (12 + Math.random() * 8);
             } else {
               runType = "in_behind";
-              vx = Math.random() * 10 - 5;
-              vy = attDirY * (8 + Math.random() * 7);
+              vx = Math.random() * 8 - 4;
+              vy = attDirY * (10 + Math.random() * 7);
             }
           } else if (slot.label === "CM" || slot.label === "CAM") {
             runType = nextPhase === "final_third" || nextPhase === "counter" ? "box_crash" : "support";
-            vx = (nextBallPos.x - runnerCoord.x) * 0.2;
+            vx = (nextBallPos.x - runnerCoord.x) * 0.25;
             vy = runType === "box_crash" ? attDirY * (11 + Math.random() * 7) : attDirY * 5;
           }
 

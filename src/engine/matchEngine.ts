@@ -880,9 +880,15 @@ export function stepLiveMatchMinute(
     const stats = isHome ? session.homeStats : session.awayStats;
     const oppStats = isHome ? session.awayStats : session.homeStats;
 
-    // Average ~13.5 shots per team over ~93 minutes
-    const baseChanceProb = 0.132 + (attPower.attack - defPower.defense) * 0.0024 + (attPower.midfield - defPower.midfield) * 0.0014;
-    const clampedProb = Math.max(0.05, Math.min(0.26, baseChanceProb));
+    // Average ~13.5 shots per team over ~93 minutes, with attacking mentality & synergy impact
+    const mentalityBonus =
+      attTactics.mentality === "Attacking" ? 0.024 : attTactics.mentality === "Defensive" ? -0.018 : 0;
+    const baseChanceProb =
+      0.136 +
+      (attPower.attack - defPower.defense) * 0.0024 +
+      (attPower.midfield - defPower.midfield) * 0.0014 +
+      mentalityBonus;
+    const clampedProb = Math.max(0.06, Math.min(0.28, baseChanceProb));
     if (Math.random() > clampedProb) return;
 
     const attackers = attTeam.filter((p) => p.roleCategory !== "GK");
@@ -967,7 +973,14 @@ export function stepLiveMatchMinute(
       Math.min(0.62, 0.38 + (shooter.faceStats.shooting * shooterShirtMult - 72) * 0.004)
     );
     if (Math.random() > onTargetProb) {
-      if (xg >= 0.22) {
+      if (xg >= 0.16) {
+        const missTexts = [
+          `Finalização perigosa! ${shooter.name} (${clubName}) ganha na velocidade da marcação e chuta cruzado, assustando o goleiro!`,
+          `Quase o gol! ${shooter.name} (${clubName}) se antecipa ao zagueiro na área e finaliza de primeira, tirando tinta da trave!`,
+          `Pressão total! ${shooter.name} (${clubName}) recebe cruzamento açucarado e cabeceia com veneno por cima do travessão!`,
+          `Uhhh! ${shooter.name} (${clubName}) solta uma bomba da entrada da área que passa raspando o poste!`,
+        ];
+        const chosenText = missTexts[Math.floor(Math.random() * missTexts.length)];
         session.events.push({
           id: `miss-${session.fixtureId}-${min}-${shooter.id}-${stats.shots}`,
           minute: min,
@@ -975,7 +988,7 @@ export function stepLiveMatchMinute(
           clubId,
           playerId: shooter.id,
           playerName: shooter.name,
-          text: `Quase! ${shooter.name} (${clubName}) finaliza com perigo, mas a bola sai tirando tinta da trave.`,
+          text: chosenText,
         });
       }
       return;
