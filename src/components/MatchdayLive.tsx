@@ -338,6 +338,30 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
   };
 
   const handleCompleteRound = () => {
+    setIsPlaying(false);
+    for (const session of sessionsRef.current) {
+      if (session.finished) continue;
+      const hClub = clubMap.get(session.homeClubId);
+      const aClub = clubMap.get(session.awayClubId);
+      if (!hClub || !aClub) continue;
+      while (!session.finished) {
+        if (session.isHalftime) {
+          session.isHalftime = false;
+          session.secondHalfStarted = true;
+          session.minute = 45;
+        }
+        stepLiveMatchMinute(
+          session,
+          playerMap,
+          hClub,
+          aClub,
+          liveTacticsByClub[session.homeClubId],
+          liveTacticsByClub[session.awayClubId],
+          userClubId,
+          stadiumByClub[session.homeClubId]
+        );
+      }
+    }
     const results = sessionsRef.current.map((s) => finalizeMatchResult(s));
     onFinishMatchweek(results);
   };
@@ -1134,21 +1158,6 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
         </div>
       </div>
 
-      {/* Halftime Quick Banner - Compact & sleek */}
-      {isHalftime && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 shrink-0">
-          <div className="text-xs text-amber-200 truncate">
-            <strong>Intervalo ({userSession.homeGoals} x {userSession.awayGoals})</strong> — Ajuste a equipe na aba Tática e retome quando quiser.
-          </div>
-          <button
-            onClick={handleStartSecondHalf}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1 text-xs font-black text-slate-950 hover:bg-amber-300 transition shadow-sm shrink-0"
-          >
-            <Play className="h-3.5 w-3.5 fill-current" /> Iniciar 2º Tempo
-          </button>
-        </div>
-      )}
-
       {/* 2. Main Arena: 2D Pitch on Left, Integrated Tabs on Right */}
       <div className={`flex-1 min-h-0 grid gap-2 overflow-hidden ${pitchSize === "full" ? "grid-cols-1" : "lg:grid-cols-12"}`}>
         {/* Left Column: 2D Live Pitch & Ball Action */}
@@ -1173,6 +1182,8 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
             pitchSize={pitchSize}
             onPitchSizeChange={setPitchSize}
             isHalftime={isHalftime}
+            onStartSecondHalf={handleStartSecondHalf}
+            onFinishMatch={handleCompleteRound}
           />
         </div>
 

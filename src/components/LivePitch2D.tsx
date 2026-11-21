@@ -17,6 +17,8 @@ import {
   Sparkles,
   Clock,
   Pause,
+  Play,
+  CheckCircle2,
 } from "lucide-react";
 import type { Club, MatchEvent, Player, Tactics } from "../types/game";
 import type { LiveMatchSession } from "../engine/matchEngine";
@@ -49,6 +51,8 @@ interface LivePitch2DProps {
   pitchSize?: PitchSize;
   onPitchSizeChange?: (size: PitchSize) => void;
   isHalftime?: boolean;
+  onStartSecondHalf?: () => void;
+  onFinishMatch?: () => void;
 }
 
 const ACTION_EVERY = 4; // pitch ticks per ball action (pass / dribble / turnover)
@@ -781,6 +785,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   pitchSize: propPitchSize,
   onPitchSizeChange,
   isHalftime = false,
+  onStartSecondHalf,
+  onFinishMatch,
 }) => {
   const [pitchSizeState, setPitchSizeState] = useState<PitchSize>(() => {
     try {
@@ -2911,10 +2917,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           </div>
 
           {session.finished ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-              <Star className="h-3 w-3 text-amber-400" />
-              Notas Finais
-            </span>
+            <div className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                <Star className="h-3 w-3 text-amber-400" />
+                Notas Finais
+              </span>
+              {onFinishMatch && (
+                <button
+                  type="button"
+                  onClick={onFinishMatch}
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow-sm transition hover:bg-emerald-400"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Finalizar Partida</span>
+                </button>
+              )}
+            </div>
           ) : carrierPlayer ? (
             <div className="hidden lg:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-2 py-0.5 text-[11px] text-slate-300">
               <span
@@ -2958,10 +2976,22 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
             ) : null
           )}
           {isHalftime && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-black text-amber-300">
-              <Pause className="h-2.5 w-2.5 fill-current" />
-              Intervalo
-            </span>
+            <div className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                <Pause className="h-2.5 w-2.5 fill-current" />
+                Intervalo
+              </span>
+              {onStartSecondHalf && (
+                <button
+                  type="button"
+                  onClick={onStartSecondHalf}
+                  className="inline-flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow-sm transition hover:bg-amber-300"
+                >
+                  <Play className="h-3 w-3 fill-current" />
+                  <span>Iniciar 2º Tempo</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -3391,21 +3421,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 </div>
               </div>
             </div>
-          ) : banner.tone === "halftime" ? (
-            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2">
-              <div className="flex items-center gap-3 rounded-xl border border-amber-500/60 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(245,158,11,0.4)]">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-slate-950 shadow-md">
-                  <Pause className="h-4 w-4 fill-current" />
-                </div>
-                <div>
-                  <div className="text-[9px] uppercase tracking-widest text-amber-300 font-bold">
-                    {banner.text}
-                  </div>
-                  <div className="text-xs font-bold text-slate-300">{banner.scorerName}</div>
-                </div>
-              </div>
-            </div>
-          ) : banner.tone === "woodwork" ? (
+          ) : banner.tone === "halftime" ? null : banner.tone === "woodwork" ? (
             <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 animate-bounce">
               <div className="flex items-center gap-3 rounded-xl border-2 border-amber-400 bg-slate-950/95 backdrop-blur-md px-4 py-2 text-white shadow-[0_0_30px_rgba(251,191,36,0.65)]">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 text-sm font-black shadow-md">
@@ -3506,6 +3522,68 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
               </div>
             </div>
           ))}
+
+        {/* Interactive Halftime Overlay directly on top of the 2D Pitch */}
+        {isHalftime && !session.finished && (
+          <div className="absolute left-1/2 top-3 z-40 w-[92%] max-w-sm -translate-x-1/2">
+            <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-amber-400/80 bg-slate-950/95 backdrop-blur-md px-3.5 py-2 text-white shadow-[0_0_30px_rgba(245,158,11,0.5)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-slate-950 shadow-md">
+                  <Pause className="h-4 w-4 fill-current" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[9px] uppercase tracking-widest text-amber-300 font-black">
+                    Intervalo • Fim do 1ºT
+                  </div>
+                  <div className="truncate text-xs font-bold text-slate-200">
+                    {homeClub.shortName} {session.homeGoals} x {session.awayGoals} {awayClub.shortName}
+                  </div>
+                </div>
+              </div>
+              {onStartSecondHalf && (
+                <button
+                  type="button"
+                  onClick={onStartSecondHalf}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-amber-300 hover:scale-105 active:scale-95 cursor-pointer"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <span>Iniciar 2º Tempo</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Interactive Full-Time Overlay directly on top of the 2D Pitch */}
+        {session.finished && (
+          <div className="absolute left-1/2 top-3 z-40 w-[92%] max-w-sm -translate-x-1/2">
+            <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-emerald-400/80 bg-slate-950/95 backdrop-blur-md px-3.5 py-2 text-white shadow-[0_0_30px_rgba(16,185,129,0.5)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-slate-950 shadow-md">
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[9px] uppercase tracking-widest text-emerald-300 font-black">
+                    Fim de Jogo • Placar Final
+                  </div>
+                  <div className="truncate text-xs font-bold text-slate-200">
+                    {homeClub.shortName} {session.homeGoals} x {session.awayGoals} {awayClub.shortName}
+                  </div>
+                </div>
+              </div>
+              {onFinishMatch && (
+                <button
+                  type="button"
+                  onClick={onFinishMatch}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Finalizar Partida</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 22 Active Players (Sofascore Official Layout) */}
         {Array.from(playerPositions.entries()).map(([playerId, info]) => {
