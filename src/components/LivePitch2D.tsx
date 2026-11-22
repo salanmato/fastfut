@@ -17,7 +17,6 @@ import {
   Sparkles,
   Clock,
   Pause,
-  Play,
   CheckCircle2,
 } from "lucide-react";
 import type { Club, MatchEvent, Player, Tactics } from "../types/game";
@@ -51,8 +50,6 @@ interface LivePitch2DProps {
   pitchSize?: PitchSize;
   onPitchSizeChange?: (size: PitchSize) => void;
   isHalftime?: boolean;
-  onStartSecondHalf?: () => void;
-  onFinishMatch?: () => void;
 }
 
 const ACTION_EVERY = 4; // pitch ticks per ball action (pass / dribble / turnover)
@@ -849,8 +846,6 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
   pitchSize: propPitchSize,
   onPitchSizeChange,
   isHalftime = false,
-  onStartSecondHalf,
-  onFinishMatch,
 }) => {
   const [pitchSizeState, setPitchSizeState] = useState<PitchSize>(() => {
     try {
@@ -3983,16 +3978,6 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 <Star className="h-3 w-3 text-amber-400" />
                 Notas Finais
               </span>
-              {onFinishMatch && (
-                <button
-                  type="button"
-                  onClick={onFinishMatch}
-                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow-sm transition hover:bg-emerald-400"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Finalizar Partida</span>
-                </button>
-              )}
             </div>
           ) : liveAction ? (
             <div className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-950/90 px-2.5 py-1 text-[11px] text-slate-300 shadow-sm transition-all duration-150">
@@ -4104,16 +4089,6 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                 <Pause className="h-2.5 w-2.5 fill-current" />
                 Intervalo
               </span>
-              {onStartSecondHalf && (
-                <button
-                  type="button"
-                  onClick={onStartSecondHalf}
-                  className="inline-flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow-sm transition hover:bg-amber-300"
-                >
-                  <Play className="h-3 w-3 fill-current" />
-                  <span>Iniciar 2º Tempo</span>
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -4707,8 +4682,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           ))}
 
         {/* Interactive Halftime Overlay directly on top of the 2D Pitch */}
+        {/* Halftime Status Banner on top of the 2D Pitch */}
         {isHalftime && !session.finished && (
-          <div className="absolute left-1/2 top-3 z-40 w-[92%] max-w-sm -translate-x-1/2">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-40 w-[92%] max-w-sm -translate-x-1/2">
             <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-amber-400/80 bg-slate-950/95 backdrop-blur-md px-3.5 py-2 text-white shadow-[0_0_30px_rgba(245,158,11,0.5)]">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-slate-950 shadow-md">
@@ -4723,26 +4699,16 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   </div>
                 </div>
               </div>
-              {onStartSecondHalf && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetToCenterKickoff(false);
-                    onStartSecondHalf();
-                  }}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-amber-300 hover:scale-105 active:scale-95 cursor-pointer"
-                >
-                  <Play className="h-3.5 w-3.5 fill-current" />
-                  <span>Iniciar 2º Tempo</span>
-                </button>
-              )}
+              <span className="shrink-0 rounded-full border border-amber-400/40 bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold text-amber-300">
+                Aguardando 2ºT
+              </span>
             </div>
           </div>
         )}
 
-        {/* Interactive Full-Time Overlay directly on top of the 2D Pitch */}
+        {/* Full-Time Scoreboard Banner on top of the 2D Pitch */}
         {session.finished && (
-          <div className="absolute left-1/2 top-3 z-40 w-[92%] max-w-sm -translate-x-1/2">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-40 w-[92%] max-w-sm -translate-x-1/2">
             <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-emerald-400/80 bg-slate-950/95 backdrop-blur-md px-3.5 py-2 text-white shadow-[0_0_30px_rgba(16,185,129,0.5)]">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-slate-950 shadow-md">
@@ -4757,16 +4723,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                   </div>
                 </div>
               </div>
-              {onFinishMatch && (
-                <button
-                  type="button"
-                  onClick={onFinishMatch}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Finalizar Partida</span>
-                </button>
-              )}
+              <span className="shrink-0 rounded-full border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-[10px] font-bold text-emerald-300">
+                Apito Final
+              </span>
             </div>
           </div>
         )}

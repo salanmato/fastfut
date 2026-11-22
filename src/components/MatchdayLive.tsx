@@ -1180,7 +1180,7 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
                   </>
                 ) : (
                   <>
-                    <Play className="h-3.5 w-3.5 fill-current" /> <span className="hidden sm:inline">{isHalftime ? "Iniciar 2º Tempo" : "Retomar"}</span>
+                    <Play className="h-3.5 w-3.5 fill-current" /> <span className="hidden sm:inline">Retomar</span>
                   </>
                 )}
               </button>
@@ -1213,12 +1213,10 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               </button>
             </>
           ) : (
-            <button
-              onClick={handleCompleteRound}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-black text-slate-950 transition hover:bg-emerald-400"
-            >
-              <CheckCircle2 className="h-4 w-4" /> Finalizar Rodada
-            </button>
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Partida Concluída</span>
+            </div>
           )}
         </div>
       </div>
@@ -1353,8 +1351,6 @@ export const MatchdayLive: React.FC<MatchdayLiveProps> = ({
               pitchSize={pitchSize}
               onPitchSizeChange={setPitchSize}
               isHalftime={isHalftime}
-              onStartSecondHalf={handleStartSecondHalf}
-              onFinishMatch={handleCompleteRound}
             />
           </div>
 
