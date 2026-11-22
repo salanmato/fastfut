@@ -12,6 +12,7 @@ import {
 import type { Club, FACupState } from "../types/game";
 import { formatMoney } from "../utils/format";
 import { formatDatePtBr } from "../utils/calendar";
+import { getCupInfo } from "../engine/faCup";
 import { ClubBadge } from "./ClubBadge";
 
 interface FACupHubProps {
@@ -53,6 +54,7 @@ export const FACupHub: React.FC<FACupHubProps> = ({
 
   const clubMap = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
   const userClub = clubMap.get(userClubId);
+  const cupInfo = useMemo(() => getCupInfo(userClub), [userClub]);
   const currentRound = faCup.rounds[faCup.currentRoundIndex];
   const viewedRound = faCup.rounds[selectedRoundIdx] ?? currentRound;
   const champion = faCup.championClubId ? clubMap.get(faCup.championClubId) : undefined;
@@ -122,7 +124,7 @@ export const FACupHub: React.FC<FACupHubProps> = ({
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded bg-amber-400/15 border border-amber-400/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
-                <Trophy className="h-3.5 w-3.5" /> Emirates FA Cup {faCup.season}
+                <Trophy className="h-3.5 w-3.5" /> {cupInfo.shortName} {faCup.season}
               </span>
               <span
                 className={`rounded border px-2.5 py-0.5 text-[11px] font-bold ${userStatus.tone}`}
@@ -132,12 +134,11 @@ export const FACupHub: React.FC<FACupHubProps> = ({
             </div>
 
             <h2 className="text-2xl text-white">
-              Copa da Inglaterra — Mata-Mata Nacional (64 Clubes)
+              {cupInfo.name}
             </h2>
 
             <p className="text-xs text-slate-400">
-              Torneio eliminatório em jogo único envolvendo clubes da Premier League, Championship,
-              League One e League Two. Empates no tempo normal vão direto para os pênaltis.
+              {cupInfo.description}
             </p>
           </div>
 

@@ -46,6 +46,7 @@ import {
   createInitialFACupState,
   extractMatchweekDates,
   generateDivisionFixtures,
+  getCupInfo,
   simulateFACupRound,
 } from "./engine/faCup";
 import { formatMoney, formatWage } from "./utils/format";
@@ -236,7 +237,7 @@ function buildWindowMilestoneNews(
       matchweek,
       category: "transfer",
       title: "Janela de Pós-Temporada Aberta",
-      body: "Com o término da Premier League 2026/27, o mercado foi reaberto para reformulação do elenco.",
+      body: "Com o término da temporada regular 2026/27, o mercado foi reaberto para reformulação do elenco.",
     });
   }
 
@@ -434,11 +435,13 @@ export const App: React.FC = () => {
             ),
             extractMatchweekDates(rawDb.fixtures),
             referees,
-            clubId
+            clubId,
+            chosenDivision
           )
         : rawDb.fixtures.map((f) => ({ ...f }));
 
     const initialDate = getDefaultDateForMatchweek(fixtures, 1, false, clubId);
+    const cupInfo = getCupInfo(chosenClub);
     const newSave: SaveState = {
       version: 1,
       managerName,
@@ -456,7 +459,7 @@ export const App: React.FC = () => {
       currentDate: initialDate,
       shortlistIds: [],
       allowTransfersOutsideWindow: false,
-      faCup: createInitialFACupState(clubs),
+      faCup: createInitialFACupState(clubs, clubId),
       news: [
         {
           id: "welcome-1",
@@ -472,8 +475,8 @@ export const App: React.FC = () => {
           id: "welcome-2",
           matchweek: 1,
           category: "cup",
-          title: "Copa da Inglaterra 2026/27 (64 Clubes)",
-          body: "Todos os 64 clubes ingleses das 4 divisões disputam o mata-mata da Emirates FA Cup a partir da Rodada 10.",
+          title: `${cupInfo.name} 2026/27`,
+          body: cupInfo.description,
         },
         {
           id: "welcome-3",
@@ -816,7 +819,9 @@ export const App: React.FC = () => {
       seasonFinished
     );
 
-    const activeCup = save.faCup ?? createInitialFACupState(nextClubs);
+    const userClub = save.clubs.find((c) => c.id === save.userClubId);
+    const cupInfo = getCupInfo(userClub);
+    const activeCup = save.faCup ?? createInitialFACupState(nextClubs, save.userClubId);
     const dueCupRound = !seasonFinished
       ? activeCup.rounds.find(
           (r) => !r.completed && r.triggerMatchweek === nextMwValue
@@ -828,8 +833,8 @@ export const App: React.FC = () => {
             id: `fac-due-${nextMwValue}`,
             matchweek: nextMwValue,
             category: "cup",
-            title: `Copa da Inglaterra: ${dueCupRound.name} disponível!`,
-            body: `Os confrontos eliminatórios da ${dueCupRound.shortName} estão prontos. Acesse a aba FA Cup para simular a fase.`,
+            title: `${cupInfo.shortName}: ${dueCupRound.name} disponível!`,
+            body: `Os confrontos eliminatórios da ${dueCupRound.shortName} estão prontos. Acesse a aba ${cupInfo.shortName} para simular a fase.`,
           },
         ]
       : [];
@@ -925,7 +930,7 @@ export const App: React.FC = () => {
     const milestoneToast = offerToastMsg
       ? offerToastMsg
       : dueCupRound
-      ? `FA Cup liberada: ${dueCupRound.name}!`
+      ? `${cupInfo.shortName} liberada: ${dueCupRound.name}!`
       : milestoneNews[0]?.title;
     setToast(
       seasonFinished
@@ -942,7 +947,9 @@ export const App: React.FC = () => {
 
   const handleSimulateFACupRound = () => {
     if (!save) return;
-    const currentCup = save.faCup ?? createInitialFACupState(save.clubs);
+    const userClub = save.clubs.find((c) => c.id === save.userClubId);
+    const cupInfo = getCupInfo(userClub);
+    const currentCup = save.faCup ?? createInitialFACupState(save.clubs, save.userClubId);
     const activeRound = currentCup.rounds[currentCup.currentRoundIndex];
     if (!activeRound || activeRound.completed) return;
 
@@ -975,7 +982,7 @@ export const App: React.FC = () => {
         ? `${activeRound.shortName} concluída! Seu clube avançou e faturou +${formatMoney(
             userBonus
           )}.`
-        : headlines[0]?.title ?? `Copa da Inglaterra (${activeRound.shortName}) concluída!`
+        : headlines[0]?.title ?? `${cupInfo.shortName} (${activeRound.shortName}) concluída!`
     );
   };
 
@@ -1596,7 +1603,7 @@ export const App: React.FC = () => {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-300">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-        <p className="text-sm font-semibold">Carregando base de dados Premier League 2026/27...</p>
+        <p className="text-sm font-semibold">Carregando base de dados mundial 2026/27...</p>
       </div>
     );
   }
@@ -1748,13 +1755,14 @@ export const App: React.FC = () => {
                 { id: "stadium" as const, label: "Estádio", icon: Building2 },
                 {
                   id: "league" as const,
-                  label:
-                    !userClub.division || userClub.division === "Premier League"
-                      ? "Premier League"
-                      : "Liga & Divisões",
+                  label: userClub.league ?? userClub.division ?? "Liga & Divisões",
                   icon: Trophy,
                 },
-                { id: "facup" as const, label: "FA Cup", icon: Award },
+                {
+                  id: "facup" as const,
+                  label: getCupInfo(userClub).shortName,
+                  icon: Award,
+                },
                 { id: "market" as const, label: "Mercado", icon: ShoppingBag },
               ].map((item) => {
                 const Icon = item.icon;

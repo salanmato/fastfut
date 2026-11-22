@@ -114,7 +114,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           <div className="space-y-6 lg:col-span-6">
             <div>
               <div className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-300">
-                <Trophy className="h-3.5 w-3.5" /> Futebol Inglês 2026/27 • 4 Divisões + FA Cup
+                <Trophy className="h-3.5 w-3.5" /> 33 Ligas Mundiais • 554 Clubes • Temporada 2026/27
               </div>
               <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
                 Football Manager{" "}
@@ -126,7 +126,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </span>
               </h1>
               <p className="mt-2 max-w-xl text-sm text-slate-300">
-                Assuma o comando técnico e financeiro de um clube da Premier League, ajuste formações ao vivo no radar 2D e gerencie estádio, lesões e transferências.
+                Assuma o comando técnico e financeiro de um clube em 33 ligas mundiais, ajuste formações ao vivo no radar 2D e gerencie estádio, lesões e transferências.
               </p>
             </div>
 
@@ -177,8 +177,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     <div className="text-base font-black text-white">Novo Jogo</div>
                     <div className="text-xs text-slate-400">
                       {save
-                        ? "Escolher um novo clube entre 4 divisões da Inglaterra"
-                        : "Escolha entre 64 clubes (PL, Championship, League One e League Two)"}
+                        ? "Escolher um novo clube em 33 ligas mundiais"
+                        : "Escolha entre 554 clubes ao redor do mundo (Premier League, Brasileirão, LaLiga, etc.)"}
                     </div>
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-slate-800 bg-slate-950 py-3 text-center text-[11px] text-slate-400">
-        Football Manager 26/27 — Premier League • Dados: EA FC 27, Premier League 26/27, Transfermarkt & FIFA WC 2026
+        Football Manager 26/27 • 33 Ligas Mundiais • Dados: EA FC 27, Transfermarkt & FIFA WC 2026
       </footer>
 
       {/* Options & Database Modal */}

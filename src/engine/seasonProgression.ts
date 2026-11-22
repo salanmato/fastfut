@@ -21,7 +21,7 @@ export interface SeasonTransitionReport {
   newSeason: string;
   seasonNumber: number;
   userClubName: string;
-  userDivision: EnglishDivision;
+  userDivision: EnglishDivision | string;
   userRank: number;
   userPoints: number;
   isChampion: boolean;
@@ -43,31 +43,77 @@ export interface SeasonTransitionResult {
   report: SeasonTransitionReport;
 }
 
-function getLeaguePrizeMoney(rank: number, division: EnglishDivision): number {
-  if (division === "Premier League") {
-    return Math.max(6_000_000, Math.round((21 - rank) * 1_800_000 + 4_000_000));
+function getLeaguePrizeMoney(rank: number, division: string): number {
+  if (
+    division === "Premier League" ||
+    division === "LALIGA EA SPORTS" ||
+    division === "Serie A Enilive" ||
+    division === "Bundesliga" ||
+    division === "Ligue 1 McDonald's"
+  ) {
+    return Math.max(5_000_000, Math.round((21 - rank) * 1_600_000 + 4_000_000));
   }
-  if (division === "EFL Championship") {
+  if (
+    division === "Brasileirão Série A" ||
+    division === "ROSHN Saudi League" ||
+    division === "Major League Soccer" ||
+    division === "Liga Portugal" ||
+    division === "Eredivisie" ||
+    division === "Liga Profesional de Fútbol" ||
+    division === "UEFA Resto da Europa" ||
+    division === "CONMEBOL Sul-Americana" ||
+    division === "Liga BBVA MX" ||
+    division === "Trendyol Süper Lig"
+  ) {
+    return Math.max(3_000_000, Math.round((21 - rank) * 900_000 + 2_500_000));
+  }
+  if (
+    division === "EFL Championship" ||
+    division === "LALIGA HYPERMOTION" ||
+    division === "2. Bundesliga" ||
+    division === "Serie BKT" ||
+    division === "Ligue 2 BKT"
+  ) {
     return Math.max(2_000_000, Math.round((25 - rank) * 550_000 + 1_500_000));
   }
   if (division === "EFL League One") {
     return Math.max(800_000, Math.round((17 - rank) * 200_000 + 600_000));
   }
-  return Math.max(400_000, Math.round((5 - rank) * 150_000 + 300_000));
+  return Math.max(600_000, Math.round((13 - rank) * 150_000 + 400_000));
 }
 
-function getSeasonSponsorTvRevenue(division: EnglishDivision): number {
+function getSeasonSponsorTvRevenue(division: string): number {
   switch (division) {
     case "Premier League":
       return 30_000_000;
+    case "LALIGA EA SPORTS":
+    case "Serie A Enilive":
+    case "Bundesliga":
+    case "Ligue 1 McDonald's":
+      return 22_000_000;
+    case "Brasileirão Série A":
+    case "ROSHN Saudi League":
+    case "Major League Soccer":
+    case "Liga Portugal":
+    case "Eredivisie":
+    case "Liga Profesional de Fútbol":
+    case "UEFA Resto da Europa":
+    case "CONMEBOL Sul-Americana":
+    case "Liga BBVA MX":
+    case "Trendyol Süper Lig":
+      return 14_000_000;
     case "EFL Championship":
-      return 10_000_000;
+    case "LALIGA HYPERMOTION":
+    case "2. Bundesliga":
+    case "Serie BKT":
+    case "Ligue 2 BKT":
+      return 9_000_000;
     case "EFL League One":
       return 3_500_000;
     case "EFL League Two":
       return 1_500_000;
     default:
-      return 10_000_000;
+      return 6_000_000;
   }
 }
 
@@ -79,10 +125,12 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
   const nextSeasonNumber = (save.seasonNumber ?? 1) + 1;
 
   const userClub = save.clubs.find((c) => c.id === save.userClubId)!;
-  const userDiv = (userClub.division ?? "Premier League") as EnglishDivision;
+  const userDiv = (userClub.league ?? userClub.division ?? "Premier League") as string;
 
   // Compute standings for user's division
-  const divClubs = save.clubs.filter((c) => (c.division ?? "Premier League") === userDiv);
+  const divClubs = save.clubs.filter(
+    (c) => (c.league ?? c.division ?? "Premier League") === userDiv
+  );
   const standings = computeStandings(divClubs, save.fixtures);
   const userStandingIdx = standings.findIndex((s) => s.club.id === save.userClubId);
   const userRank = userStandingIdx >= 0 ? userStandingIdx + 1 : 1;
@@ -233,9 +281,58 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     }
   }
 
+  // Continental & International Tiers Promotion / Relegation
+  const tierPairs: Array<{ top: string; second: string; count: number }> = [
+    { top: "LALIGA EA SPORTS", second: "LALIGA HYPERMOTION", count: 3 },
+    { top: "Bundesliga", second: "2. Bundesliga", count: 2 },
+    { top: "Serie A Enilive", second: "Serie BKT", count: 3 },
+    { top: "Ligue 1 McDonald's", second: "Ligue 2 BKT", count: 2 },
+  ];
+
+  for (const pair of tierPairs) {
+    const topClubs = updatedClubs.filter((c) => (c.league ?? c.division) === pair.top);
+    const secClubs = updatedClubs.filter((c) => (c.league ?? c.division) === pair.second);
+    if (topClubs.length === 0 || secClubs.length === 0) continue;
+
+    let relIds: number[] = [];
+    let promIds: number[] = [];
+
+    if (userDiv === pair.top) {
+      relIds = standings.slice(Math.max(0, standings.length - pair.count)).map((s) => s.club.id);
+      promIds = [...secClubs].sort((a, b) => b.avgOverall - a.avgOverall).slice(0, pair.count).map((c) => c.id);
+    } else if (userDiv === pair.second) {
+      promIds = standings.slice(0, pair.count).map((s) => s.club.id);
+      relIds = [...topClubs].sort((a, b) => a.avgOverall - b.avgOverall).slice(0, pair.count).map((c) => c.id);
+    } else {
+      relIds = [...topClubs].sort((a, b) => a.avgOverall - b.avgOverall).slice(0, pair.count).map((c) => c.id);
+      promIds = [...secClubs].sort((a, b) => b.avgOverall - a.avgOverall).slice(0, pair.count).map((c) => c.id);
+    }
+
+    for (const id of relIds) {
+      const c = clubById.get(id);
+      if (c) {
+        c.division = pair.second;
+        c.league = pair.second;
+        c.tier = 2;
+        relegatedClubNames.push(c.name);
+        if (c.id === save.userClubId) userRelegated = true;
+      }
+    }
+    for (const id of promIds) {
+      const c = clubById.get(id);
+      if (c) {
+        c.division = pair.top;
+        c.league = pair.top;
+        c.tier = 1;
+        promotedClubNames.push(c.name);
+        if (c.id === save.userClubId) userPromoted = true;
+      }
+    }
+  }
+
   // 2. Budget & Prize Injection
   const userNewClub = clubById.get(save.userClubId)!;
-  const newDivision = (userNewClub.division ?? "Premier League") as EnglishDivision;
+  const newDivision = (userNewClub.league ?? userNewClub.division ?? "Premier League") as string;
   const leaguePrize = getLeaguePrizeMoney(userRank, userDiv);
   const tvSponsor = getSeasonSponsorTvRevenue(newDivision);
   const totalAdded = leaguePrize + tvSponsor;
@@ -352,7 +449,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
 
   // 5. Generate New Fixtures for User's New Division
   const newDivClubs = updatedClubs.filter(
-    (c) => (c.division ?? "Premier League") === newDivision
+    (c) => (c.league ?? c.division ?? "Premier League") === newDivision
   );
   const baseMatchweekDates = extractMatchweekDates(save.fixtures);
   const nextMatchweekDates = baseMatchweekDates.map((d) => addDaysIso(d, 364));
@@ -361,7 +458,8 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     newDivClubs,
     nextMatchweekDates,
     save.referees,
-    save.userClubId
+    save.userClubId,
+    newDivision
   );
 
   const initialDate = getDefaultDateForMatchweek(
@@ -371,8 +469,8 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     save.userClubId
   );
 
-  // 6. Reset FA Cup for the new season
-  const nextFaCup = createInitialFACupState(updatedClubs);
+  // 6. Reset Domestic Cup for the new season
+  const nextFaCup = createInitialFACupState(updatedClubs, save.userClubId);
 
   // 7. News Items for New Season
   const welcomeNews = [

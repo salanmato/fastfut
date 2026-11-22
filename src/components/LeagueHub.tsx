@@ -78,7 +78,7 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
   const divisionClubs = useMemo(
     () =>
       clubs
-        .filter((c) => (c.division ?? "Premier League") === selectedDivision)
+        .filter((c) => (c.league ?? c.division ?? "Premier League") === selectedDivision)
         .sort((a, b) => b.avgOverall - a.avgOverall || b.transferBudgetEur - a.transferBudgetEur),
     [clubs, selectedDivision]
   );
@@ -94,7 +94,7 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
       <div className="flex flex-wrap gap-2">
         {[
           { id: "table" as const, label: `Classificação (${userDivision})`, icon: Trophy },
-          { id: "divisions" as const, label: "Divisões da Inglaterra (64)", icon: Layers },
+          { id: "divisions" as const, label: "Todas as Ligas Mundiais (33)", icon: Layers },
           { id: "stats" as const, label: "Artilharia & Assistências", icon: Award },
           { id: "fixtures" as const, label: "Calendário (38 Rodadas)", icon: Calendar },
         ].map((tab) => {
@@ -208,7 +208,7 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
             </table>
           </div>
           <div className="flex flex-wrap gap-4 border-t border-slate-800 bg-slate-950/50 px-4 py-2.5 text-[11px] text-slate-400">
-            {userDivision === "Premier League" ? (
+            {userDivision === "Premier League" || userDivision === "LALIGA EA SPORTS" || userDivision === "Serie A Enilive" || userDivision === "Bundesliga" || userDivision === "Ligue 1 McDonald's" ? (
               <>
                 <span className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 1º–4º UEFA Champions League
@@ -217,16 +217,31 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
                   <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> 5º UEFA Europa League
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 18º–20º Rebaixamento
+                  <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> Zona de Rebaixamento
+                </span>
+              </>
+            ) : userDivision.includes("Brasileirão") ? (
+              <>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 1º–4º Libertadores (Fase de Grupos)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> 5º–6º Pré-Libertadores
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> 7º–12º Copa Sul-Americana
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 17º–20º Rebaixamento
                 </span>
               </>
             ) : (
               <>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Zona de Acesso / Título
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 1º Campeão / Vaga Continental
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> Playoffs de Acesso
+                  <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> Torneios Internacionais / Acesso
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> Zona de Rebaixamento
@@ -535,7 +550,7 @@ export const LeagueHub: React.FC<LeagueHubProps> = ({
                 >
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
                     <span className="inline-flex items-center gap-1.5">
-                      <span>{fx.date} • {fx.kickoffTimeUk} UK</span>
+                      <span>{fx.date} • {fx.kickoffTimeUk}</span>
                       <span className="text-slate-600">•</span>
                       <span className="inline-flex items-center gap-0.5 text-slate-300">
                         <MapPin className="h-2.5 w-2.5 text-emerald-400" /> {h.stadium}

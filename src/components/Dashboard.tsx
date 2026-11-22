@@ -32,6 +32,7 @@ import type { TransferWindowStatus } from "../utils/calendar";
 import { formatDateLongPtBr } from "../utils/calendar";
 import { computeMatchStadiumMetrics, computeTeamPower } from "../engine/matchEngine";
 import { formatMoney, formatWage, getOverallColor } from "../utils/format";
+import { getCupInfo } from "../engine/faCup";
 import { getClubVisuals } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
 import { ClubKit } from "./ClubKit";
@@ -92,7 +93,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigate,
   onSelectPlayer,
 }) => {
-  const userDivision = userClub.division ?? "Premier League";
+  const userDivision = userClub.league ?? userClub.division ?? "Premier League";
+  const cupInfo = getCupInfo(userClub);
   const currentCupRound = faCup ? faCup.rounds[faCup.currentRoundIndex] : undefined;
   const clubMap = new Map(clubs.map((c) => [c.id, c]));
   const playerMap = new Map(players.map((p) => [p.id, p]));
@@ -201,7 +203,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20"
             >
               <Trophy className="h-3.5 w-3.5" />
-              <span>FA Cup{currentCupRound ? ` (${currentCupRound.shortName})` : ""}</span>
+              <span>{cupInfo.shortName}{currentCupRound ? ` (${currentCupRound.shortName})` : ""}</span>
             </button>
           )}
           <button
@@ -288,7 +290,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" /> {nextFixture.date} •{" "}
-                  {nextFixture.kickoffTimeUk} (UK)
+                  {nextFixture.kickoffTimeUk}
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5 text-emerald-400" /> {homeClub.stadium} (

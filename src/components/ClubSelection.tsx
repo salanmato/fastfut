@@ -62,6 +62,45 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
   const [selectedId, setSelectedId] = useState<number>(clubs[0]?.id ?? 1);
   const [previewKit, setPreviewKit] = useState<"home" | "away">("home");
 
+  const handleFilterChange = (tabId: string) => {
+    setDivisionFilter(tabId);
+    const targetClubs =
+      tabId === "ALL"
+        ? clubs
+        : clubs.filter((c) => (c.league ?? c.division ?? "Premier League") === tabId);
+    if (targetClubs.length > 0) {
+      const alreadySelected = targetClubs.some((c) => c.id === selectedId);
+      if (!alreadySelected) {
+        const topClub = [...targetClubs].sort(
+          (a, b) => (a.tier ?? 1) - (b.tier ?? 1) || b.avgOverall - a.avgOverall
+        )[0];
+        if (topClub) setSelectedId(topClub.id);
+      }
+    }
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearch(query);
+    const q = query.trim().toLowerCase();
+    if (q.length >= 2) {
+      const match = clubs.find((c) => {
+        if (divisionFilter !== "ALL") {
+          const l = c.league ?? c.division ?? "Premier League";
+          if (l !== divisionFilter) return false;
+        }
+        return (
+          c.name.toLowerCase().includes(q) ||
+          c.city.toLowerCase().includes(q) ||
+          (c.country ?? "").toLowerCase().includes(q) ||
+          (c.manager ?? "").toLowerCase().includes(q)
+        );
+      });
+      if (match) {
+        setSelectedId(match.id);
+      }
+    }
+  };
+
   const sortedClubs = useMemo(() => {
     const q = search.trim().toLowerCase();
     return [...clubs]
@@ -115,14 +154,14 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                   </button>
                 )}
                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  <Trophy className="h-3.5 w-3.5" /> Database Unificada • {clubs.length} Clubes • 13 Ligas • 10 Países
+                  <Trophy className="h-3.5 w-3.5" /> Database Unificada • {clubs.length} Clubes • 33 Ligas Mundiais
                 </div>
               </div>
               <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
                 Football Manager <span className="text-emerald-400">26/27</span>
               </h1>
               <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
-                Escolha seu clube em qualquer uma das 13 ligas sincronizadas na database única (Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Brasileirão, Saudi Pro, MLS e mais).
+                Escolha seu clube em qualquer uma das 33 ligas mundiais (Premier League, Brasileirão, LaLiga, Serie A, Bundesliga, Ligue 1, Liga Argentina, Sul-Americana, MLS, Saudi Pro, e dezenas de ligas europeias e globais).
               </p>
             </div>
 
@@ -166,8 +205,8 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar clube ou cidade (ex: Arsenal, Wrexham, Leicester...)"
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Buscar clube ou cidade (ex: Flamengo, Real Madrid, Boca, Arsenal, Bayern...)"
               className="w-full rounded-xl border border-slate-800 bg-slate-900/80 py-2.5 pl-10 pr-4 text-sm text-white outline-none transition focus:border-emerald-500/60"
             />
           </div>
@@ -184,7 +223,7 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setDivisionFilter(tab.id)}
+                  onClick={() => handleFilterChange(tab.id)}
                   className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
                     divisionFilter === tab.id
                       ? "bg-emerald-500 text-slate-950"

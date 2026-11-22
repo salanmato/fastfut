@@ -80,13 +80,129 @@ function shuffleArray<T>(items: T[]): T[] {
   return arr;
 }
 
-export function createInitialFACupState(clubs: Club[]): FACupState {
+export function getLeagueTvBroadcaster(division?: string): string {
+  if (!division) return "Transmissão Oficial";
+  if (division === "Premier League") return "Sky Sports / TNT Sports";
+  if (division.includes("EFL")) return "Sky Sports+";
+  if (division.includes("Brasileirão")) return "Globo / Premiere / CazéTV";
+  if (division.includes("LALIGA")) return "DAZN / Movistar+";
+  if (division.includes("Serie A") || division.includes("Serie B")) return "DAZN / Sky Sport Italia";
+  if (division.includes("Bundesliga")) return "Sky Sport / DAZN Deutschland";
+  if (division.includes("Ligue 1") || division.includes("Ligue 2")) return "DAZN / beIN SPORTS";
+  if (division.includes("Liga Profesional")) return "ESPN Premium / TNT Sports Argentina";
+  if (division.includes("Sul-Americana")) return "ESPN / Disney+ / Paramount+";
+  if (division.includes("UEFA")) return "UEFA.tv / Prime Video";
+  if (division.includes("Liga Portugal")) return "Sport TV Portugal";
+  if (division.includes("Eredivisie")) return "ESPN Eredivisie";
+  if (division.includes("Major League Soccer")) return "Apple TV (MLS Season Pass)";
+  if (division.includes("Saudi")) return "Shahid / SSC Sports";
+  if (division.includes("Liga BBVA MX")) return "TUDN / ViX Premium";
+  if (division.includes("Scottish")) return "Sky Sports Scotland";
+  if (division.includes("Süper Lig")) return "beIN SPORTS Türkiye";
+  if (division.includes("Jupiler")) return "DAZN Belgium";
+  return "Transmissão Oficial";
+}
+
+export function getCupInfo(club?: Club): { name: string; shortName: string; description: string } {
+  const country = club?.country ?? "";
+  const league = club?.league ?? club?.division ?? "";
+  if (country === "Brasil" || league.includes("Brasileirão")) {
+    return {
+      name: "Copa do Brasil — Mata-Mata Nacional",
+      shortName: "Copa do Brasil",
+      description: "Torneio eliminatório nacional em jogo único com decisão por pênaltis em caso de empate.",
+    };
+  }
+  if (country === "Espanha" || league.includes("LALIGA")) {
+    return {
+      name: "Copa del Rey — Mata-Mata Nacional",
+      shortName: "Copa del Rey",
+      description: "O tradicional torneio de mata-mata espanhol com decisão por pênaltis em caso de empate.",
+    };
+  }
+  if (country === "Itália" || league.includes("Serie A") || league.includes("Serie B")) {
+    return {
+      name: "Coppa Italia — Mata-Mata Nacional",
+      shortName: "Coppa Italia",
+      description: "Torneio eliminatório nacional italiano com decisão por pênaltis em caso de empate.",
+    };
+  }
+  if (country === "Alemanha" || league.includes("Bundesliga")) {
+    return {
+      name: "DFB-Pokal — Copa da Alemanha",
+      shortName: "DFB-Pokal",
+      description: "Torneio de mata-mata alemão onde zebras históricas acontecem a cada fase.",
+    };
+  }
+  if (country === "França" || league.includes("Ligue 1") || league.includes("Ligue 2")) {
+    return {
+      name: "Coupe de France — Copa da França",
+      shortName: "Coupe de France",
+      description: "Mata-mata tradicional do futebol francês em jogo único com pênaltis em caso de empate.",
+    };
+  }
+  if (country === "Argentina" || league.includes("Liga Profesional")) {
+    return {
+      name: "Copa Argentina — Mata-Mata Nacional",
+      shortName: "Copa Argentina",
+      description: "Torneio eliminatório da Argentina reunindo os maiores clubes do país.",
+    };
+  }
+  if (country === "Estados Unidos" || league.includes("MLS") || league.includes("Major League Soccer")) {
+    return {
+      name: "Lamar Hunt US Open Cup",
+      shortName: "US Open Cup",
+      description: "Copa nacional dos Estados Unidos em formato mata-mata.",
+    };
+  }
+  if (country === "Arábia Saudita" || league.includes("Saudi")) {
+    return {
+      name: "King's Cup — Copa do Rei da Arábia",
+      shortName: "King's Cup",
+      description: "Torneio eliminatório do futebol saudita reunindo os gigantes da ROSHN Saudi League.",
+    };
+  }
+  return {
+    name: "Emirates FA Cup — Copa da Inglaterra",
+    shortName: "FA Cup",
+    description: "Torneio eliminatório em jogo único envolvendo clubes das principais divisões.",
+  };
+}
+
+export function createInitialFACupState(clubs: Club[], userClubId?: number): FACupState {
+  const userClub = userClubId ? clubs.find((c) => c.id === userClubId) : undefined;
+  const userCountry = userClub?.country ?? "Inglaterra";
+  const userLeague = userClub?.league ?? userClub?.division ?? "Premier League";
+
+  // Select clubs for domestic cup: prefer same country or league family
+  let candidateClubs = clubs.filter((c) => {
+    if (userCountry && userCountry !== "Outro" && c.country === userCountry) return true;
+    if (c.league === userLeague) return true;
+    return false;
+  });
+
+  if (candidateClubs.length < 16) {
+    const additional = [...clubs]
+      .filter((c) => !candidateClubs.some((existing) => existing.id === c.id))
+      .sort((a, b) => b.avgOverall - a.avgOverall);
+    candidateClubs = [...candidateClubs, ...additional];
+  }
+
+  if (userClub && !candidateClubs.some((c) => c.id === userClub.id)) {
+    candidateClubs.unshift(userClub);
+  }
+
   const usableCount =
-    clubs.length >= 64 ? 64 : clubs.length >= 32 ? 32 : clubs.length >= 16 ? 16 : 8;
+    candidateClubs.length >= 64 ? 64 : candidateClubs.length >= 32 ? 32 : candidateClubs.length >= 16 ? 16 : 8;
   const startRoundIndex =
     usableCount === 64 ? 0 : usableCount === 32 ? 1 : usableCount === 16 ? 2 : 3;
 
-  const pool = shuffleArray(clubs.slice(0, usableCount));
+  let poolClubs = candidateClubs.slice(0, usableCount);
+  if (userClub && !poolClubs.some((c) => c.id === userClub.id)) {
+    poolClubs[poolClubs.length - 1] = userClub;
+  }
+
+  const pool = shuffleArray(poolClubs);
   const initialTies: FACupTie[] = [];
   for (let i = 0; i < pool.length; i += 2) {
     initialTies.push({
@@ -273,13 +389,16 @@ export function simulateFACupRound(
     };
   });
 
+  const userClub = clubMap.get(userClubId);
+  const cupInfo = getCupInfo(userClub);
+
   if (userTieSummary) {
     headlines.push({
       id: `fac-user-${rIdx}-${Date.now()}`,
       matchweek: currentMatchweek,
       category: "cup",
       clubId: userClubId,
-      title: `Copa da Inglaterra (${round.shortName})`,
+      title: `${cupInfo.shortName} (${round.shortName})`,
       body: userTieSummary,
     });
   }
@@ -291,8 +410,8 @@ export function simulateFACupRound(
       id: `fac-upset-${rIdx}-${Date.now()}`,
       matchweek: currentMatchweek,
       category: "cup",
-      title: `ZEBRA NA FA CUP! ${biggest.winner.name} elimina ${biggest.loser.name}`,
-      body: `Surpresa na ${round.shortName}: ${biggest.score} (${biggest.winner.division ?? "EFL"} derruba clube da ${biggest.loser.division ?? "divisão superior"}).`,
+      title: `ZEBRA NA ${cupInfo.shortName.toUpperCase()}! ${biggest.winner.name} elimina ${biggest.loser.name}`,
+      body: `Surpresa na ${round.shortName}: ${biggest.score} (${biggest.winner.division ?? "divisão de acesso"} derruba clube da ${biggest.loser.division ?? "divisão superior"}).`,
     });
   }
 
@@ -333,8 +452,8 @@ export function simulateFACupRound(
       matchweek: currentMatchweek,
       category: "cup",
       clubId: champClub.id,
-      title: `${champClub.name} é CAMPEÃO da Copa da Inglaterra 2026/27!`,
-      body: `Em Wembley, o ${champClub.name} levantou a taça da Emirates FA Cup e levou o prêmio de ${formatMoney(
+      title: `${champClub.name} é CAMPEÃO da ${cupInfo.shortName} 2026/27!`,
+      body: `O ${champClub.name} levantou o troféu da ${cupInfo.name} e faturou a premiação de ${formatMoney(
         round.prizeEur
       )}!`,
     });
@@ -370,7 +489,8 @@ export function generateDivisionFixtures(
   divisionClubs: Club[],
   allMatchweekDates: string[],
   referees: Referee[],
-  userClubId?: number
+  userClubId?: number,
+  divisionName?: string
 ): Fixture[] {
   // Select up to 20 clubs (always keeping userClubId) for a balanced 38-matchweek season
   let activePool = [...divisionClubs].sort((a, b) => b.avgOverall - a.avgOverall);
@@ -380,13 +500,21 @@ export function generateDivisionFixtures(
     activePool = userClub ? [userClub, ...others] : others;
   }
 
-  // Ensure even team count
+  // Ensure even team count without removing user club
   if (activePool.length % 2 !== 0 && activePool.length > 2) {
-    activePool = activePool.slice(0, activePool.length - 1);
+    if (userClubId && activePool[activePool.length - 1].id === userClubId) {
+      activePool.splice(activePool.length - 2, 1);
+    } else {
+      activePool.pop();
+    }
   }
 
   const n = activePool.length;
   if (n < 2) return [];
+
+  const tvChannel = getLeagueTvBroadcaster(
+    divisionName ?? divisionClubs[0]?.league ?? divisionClubs[0]?.division ?? "Premier League"
+  );
 
   // Build canonical single round-robin legs using circle method
   const ids = activePool.map((c) => c.id);
@@ -429,7 +557,7 @@ export function generateDivisionFixtures(
         kickoffTimeUk: "15:00",
         homeClubId,
         awayClubId,
-        tvBroadcaster: "EFL / Sky Sports+",
+        tvBroadcaster: tvChannel,
         refereeId: ref.id,
         played: false,
         homeGoals: null,
