@@ -158,6 +158,54 @@ export const CLUB_VISUAL_CATALOG: Record<string, ClubVisualSpec> = {
     homeKit: { primary: "#F8FAFC", secondary: "#132257", trim: "#132257", pattern: "sleeves" },
     awayKit: { primary: "#132257", secondary: "#38BDF8", trim: "#FFFFFF", pattern: "solid" },
   },
+  "River Plate": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/209.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#FFFFFF", secondary: "#EE1C25", trim: "#111111", pattern: "sash" },
+    awayKit: { primary: "#111827", secondary: "#EE1C25", trim: "#FFFFFF", pattern: "sash" },
+  },
+  "Boca Juniors": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/189.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#002B49", secondary: "#FEE100", trim: "#FFFFFF", pattern: "sash" },
+    awayKit: { primary: "#FFFFFF", secondary: "#002B49", trim: "#FEE100", pattern: "sash" },
+  },
+  "Celtic FC": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/371.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#008000", secondary: "#FFFFFF", trim: "#00482B", pattern: "stripes" },
+    awayKit: { primary: "#F8FAFC", secondary: "#008000", trim: "#111111", pattern: "solid" },
+  },
+  "Rangers FC": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/124.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#0047AB", secondary: "#FFFFFF", trim: "#E30613", pattern: "solid" },
+    awayKit: { primary: "#FFFFFF", secondary: "#0047AB", trim: "#E30613", pattern: "solid" },
+  },
+  Galatasaray: {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/141.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#A90432", secondary: "#FDB912", trim: "#FFFFFF", pattern: "stripes" },
+    awayKit: { primary: "#FFFFFF", secondary: "#A90432", trim: "#FDB912", pattern: "solid" },
+  },
+  Fenerbahçe: {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/36.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#002366", secondary: "#FFFF00", trim: "#FFFFFF", pattern: "stripes" },
+    awayKit: { primary: "#FFFFFF", secondary: "#002366", trim: "#FFFF00", pattern: "solid" },
+  },
+  "Club América": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/3631.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#FFFF99", secondary: "#002B49", trim: "#E30613", pattern: "solid" },
+    awayKit: { primary: "#002B49", secondary: "#FFFF99", trim: "#E30613", pattern: "solid" },
+  },
+  "Chivas Guadalajara": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/6711.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#E30613", secondary: "#FFFFFF", trim: "#002B49", pattern: "stripes" },
+    awayKit: { primary: "#002B49", secondary: "#E30613", trim: "#FFFFFF", pattern: "solid" },
+  },
 };
 
 export function getClubVisuals(
