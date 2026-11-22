@@ -103,31 +103,79 @@ export function autoPickLineup(
   const healthy = players.filter((p) => (p.injuryMatchesLeft ?? 0) === 0);
   const injured = players.filter((p) => (p.injuryMatchesLeft ?? 0) > 0);
   const available = healthy.length >= 11 ? [...healthy] : [...healthy, ...injured];
-  const starters: number[] = [];
 
   const effectiveOvr = (p: Player) =>
     p.roleCategory === "GK"
       ? p.overall * (0.92 + 0.08 * (p.stamina / 100))
       : p.overall * (0.65 + 0.35 * (p.stamina / 100));
 
-  for (const slot of slots) {
+  // Prioritize specialized tactical roles (GK, ST, Wingers, Fullbacks) so specialists
+  // are locked into their natural starting slots before generic midfield slots can misassign them.
+  const getSlotPriority = (slot: (typeof slots)[number]): number => {
+    const mainPos = slot.preferredPositions[0];
+    if (mainPos === "GK") return 1;
+    if (mainPos === "ST" || mainPos === "CF") return 2;
+    if (mainPos === "RW" || mainPos === "RM" || mainPos === "LW" || mainPos === "LM") return 3;
+    if (mainPos === "CB") return 4;
+    if (mainPos === "LB" || mainPos === "LWB" || mainPos === "RB" || mainPos === "RWB") return 5;
+    if (mainPos === "CDM") return 6;
+    if (mainPos === "CAM") return 7;
+    return 8; // CM
+  };
+
+  const sortedSlots = slots
+    .map((s, idx) => ({ slot: s, originalIndex: idx, priority: getSlotPriority(s) }))
+    .sort((a, b) => a.priority - b.priority);
+
+  const starters: Array<number | null> = new Array(slots.length).fill(null);
+
+  for (const { slot, originalIndex } of sortedSlots) {
     let bestIdx = -1;
-    let bestScore = -1;
+    let bestScore = -99999;
 
     for (let i = 0; i < available.length; i++) {
       const p = available[i];
+      const eff = effectiveOvr(p);
+      const pPos = p.primaryPosition;
+      const positions = p.positions ?? [pPos];
+      const mainSlotPos = slot.preferredPositions[0];
+
       let posBonus = 0;
-      if (p.primaryPosition === slot.preferredPositions[0]) {
-        posBonus = 18;
-      } else if (slot.preferredPositions.some((pos) => p.positions.includes(pos))) {
-        posBonus = 12;
+
+      if (slot.roleCategory === "GK") {
+        posBonus = p.roleCategory === "GK" ? 120 : -500;
+      } else if (p.roleCategory === "GK") {
+        posBonus = -500;
+      } else if (pPos === mainSlotPos) {
+        // Exact primary position match
+        posBonus = 48;
+      } else if (
+        (mainSlotPos in { RW: 1, RM: 1 } && pPos in { RW: 1, RM: 1 }) ||
+        (mainSlotPos in { LW: 1, LM: 1 } && pPos in { LW: 1, LM: 1 }) ||
+        (mainSlotPos in { ST: 1, CF: 1 } && pPos in { ST: 1, CF: 1 }) ||
+        (mainSlotPos in { RB: 1, RWB: 1 } && pPos in { RB: 1, RWB: 1 }) ||
+        (mainSlotPos in { LB: 1, LWB: 1 } && pPos in { LB: 1, LWB: 1 })
+      ) {
+        // Natural flank & striker equivalences (e.g. RM playing RW)
+        posBonus = 46;
+      } else if (slot.preferredPositions.includes(pPos)) {
+        // Primary position is in slot preferences (e.g. CAM in CM slot)
+        posBonus = 44;
+      } else if (positions.includes(mainSlotPos)) {
+        // Secondary position is exact match for slot
+        posBonus = 42;
+      } else if (slot.preferredPositions.some((pos) => positions.includes(pos))) {
+        // Secondary position is in slot preferences
+        posBonus = 38;
       } else if (p.roleCategory === slot.roleCategory) {
-        posBonus = 6;
-      } else if (slot.roleCategory === "GK" || p.roleCategory === "GK") {
+        // Same broad category (MID, DEF, ATT)
+        posBonus = 12;
+      } else {
+        // Mismatch
         posBonus = -45;
       }
 
-      const score = effectiveOvr(p) + posBonus;
+      const score = eff + posBonus;
       if (score > bestScore) {
         bestScore = score;
         bestIdx = i;
@@ -135,10 +183,12 @@ export function autoPickLineup(
     }
 
     if (bestIdx >= 0) {
-      starters.push(available[bestIdx].id);
+      starters[originalIndex] = available[bestIdx].id;
       available.splice(bestIdx, 1);
     }
   }
+
+  const finalStarters = starters.filter((id): id is number => id !== null);
 
   // Pick 7 balanced bench players (1 GK, 2 DEF, 2 MID, 2 ATT)
   const bench: number[] = [];
@@ -165,7 +215,7 @@ export function autoPickLineup(
     bench.push(next.id);
   }
 
-  return { starters, bench };
+  return { starters: finalStarters, bench };
 }
 
 export function createDefaultTactics(players: Player[], clubAvgOverall: number): Tactics {
