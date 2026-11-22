@@ -70,7 +70,7 @@
 /* Dynamic Flat Club Theme Surfaces (100% solid opaque fills) */
 .club-theme-root {
   background-image: none !important;
-  transition: background-color 250ms ease;
+  transition: background-color 250ms ease, color 250ms ease;
 }
 
 .club-theme-root .bg-slate-900,
@@ -80,21 +80,120 @@
 .club-theme-root .bg-slate-900\/85,
 .club-theme-root .bg-slate-900\/90,
 .club-theme-root .bg-slate-900\/95 {
-  background-color: color-mix(in srgb, var(--club-surface, #111827) 100%, #000000) !important;
+  background-color: var(--club-surface, #111827) !important;
 }
 
+.club-theme-root .bg-slate-950,
 .club-theme-root .bg-slate-950\/50,
 .club-theme-root .bg-slate-950\/60,
 .club-theme-root .bg-slate-950\/70,
 .club-theme-root .bg-slate-950\/75,
-.club-theme-root .bg-slate-950\/80 {
-  background-color: color-mix(in srgb, var(--club-bg-base, #090d16) 100%, #000000) !important;
+.club-theme-root .bg-slate-950\/80,
+.club-theme-root .bg-slate-950\/90 {
+  background-color: var(--club-bg-base, #090d16) !important;
 }
 
 .club-theme-root .border-slate-800,
 .club-theme-root .border-slate-800\/80,
 .club-theme-root .border-slate-800\/90 {
   border-color: var(--club-border, #1e293b) !important;
+}
+
+/* Light Theme Overrides (Uniforme 2 / Tema Claro) */
+.club-theme-root.theme-light {
+  color: #0f172a !important;
+}
+
+.club-theme-root.theme-light .bg-slate-900,
+.club-theme-root.theme-light .bg-slate-900\/70,
+.club-theme-root.theme-light .bg-slate-900\/75,
+.club-theme-root.theme-light .bg-slate-900\/80,
+.club-theme-root.theme-light .bg-slate-900\/85,
+.club-theme-root.theme-light .bg-slate-900\/90,
+.club-theme-root.theme-light .bg-slate-900\/95 {
+  background-color: #ffffff !important;
+  color: #0f172a;
+}
+
+.club-theme-root.theme-light .bg-slate-950,
+.club-theme-root.theme-light .bg-slate-950\/50,
+.club-theme-root.theme-light .bg-slate-950\/60,
+.club-theme-root.theme-light .bg-slate-950\/70,
+.club-theme-root.theme-light .bg-slate-950\/75,
+.club-theme-root.theme-light .bg-slate-950\/80,
+.club-theme-root.theme-light .bg-slate-950\/90 {
+  background-color: #f1f5f9 !important;
+}
+
+.club-theme-root.theme-light .bg-slate-800,
+.club-theme-root.theme-light .bg-slate-800\/50,
+.club-theme-root.theme-light .bg-slate-800\/60,
+.club-theme-root.theme-light .bg-slate-800\/80 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a;
+}
+
+.club-theme-root.theme-light .border-slate-800,
+.club-theme-root.theme-light .border-slate-800\/80,
+.club-theme-root.theme-light .border-slate-800\/90,
+.club-theme-root.theme-light .border-slate-700,
+.club-theme-root.theme-light .border-slate-700\/80 {
+  border-color: #e2e8f0 !important;
+}
+
+.club-theme-root.theme-light .text-slate-100,
+.club-theme-root.theme-light .text-slate-200 {
+  color: #0f172a !important;
+}
+
+.club-theme-root.theme-light .text-slate-300,
+.club-theme-root.theme-light .text-slate-400 {
+  color: #334155 !important;
+}
+
+.club-theme-root.theme-light .text-slate-500 {
+  color: #64748b !important;
+}
+
+.club-theme-root.theme-light h1.text-white,
+.club-theme-root.theme-light h2.text-white,
+.club-theme-root.theme-light h3.text-white,
+.club-theme-root.theme-light span.text-white:not([class*="bg-emerald"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-sky"]):not([class*="bg-purple"]):not([class*="bg-indigo"]):not([class*="bg-red"]):not([class*="bg-blue"]):not([class*="bg-green"]),
+.club-theme-root.theme-light div.text-white:not([class*="bg-emerald"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-sky"]):not([class*="bg-purple"]):not([class*="bg-indigo"]):not([class*="bg-red"]):not([class*="bg-blue"]):not([class*="bg-green"]),
+.club-theme-root.theme-light p.text-white,
+.club-theme-root.theme-light strong.text-white {
+  color: #0f172a !important;
+}
+
+.club-theme-root.theme-light input:not([type="checkbox"]):not([type="radio"]),
+.club-theme-root.theme-light select,
+.club-theme-root.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.club-theme-root.theme-light .bg-black\/20,
+.club-theme-root.theme-light .bg-black\/25,
+.club-theme-root.theme-light .bg-black\/30,
+.club-theme-root.theme-light .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.club-theme-root.theme-light .border-white\/10,
+.club-theme-root.theme-light .border-white\/15,
+.club-theme-root.theme-light .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+.club-theme-root.theme-light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.club-theme-root.theme-light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+.club-theme-root.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* Flat solid scrollbar */

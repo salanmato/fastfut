@@ -16,6 +16,8 @@ import {
   ShoppingBag,
   HeartPulse,
   Calendar as CalendarIcon,
+  Sun,
+  Moon,
 } from "lucide-react";
 import type { RawDatabase, SaveState, StandingRow } from "../types/game";
 import { formatMoney } from "../utils/format";
@@ -412,9 +414,16 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                   </div>
                   <button
                     onClick={onToggleKitTheme}
-                    className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700 transition"
                   >
-                    {kitTheme === "home" ? "Uniforme 1" : "Uniforme 2"}
+                    {palette?.isLight ? (
+                      <Sun className="h-3 w-3 text-amber-400 fill-amber-400" />
+                    ) : (
+                      <Moon className="h-3 w-3 text-sky-400 fill-sky-400" />
+                    )}
+                    <span>
+                      {kitTheme === "home" ? "Uniforme 1 (Escuro)" : "Uniforme 2 (Claro)"}
+                    </span>
                   </button>
                 </div>
 

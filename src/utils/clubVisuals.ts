@@ -192,6 +192,7 @@ export function getClubVisuals(
 
 export interface KitThemePalette {
   variant: "home" | "away";
+  isLight: boolean;
   kit: KitSpec;
   bgBase: string;
   bgSurface: string;
@@ -237,7 +238,57 @@ export function getKitThemePalette(
 ): KitThemePalette {
   const visuals = getClubVisuals(club);
   const kit = variant === "home" ? visuals.homeKit : visuals.awayKit;
+  const isLight = variant === "away";
 
+  if (isLight) {
+    // Light Theme (Uniforme 2 / Reserva)
+    const bgBase = mixHex(kit.primary, "#f1f5f9", 0.05);
+    const bgSurface = "#ffffff";
+    const bgHeader = "#ffffff";
+    const borderTint = "#e2e8f0";
+    const accentPrimary = kit.primary;
+    const accentText = relativeLuminance(accentPrimary) > 0.48 ? "#0f172a" : "#ffffff";
+
+    const pageBackgroundStyle: CSSProperties = {
+      backgroundColor: bgBase,
+      backgroundImage: "none",
+    };
+
+    const headerStyle: CSSProperties = {
+      backgroundColor: bgHeader,
+      borderBottomColor: accentPrimary,
+      borderBottomWidth: "2px",
+    };
+
+    const cssVars = {
+      "--club-primary": accentPrimary,
+      "--club-secondary": kit.secondary,
+      "--club-trim": kit.trim,
+      "--club-bg-base": bgBase,
+      "--club-surface": bgSurface,
+      "--club-border": borderTint,
+      "--club-header": bgHeader,
+    } as CSSProperties;
+
+    return {
+      variant,
+      isLight: true,
+      kit,
+      bgBase,
+      bgSurface,
+      bgHeader,
+      accentPrimary,
+      accentSecondary: kit.secondary,
+      accentTrim: kit.trim,
+      accentText,
+      borderTint,
+      pageBackgroundStyle,
+      headerStyle,
+      cssVars,
+    };
+  }
+
+  // Dark Theme (Uniforme 1 / Titular)
   const primLum = relativeLuminance(kit.primary);
   const secLum = relativeLuminance(kit.secondary);
 
@@ -279,10 +330,12 @@ export function getKitThemePalette(
     "--club-bg-base": bgBase,
     "--club-surface": bgSurface,
     "--club-border": borderTint,
+    "--club-header": bgHeader,
   } as CSSProperties;
 
   return {
     variant,
+    isLight: false,
     kit,
     bgBase,
     bgSurface,

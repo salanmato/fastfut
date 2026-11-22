@@ -2662,6 +2662,7 @@ export function stepLiveMatchMinute(
   }
 
   // Dead-ball stoppage check: execute pending substitutions when ball goes out of play
+  // Dead-ball stoppage check: execute pending substitutions ONLY when the ball is genuinely out of play or stopped by referee whistle
   const minuteFreshEvents = session.events.slice(prevMinuteEventsLen);
   const deadBallEvent = minuteFreshEvents.find((e) =>
     [
@@ -2670,13 +2671,9 @@ export function stepLiveMatchMinute(
       "goal",
       "yellow_card",
       "red_card",
+      "foul",
       "injury",
       "offside",
-      "woodwork",
-      "chance",
-      "penalty_miss",
-      "stoppage_time",
-      "foul",
     ].includes(e.type)
   );
 
@@ -2694,8 +2691,6 @@ export function stepLiveMatchMinute(
         ? "atendimento médico"
         : deadBallEvent.type === "offside"
         ? "impedimento"
-        : deadBallEvent.type === "stoppage_time"
-        ? "acréscimos"
         : "bola fora";
     processPendingSubsOnStoppage(session, reasonLabel, playerMap);
   } else if (
@@ -2732,7 +2727,7 @@ export function stepLiveMatchMinute(
 
   // Check end of match (full time)
   if (session.secondHalfStarted && min >= session.stoppageEnd) {
-    processPendingSubsOnStoppage(session, "acréscimos", playerMap);
+    session.pendingSubs = [];
     session.finished = true;
     session.events.push({
       id: `whistle-ft-${session.fixtureId}-${min}`,

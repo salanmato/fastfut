@@ -75,6 +75,7 @@ export interface LivePitchAction {
     | "throw_in"
     | "woodwork"
     | "offside"
+    | "substitution"
     | "goal";
   label: string;
   playerName: string;
@@ -1360,18 +1361,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       woodwork: 75,
       save: 65,
       chance: 60,
-      substitution: 55,
-      throw_in: 52,
+      throw_in: 55,
       injury: 50,
       yellow_card: 45,
       foul: 43,
       stoppage_time: 40,
+      substitution: 35,
     };
-    const latest: MatchEvent = [...newEvents].sort(
-      (a, b) => (EVENT_PRIORITY[b.type] ?? 0) - (EVENT_PRIORITY[a.type] ?? 0)
-    )[0];
+
+    const subEvents = newEvents.filter((e) => e.type === "substitution");
+    const nonSubEvents = newEvents.filter((e) => e.type !== "substitution");
+
+    // The primary action on the pitch is the dead-ball stoppage or match highlight
+    const latest: MatchEvent =
+      nonSubEvents.length > 0
+        ? [...nonSubEvents].sort(
+            (a, b) => (EVENT_PRIORITY[b.type] ?? 0) - (EVENT_PRIORITY[a.type] ?? 0)
+          )[0]
+        : subEvents[0];
+
     const cornerFollowUpEvent: MatchEvent | undefined =
-      latest.type === "corner"
+      latest?.type === "corner"
         ? newEvents.find(
             (e) =>
               e.id !== latest.id &&
@@ -1379,7 +1389,9 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           )
         : undefined;
 
-    if (latest.id === lastHandledEventIdRef.current) return;
+    const subFollowUpEvent: MatchEvent | undefined = subEvents[0];
+
+    if (!latest || latest.id === lastHandledEventIdRef.current) return;
     lastHandledEventIdRef.current = latest.id;
 
     const isHomeEvent = latest.clubId === homeClub.id;
@@ -1840,7 +1852,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         },
         4000
       );
-      setHighlightPause(2800, 1800);
+      if (subFollowUpEvent) {
+        setSubHighlight({
+          playerInId: subFollowUpEvent.playerId,
+          playerInName: subFollowUpEvent.playerName,
+          playerOutName: subFollowUpEvent.assistPlayerName,
+          minute: subFollowUpEvent.minute,
+        });
+      }
+      setHighlightPause(subFollowUpEvent ? 3800 : 2800, subFollowUpEvent ? 2400 : 1800);
 
       // Schedule post-goal center circle kickoff restart for the team that conceded
       const concedingIsHome = !isHomeEvent;
@@ -1849,8 +1869,8 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         window.clearTimeout(kickoffTimeoutRef.current);
       }
       const koDelay = Math.max(
-        850,
-        Math.round(1350 * clamp(speedRef.current / 1200, 0.4, 1.4))
+        subFollowUpEvent ? 1400 : 850,
+        Math.round((subFollowUpEvent ? 2200 : 1350) * clamp(speedRef.current / 1200, 0.4, 1.4))
       );
       kickoffTimeoutRef.current = window.setTimeout(() => {
         kickoffTimeoutRef.current = null;
@@ -2174,6 +2194,14 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
           minute: latest.minute,
         });
       }
+      if (subFollowUpEvent) {
+        setSubHighlight({
+          playerInId: subFollowUpEvent.playerId,
+          playerInName: subFollowUpEvent.playerName,
+          playerOutName: subFollowUpEvent.assistPlayerName,
+          minute: subFollowUpEvent.minute,
+        });
+      }
       triggerActionIndicatorRef.current(
         {
           type: isRed || isYellow ? "card" : "foul",
@@ -2189,16 +2217,20 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         },
         isRed ? 3200 : isYellow ? 2800 : 2500
       );
-      setHighlightPause(isRed ? 2400 : isYellow ? 1900 : 1300, 1000);
+      setHighlightPause(
+        subFollowUpEvent ? 2900 : isRed ? 2400 : isYellow ? 1900 : 1300,
+        subFollowUpEvent ? 1900 : 1000
+      );
 
       // Stage 2: Free kick taken from the exact spot of the foul by the fouled team!
       const fouledHome = !isHomeEvent;
       const fkClubId = fouledHome ? homeClub.id : awayClub.id;
       const fkActiveIds = fouledHome ? session.homeActiveIds : session.awayActiveIds;
       const fkDelay = Math.max(
-        700,
+        subFollowUpEvent ? 1200 : 700,
         Math.round(
-          (isRed ? 1300 : isYellow ? 1000 : 800) * clamp(speedRef.current / 1200, 0.45, 1.4)
+          (subFollowUpEvent ? 1400 : isRed ? 1300 : isYellow ? 1000 : 800) *
+            clamp(speedRef.current / 1200, 0.45, 1.4)
         )
       );
       window.setTimeout(() => {
@@ -2306,7 +2338,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         },
         3000
       );
-      setHighlightPause(1900, 1200);
+      if (subFollowUpEvent) {
+        setSubHighlight({
+          playerInId: subFollowUpEvent.playerId,
+          playerInName: subFollowUpEvent.playerName,
+          playerOutName: subFollowUpEvent.assistPlayerName,
+          minute: subFollowUpEvent.minute,
+        });
+      }
+      setHighlightPause(subFollowUpEvent ? 2900 : 1900, subFollowUpEvent ? 1800 : 1200);
     } else if (latest.type === "corner") {
       const attackingHome = isHomeEvent;
       const cornerClub = isHomeEvent ? homeClub : awayClub;
@@ -2364,7 +2404,15 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         tone: "save",
       });
 
-      const totalPauseBase = cornerFollowUpEvent?.type === "goal" ? 4100 : 2850;
+      if (subFollowUpEvent) {
+        setSubHighlight({
+          playerInId: subFollowUpEvent.playerId,
+          playerInName: subFollowUpEvent.playerName,
+          playerOutName: subFollowUpEvent.assistPlayerName,
+          minute: subFollowUpEvent.minute,
+        });
+      }
+      const totalPauseBase = (cornerFollowUpEvent?.type === "goal" ? 4100 : 2850) + (subFollowUpEvent ? 1200 : 0);
       setHighlightPause(totalPauseBase, 2000);
 
       // STAGE 2 (~900ms): Ball placed at the corner flag, taker runs to flag, box crowds, and aerial cross flies in!
@@ -2372,7 +2420,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const cornerFlagY = attackingHome ? 3.5 : 96.5;
       const targetBoxX = 45 + Math.random() * 10;
       const targetBoxY = attackingHome ? 10 + Math.random() * 4.5 : 90 - Math.random() * 4.5;
-      const stage2Delay = Math.max(550, Math.round(900 * speedScale));
+      const stage2Delay = Math.max(subFollowUpEvent ? 1200 : 550, Math.round((subFollowUpEvent ? 1500 : 900) * speedScale));
 
       window.setTimeout(() => {
         const boxCoords: Record<number, Coord> = { ...liveCoordsRef.current };
@@ -2787,10 +2835,27 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         },
         2600
       );
-      setHighlightPause(latest.disallowedGoal ? 2400 : 1700, 1100);
+      if (subFollowUpEvent) {
+        setSubHighlight({
+          playerInId: subFollowUpEvent.playerId,
+          playerInName: subFollowUpEvent.playerName,
+          playerOutName: subFollowUpEvent.assistPlayerName,
+          minute: subFollowUpEvent.minute,
+        });
+      }
+      setHighlightPause(
+        subFollowUpEvent ? 2900 : latest.disallowedGoal ? 2400 : 1700,
+        subFollowUpEvent ? 1900 : 1100
+      );
 
       // After the whistle: free kick for the defending side, taken by their best-placed defender/keeper
-      const freeKickDelay = Math.max(900, Math.round((latest.disallowedGoal ? 2400 : 1700) * clamp(speedRef.current / 1200, 0.4, 1.4)));
+      const freeKickDelay = Math.max(
+        subFollowUpEvent ? 1400 : 900,
+        Math.round(
+          (subFollowUpEvent ? 2200 : latest.disallowedGoal ? 2400 : 1700) *
+            clamp(speedRef.current / 1200, 0.4, 1.4)
+        )
+      );
       window.setTimeout(() => {
         const defendingHome = !attackingHome;
         const takerId =
@@ -2912,30 +2977,66 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         clubShortName: throwClub.shortName,
         takerName: getPlayerDisplayName(latest.playerName),
       });
-      setBanner({
-        text: isLongThrow ? "LATERAL LONGO NA ÁREA" : "COBRANÇA DE LATERAL",
-        tone: "throw_in",
-        minute: latest.minute,
-        clubName: throwClub.name,
-        scorerName: `${getPlayerDisplayName(latest.playerName)} (${throwClub.shortName})`,
-      });
-      triggerActionIndicatorRef.current(
-        {
-          type: "throw_in",
-          label: isLongThrow ? "Cobrança de Lateral Longo" : "Cobrança de Lateral",
-          playerName: getPlayerDisplayName(latest.playerName),
-          secondaryPlayerName: latest.assistPlayerName
-            ? getPlayerDisplayName(latest.assistPlayerName)
-            : undefined,
-          clubId: latest.clubId,
-          badgeTone: "teal",
-        },
-        2500
-      );
-      setHighlightPause(1550, 1000);
+      if (subFollowUpEvent) {
+        const subClub = subFollowUpEvent.clubId === homeClub.id ? homeClub : awayClub;
+        setSubHighlight({
+          playerInId: subFollowUpEvent.playerId,
+          playerInName: subFollowUpEvent.playerName,
+          playerOutName: subFollowUpEvent.assistPlayerName,
+          minute: subFollowUpEvent.minute,
+        });
+        setBanner({
+          text: "SUBSTITUIÇÃO (LATERAL)",
+          tone: "substitution",
+          minute: subFollowUpEvent.minute,
+          clubName: subClub.name,
+          clubColor: subClub.primaryColor,
+          scorerName: subEvents.map((s) => s.playerName).join(", "),
+          scorerShirt: playerMap.get(subFollowUpEvent.playerId)?.shirtNumber,
+          assistName: subEvents.map((s) => s.assistPlayerName ?? "").filter(Boolean).join(", "),
+        });
+        triggerActionIndicatorRef.current(
+          {
+            type: "substitution",
+            label: "Substituição",
+            playerName: getPlayerDisplayName(subFollowUpEvent.playerName),
+            secondaryPlayerName: subFollowUpEvent.assistPlayerName
+              ? `sai ${getPlayerDisplayName(subFollowUpEvent.assistPlayerName)}`
+              : undefined,
+            clubId: subFollowUpEvent.clubId,
+            badgeTone: "emerald",
+          },
+          3000
+        );
+      } else {
+        setBanner({
+          text: isLongThrow ? "LATERAL LONGO NA ÁREA" : "COBRANÇA DE LATERAL",
+          tone: "throw_in",
+          minute: latest.minute,
+          clubName: throwClub.name,
+          scorerName: `${getPlayerDisplayName(latest.playerName)} (${throwClub.shortName})`,
+        });
+        triggerActionIndicatorRef.current(
+          {
+            type: "throw_in",
+            label: isLongThrow ? "Cobrança de Lateral Longo" : "Cobrança de Lateral",
+            playerName: getPlayerDisplayName(latest.playerName),
+            secondaryPlayerName: latest.assistPlayerName
+              ? getPlayerDisplayName(latest.assistPlayerName)
+              : undefined,
+            clubId: latest.clubId,
+            badgeTone: "teal",
+          },
+          2500
+        );
+      }
+      setHighlightPause(subFollowUpEvent ? 2900 : 1550, subFollowUpEvent ? 1900 : 1000);
 
       // Stage 2: Taker throws the ball overhead from the touchline to receiver
-      const stage2Delay = Math.max(420, Math.round(620 * clamp(speedRef.current / 1200, 0.45, 1.35)));
+      const stage2Delay = Math.max(
+        subFollowUpEvent ? 1200 : 420,
+        Math.round((subFollowUpEvent ? 1500 : 620) * clamp(speedRef.current / 1200, 0.45, 1.35))
+      );
       window.setTimeout(() => {
         const throwCurve = computeTrajectoryCurve(
           touchlineX,
@@ -2991,15 +3092,34 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
       const subClub = isHomeEvent ? homeClub : awayClub;
       const playerIn = playerMap.get(latest.playerId);
       const playerOut = latest.assistPlayerId ? playerMap.get(latest.assistPlayerId) : undefined;
+
+      // Always guarantee the ball is stopped at the touchline (jogo paralisado na lateral)
+      const isLeft = ballPosRef.current.x < 50;
+      const touchX = isLeft ? 4.0 : 96.0;
+      const touchY = clamp(ballPosRef.current.y, 18, 82);
+      setBallPos({ x: touchX, y: touchY });
+      ballPosRef.current = { x: touchX, y: touchY };
+      setBallVisual({ x: touchX, y: touchY, altitude: 0, isAerial: false });
+      setTrail(null);
+      setThrowInSpot({
+        x: touchX,
+        y: touchY,
+        isLeft,
+        clubShortName: subClub.shortName,
+        takerName: getPlayerDisplayName(latest.playerName),
+      });
+
       setBanner({
-        text: "SUBSTITUIÇÃO",
+        text: "SUBSTITUIÇÃO (JOGO PARADO)",
         tone: "substitution",
         minute: latest.minute,
         clubName: subClub.name,
         clubColor: subClub.primaryColor,
-        scorerName: latest.playerName,
+        scorerName: subEvents.length > 1 ? subEvents.map((s) => s.playerName).join(", ") : latest.playerName,
         scorerShirt: playerIn?.shirtNumber,
-        assistName: latest.assistPlayerName,
+        assistName: subEvents.length > 1
+          ? subEvents.map((s) => s.assistPlayerName ?? "").filter(Boolean).join(", ")
+          : latest.assistPlayerName,
         assistShirt: playerOut?.shirtNumber,
       });
       setSubHighlight({
@@ -3008,7 +3128,73 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
         playerOutName: latest.assistPlayerName,
         minute: latest.minute,
       });
-      setHighlightPause(1900, 1200);
+      triggerActionIndicatorRef.current(
+        {
+          type: "substitution",
+          label: "Substituição",
+          playerName: getPlayerDisplayName(latest.playerName),
+          secondaryPlayerName: latest.assistPlayerName
+            ? `sai ${getPlayerDisplayName(latest.assistPlayerName)}`
+            : undefined,
+          clubId: latest.clubId,
+          badgeTone: "emerald",
+        },
+        3200
+      );
+      setHighlightPause(2800, 1800);
+
+      // Stage 2: Lateral throw-in restart back onto the pitch
+      const stage2Delay = Math.max(
+        1200,
+        Math.round(1500 * clamp(speedRef.current / 1200, 0.45, 1.35))
+      );
+      window.setTimeout(() => {
+        const attIds = isHomeEvent ? session.homeActiveIds : session.awayActiveIds;
+        const receiverId =
+          attIds.find((id) => id !== latest.playerId && playerMap.get(id)?.roleCategory !== "GK") ??
+          latest.playerId;
+        const dirY = isHomeEvent ? -1 : 1;
+        const targetThrowCoord: Coord = {
+          x: isLeft ? 15 + Math.random() * 12 : 85 - Math.random() * 12,
+          y: clamp(touchY + dirY * (6 + Math.random() * 8), 10, 90),
+        };
+        const throwCurve = computeTrajectoryCurve(
+          touchX,
+          touchY,
+          targetThrowCoord.x,
+          targetThrowCoord.y,
+          true,
+          "pass"
+        );
+        setCarrierId(receiverId);
+        carrierIdRef.current = receiverId;
+        setCarrierClubId(latest.clubId);
+        carrierClubIdRef.current = latest.clubId;
+        setTrail({
+          x1: touchX,
+          y1: touchY,
+          x2: targetThrowCoord.x,
+          y2: targetThrowCoord.y,
+          kind: "pass",
+          isAerial: true,
+          maxAltitude: 0.5,
+          curveX: throwCurve.curveX,
+          curveY: throwCurve.curveY,
+        });
+        setBallPos(targetThrowCoord);
+        ballPosRef.current = targetThrowCoord;
+        triggerBallFlight(
+          touchX,
+          touchY,
+          targetThrowCoord.x,
+          targetThrowCoord.y,
+          throwCurve.curveX,
+          throwCurve.curveY,
+          true,
+          0.5,
+          420
+        );
+      }, stage2Delay);
     } else if (latest.type === "whistle") {
       if (session.finished) {
         setBanner({
@@ -3859,6 +4045,7 @@ export const LivePitch2D: React.FC<LivePitch2DProps> = ({
                     liveAction.type === "cross"
                       ? "➔"
                       : liveAction.secondaryPlayerName.startsWith("sobre") ||
+                        liveAction.secondaryPlayerName.startsWith("sai") ||
                         liveAction.secondaryPlayerName.startsWith("Assistência")
                       ? ""
                       : "➔"}

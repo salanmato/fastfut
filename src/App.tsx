@@ -16,6 +16,8 @@ import {
   Award,
   BarChart3,
   GraduationCap,
+  Sun,
+  Moon,
 } from "lucide-react";
 import type {
   Club,
@@ -1606,8 +1608,8 @@ export const App: React.FC = () => {
     setSave({ ...save, kitTheme: nextTheme });
     setToast(
       nextTheme === "home"
-        ? `Tema alterado: Uniforme 1 (Titular)${club ? ` do ${club.shortName}` : ""}`
-        : `Tema alterado: Uniforme 2 (Reserva)${club ? ` do ${club.shortName}` : ""}`
+        ? `Tema Escuro ativado: Uniforme 1 (Titular)${club ? ` do ${club.shortName}` : ""}`
+        : `Tema Claro ativado: Uniforme 2 (Reserva)${club ? ` do ${club.shortName}` : ""}`
     );
   };
 
@@ -1674,7 +1676,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`club-theme-root text-slate-100 ${
+      className={`club-theme-root ${palette.isLight ? "theme-light text-slate-900" : "theme-dark text-slate-100"} ${
         activeTab === "matchday"
           ? "h-screen max-h-screen overflow-hidden flex flex-col"
           : "min-h-screen"
@@ -1827,12 +1829,21 @@ export const App: React.FC = () => {
             </button>
             <button
               onClick={handleToggleKitTheme}
-              title="Alternar tema entre Uniforme 1 (Titular) e Uniforme 2 (Reserva)"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/25 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-white/10"
+              title={`Alternar para ${kitTheme === "home" ? "Uniforme 2 (Tema Claro ☀️)" : "Uniforme 1 (Tema Escuro 🌙)"}`}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition ${
+                palette.isLight
+                  ? "border-slate-300 bg-white text-slate-800 hover:bg-slate-100 shadow-sm"
+                  : "border-white/15 bg-black/25 text-white hover:bg-white/10"
+              }`}
             >
               <ClubKit club={userClub} variant={kitTheme} size="xs" />
+              {palette.isLight ? (
+                <Sun className="h-3.5 w-3.5 text-amber-500 fill-amber-500 shrink-0" />
+              ) : (
+                <Moon className="h-3.5 w-3.5 text-sky-400 fill-sky-400 shrink-0" />
+              )}
               <span className="hidden md:inline">
-                {kitTheme === "home" ? "Uniforme 1" : "Uniforme 2"}
+                {kitTheme === "home" ? "Uniforme 1 (Escuro)" : "Uniforme 2 (Claro)"}
               </span>
             </button>
             <button
