@@ -34,6 +34,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from scripts.expanded_leagues import (
+    ALL_EXPANDED_CLUBS,
+    EXPANDED_FIRST_NAMES,
+    EXPANDED_LAST_NAMES,
+    NEW_LEAGUES_METADATA,
+)
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = ROOT_DIR / "data" / "raw"
 SQLITE_PATH = ROOT_DIR / "data" / "fm2627.sqlite"
@@ -64,6 +71,7 @@ LEAGUES_METADATA = [
     {"id": 15, "code": "TUR_SUPERLIG", "name": "Trendyol Süper Lig", "country": "Turquia", "flagEmoji": "🇹🇷", "tier": 1, "totalClubs": 18},
     {"id": 16, "code": "MEX_LIGAMX", "name": "Liga BBVA MX", "country": "México", "flagEmoji": "🇲🇽", "tier": 1, "totalClubs": 18},
     {"id": 17, "code": "SCO_PREM", "name": "Scottish Premiership", "country": "Escócia", "flagEmoji": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "tier": 1, "totalClubs": 12},
+    *NEW_LEAGUES_METADATA,
 ]
 
 # Map EA FC 27 club names -> Official Premier League 2026/27 team names
@@ -775,6 +783,8 @@ def main() -> None:
     register_clubs(TURKEY_CLUBS)
     register_clubs(MEXICO_CLUBS)
     register_clubs(SCOTLAND_CLUBS)
+    for c_set in ALL_EXPANDED_CLUBS:
+        register_clubs(c_set)
 
     print(f"[etl] Total clubs registered: {len(clubs)}")
 
@@ -1094,6 +1104,8 @@ def main() -> None:
         "México": ["Hernández", "García", "Martínez", "López", "González", "Pérez", "Rodríguez", "Sánchez", "Ramírez", "Cruz", "Flores", "Gómez", "Morales", "Vázquez", "Jiménez", "Reyes", "Díaz", "Torres", "Gutiérrez", "Ruiz"],
         "Escócia": ["Smith", "Brown", "Wilson", "Robertson", "Thomson", "Campbell", "Stewart", "Anderson", "MacDonald", "Scott", "Reid", "Murray", "Taylor", "Clark", "Mitchell", "Ross", "Walker", "Paterson", "Young", "Graham"],
     }
+    first_names_by_country.update(EXPANDED_FIRST_NAMES)
+    last_names_by_country.update(EXPANDED_LAST_NAMES)
 
     pos_by_cat = {
         "GK": "GK",

@@ -206,6 +206,60 @@ export const CLUB_VISUAL_CATALOG: Record<string, ClubVisualSpec> = {
     homeKit: { primary: "#E30613", secondary: "#FFFFFF", trim: "#002B49", pattern: "stripes" },
     awayKit: { primary: "#002B49", secondary: "#E30613", trim: "#FFFFFF", pattern: "solid" },
   },
+  "Club Brugge KV": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/2282.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#002F6C", secondary: "#000000", trim: "#FFFFFF", pattern: "stripes" },
+    awayKit: { primary: "#FFFFFF", secondary: "#002F6C", trim: "#000000", pattern: "solid" },
+  },
+  "RSC Anderlecht": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/58.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#56237D", secondary: "#FFFFFF", trim: "#FFFFFF", pattern: "sleeves" },
+    awayKit: { primary: "#FFFFFF", secondary: "#56237D", trim: "#56237D", pattern: "solid" },
+  },
+  "FC Basel": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/26.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#E30613", secondary: "#002F6C", trim: "#FEE100", pattern: "stripes" },
+    awayKit: { primary: "#FFFFFF", secondary: "#E30613", trim: "#002F6C", pattern: "solid" },
+  },
+  "Red Bull Salzburg": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/409.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#E30613", secondary: "#FFFFFF", trim: "#E30613", pattern: "sleeves" },
+    awayKit: { primary: "#002F6C", secondary: "#E30613", trim: "#FFFFFF", pattern: "solid" },
+  },
+  "Olympiacos FC": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/683.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#E30613", secondary: "#FFFFFF", trim: "#E30613", pattern: "stripes" },
+    awayKit: { primary: "#000000", secondary: "#E30613", trim: "#FFFFFF", pattern: "solid" },
+  },
+  "Shakhtar Donetsk": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/660.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#FF6600", secondary: "#000000", trim: "#FFFFFF", pattern: "stripes" },
+    awayKit: { primary: "#FFFFFF", secondary: "#FF6600", trim: "#000000", pattern: "solid" },
+  },
+  "CA Peñarol": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/207.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#FEE100", secondary: "#000000", trim: "#FFFFFF", pattern: "stripes" },
+    awayKit: { primary: "#000000", secondary: "#FEE100", trim: "#FFFFFF", pattern: "solid" },
+  },
+  "Club Nacional": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/206.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#FFFFFF", secondary: "#003399", trim: "#E30613", pattern: "sash" },
+    awayKit: { primary: "#E30613", secondary: "#003399", trim: "#FFFFFF", pattern: "solid" },
+  },
+  "Ulsan HD": {
+    badgeUrl: "https://tmssl.akamaized.net//images/wappen/head/3582.png",
+    stadiumImageUrl: "",
+    homeKit: { primary: "#002F6C", secondary: "#005BA6", trim: "#FEE100", pattern: "stripes" },
+    awayKit: { primary: "#FFFFFF", secondary: "#002F6C", trim: "#005BA6", pattern: "solid" },
+  },
 };
 
 export function getClubVisuals(
