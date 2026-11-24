@@ -1702,12 +1702,15 @@ export const App: React.FC = () => {
               type="button"
               onClick={() => setScreen("menu")}
               title="Voltar ao Menu Principal FASTFUT"
-              className="group flex items-center pr-2.5 border-r border-white/15 transition hover:opacity-85"
+              className={`group flex items-center transition hover:opacity-85 ${
+                palette.isLight
+                  ? "rounded-lg bg-slate-950 px-2.5 py-1.5 mr-1"
+                  : "pr-2.5 border-r border-white/15"
+              }`}
             >
               <FastFutLogo
                 variant="extended"
                 size="sm"
-                accentColor="text-emerald-400"
                 className="hidden lg:inline-flex"
               />
               <FastFutLogo

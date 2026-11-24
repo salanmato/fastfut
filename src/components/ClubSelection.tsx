@@ -158,13 +158,16 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                   <Trophy className="h-3.5 w-3.5" /> Database Unificada • {clubs.length} Clubes • 33 Ligas Mundiais
                 </div>
               </div>
-              <div className="mt-3">
+              <div
+                className={`mt-3 ${
+                  palette?.isLight ? "inline-flex rounded-lg bg-slate-950 px-3 py-1.5" : ""
+                }`}
+              >
                 <FastFutLogo
                   variant="extended"
                   size="lg"
                   showBadge
                   badgeText="26/27"
-                  accentColor="text-emerald-400"
                 />
               </div>
               <p className="mt-1.5 max-w-2xl text-sm text-slate-400">

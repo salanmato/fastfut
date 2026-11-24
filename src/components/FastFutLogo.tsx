@@ -12,7 +12,7 @@ export interface FastFutIconProps {
  */
 export const FastFutIcon: React.FC<FastFutIconProps> = ({
   className = "h-8 w-8",
-  fill = "#006837",
+  fill = "#ffffff",
   size,
 }) => {
   return (
@@ -62,9 +62,9 @@ export const FastFutLogo: React.FC<FastFutLogoProps> = ({
   size = "md",
   showBadge = false,
   badgeText = "26/27",
-  iconColor = "#006837",
-  textColor = "text-white",
-  accentColor = "text-emerald-400",
+  iconColor = "#ffffff",
+  textColor,
+  accentColor,
   className = "",
   onClick,
 }) => {
@@ -117,7 +117,7 @@ export const FastFutLogo: React.FC<FastFutLogoProps> = ({
       onClick={onClick}
       className={`inline-flex items-center select-none ${sizeStyles.gap} ${onClick ? "cursor-pointer group transition" : ""} ${className}`}
     >
-      {/* Icon Emblem with sleek backdrop / drop */}
+      {/* Icon Emblem */}
       <div className="relative shrink-0 flex items-center justify-center transition-transform group-hover:scale-105">
         <FastFutIcon className={sizeStyles.icon} fill={iconColor} />
       </div>
@@ -125,15 +125,26 @@ export const FastFutLogo: React.FC<FastFutLogoProps> = ({
       {/* Extended Brand Typographic Logo in DynaPuff Bold */}
       <div className="flex items-center gap-2">
         <span
-          className={`font-dynapuff font-bold tracking-tight leading-none ${textColor}`}
-          style={{ fontFamily: '"DynaPuff", cursive, sans-serif', fontWeight: 700 }}
+          className={`font-dynapuff font-bold tracking-tight leading-none ${sizeStyles.text} ${textColor ?? ""}`}
+          style={{
+            fontFamily: '"DynaPuff", cursive, sans-serif',
+            fontWeight: 700,
+            color: textColor ? undefined : "#ffffff",
+          }}
         >
-          FAST<span className={accentColor}>FUT</span>
+          {accentColor ? (
+            <>
+              FAST<span className={accentColor}>FUT</span>
+            </>
+          ) : (
+            "FASTFUT"
+          )}
         </span>
 
         {showBadge && (
           <span
-            className={`font-mono font-black uppercase rounded-md border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 ${sizeStyles.badge}`}
+            className={`font-mono font-black uppercase rounded-md border border-white/25 bg-white/10 ${sizeStyles.badge}`}
+            style={{ color: "#ffffff" }}
           >
             {badgeText}
           </span>

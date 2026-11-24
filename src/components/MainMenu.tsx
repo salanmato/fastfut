@@ -123,7 +123,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                   size="xl"
                   showBadge
                   badgeText="26/27"
-                  accentColor="text-emerald-400"
                 />
               </div>
               <p className="mt-2 max-w-xl text-sm text-slate-300">
