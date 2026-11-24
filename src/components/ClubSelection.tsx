@@ -5,6 +5,7 @@ import { formatMoney, getOverallColor } from "../utils/format";
 import { getClubVisuals, getKitThemePalette } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
 import { ClubKit } from "./ClubKit";
+import { FastFutLogo } from "./FastFutLogo";
 
 interface ClubSelectionProps {
   clubs: Club[];
@@ -157,9 +158,15 @@ export const ClubSelection: React.FC<ClubSelectionProps> = ({
                   <Trophy className="h-3.5 w-3.5" /> Database Unificada • {clubs.length} Clubes • 33 Ligas Mundiais
                 </div>
               </div>
-              <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                Football Manager <span className="text-emerald-400">26/27</span>
-              </h1>
+              <div className="mt-3">
+                <FastFutLogo
+                  variant="extended"
+                  size="lg"
+                  showBadge
+                  badgeText="26/27"
+                  accentColor="text-emerald-400"
+                />
+              </div>
               <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
                 Escolha seu clube em qualquer uma das 33 ligas mundiais (Premier League, Brasileirão, LaLiga, Serie A, Bundesliga, Ligue 1, Liga Argentina, Sul-Americana, MLS, Saudi Pro, e dezenas de ligas europeias e globais).
               </p>

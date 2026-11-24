@@ -23,6 +23,7 @@ import type { RawDatabase, SaveState, StandingRow } from "../types/game";
 import { formatMoney } from "../utils/format";
 import { getClubVisuals, getKitThemePalette } from "../utils/clubVisuals";
 import { ClubBadge } from "./ClubBadge";
+import { FastFutLogo } from "./FastFutLogo";
 import { ClubKit } from "./ClubKit";
 
 interface MainMenuProps {
@@ -116,15 +117,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               <div className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-300">
                 <Trophy className="h-3.5 w-3.5" /> 33 Ligas Mundiais • 554 Clubes • Temporada 2026/27
               </div>
-              <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
-                Football Manager{" "}
-                <span
-                  className="text-emerald-400"
-                  style={palette ? { color: palette.accentPrimary } : undefined}
-                >
-                  26/27
-                </span>
-              </h1>
+              <div className="mt-4">
+                <FastFutLogo
+                  variant="extended"
+                  size="xl"
+                  showBadge
+                  badgeText="26/27"
+                  accentColor="text-emerald-400"
+                />
+              </div>
               <p className="mt-2 max-w-xl text-sm text-slate-300">
                 Assuma o comando técnico e financeiro de um clube em 33 ligas mundiais, ajuste formações ao vivo no radar 2D e gerencie estádio, lesões e transferências.
               </p>
@@ -325,7 +326,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-slate-800 bg-slate-950 py-3 text-center text-[11px] text-slate-400">
-        Football Manager 26/27 • 33 Ligas Mundiais • Dados: EA FC 27, Transfermarkt & FIFA WC 2026
+        FASTFUT 26/27 • 33 Ligas Mundiais • Dados: EA FC 27, Transfermarkt & FIFA WC 2026
       </footer>
 
       {/* Options & Database Modal */}

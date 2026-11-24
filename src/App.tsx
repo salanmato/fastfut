@@ -70,6 +70,7 @@ import {
 } from "./utils/calendar";
 import { ClubBadge } from "./components/ClubBadge";
 import { ClubKit } from "./components/ClubKit";
+import { FastFutLogo } from "./components/FastFutLogo";
 import { MainMenu } from "./components/MainMenu";
 import { ClubSelection } from "./components/ClubSelection";
 import { Dashboard } from "./components/Dashboard";
@@ -1697,6 +1698,24 @@ export const App: React.FC = () => {
       >
         <div className={`mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 ${activeTab === "matchday" ? "max-w-full py-2" : "max-w-7xl py-3"}`}>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setScreen("menu")}
+              title="Voltar ao Menu Principal FASTFUT"
+              className="group flex items-center pr-2.5 border-r border-white/15 transition hover:opacity-85"
+            >
+              <FastFutLogo
+                variant="extended"
+                size="sm"
+                accentColor="text-emerald-400"
+                className="hidden lg:inline-flex"
+              />
+              <FastFutLogo
+                variant="icon"
+                size="sm"
+                className="inline-flex lg:hidden"
+              />
+            </button>
             <ClubBadge club={userClub} size="md" />
             <div>
               <div className="flex flex-wrap items-center gap-2">
