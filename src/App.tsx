@@ -538,7 +538,7 @@ export const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `fm2627_${save.userClubId}_rodada${save.currentMatchweek}.json`;
+    a.download = `fastfut_${save.userClubId}_rodada${save.currentMatchweek}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

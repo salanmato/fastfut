@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ETL Pipeline for Football Manager 2026/27 — Unified Global Database.
+ETL Pipeline for FASTFUT 2026/27 — Unified Global Database.
 Synchronizes data across 10 nations and 13 leagues:
   - England (Premier League, EFL Championship, EFL League One, EFL League Two)
   - Spain (LALIGA EA SPORTS)

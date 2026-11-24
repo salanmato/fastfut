@@ -1,13 +1,13 @@
 {
-  "name": "football-manager-pl2627",
+  "name": "fastfut",
   "private": true,
   "version": "1.0.0",
-  "description": "Football Manager 26/27 — Premier League interactive web simulation powered by EA FC 27 & Transfermarkt data.",
+  "description": "FASTFUT 26/27 — Simulador tático e gerencial de futebol com 33 ligas mundiais, radar 2D ao vivo e dados reais do EA FC 27 & Transfermarkt.",
   "author": "salanmato",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/salanmato/football-manager.git"
+    "url": "https://github.com/salanmato/fastfut.git"
   },
   "type": "module",
   "scripts": {
