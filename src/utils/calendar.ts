@@ -1,4 +1,4 @@
-import type { Fixture } from "../types/game";
+import type { FifaWindow, Fixture } from "../types/game";
 
 export const SUMMER_WINDOW_START = "2026-08-01";
 export const SUMMER_WINDOW_END = "2026-09-01";
@@ -231,14 +231,10 @@ export function getDefaultDateForMatchweek(
 ): string {
   const firstFxDate = fixtures[0]?.date ?? "2026-08-15";
   const startYear = getSeasonStartYear(firstFxDate);
-  const { summerEnd, winterStart, winterEnd, postSeasonStart } =
-    getSeasonWindowDates(startYear);
+  const { postSeasonStart } = getSeasonWindowDates(startYear);
 
   if (seasonFinished) return postSeasonStart;
   if (matchweek <= 1) return firstFxDate;
-  if (matchweek === 3) return summerEnd;
-  if (matchweek === 19) return winterStart;
-  if (matchweek === 24) return winterEnd;
 
   const prevDates = fixtures
     .filter((f) => f.matchweek === matchweek - 1)
@@ -265,6 +261,190 @@ export function getDefaultDateForMatchweek(
     return addDaysIso(currUserFx.date, -2);
   }
   return firstFxDate;
+}
+
+function getMondayOnOrAfter(isoDate: string): string {
+  const dt = parseIsoUtc(isoDate);
+  const offset = (1 - dt.getUTCDay() + 7) % 7;
+  return offset === 0 ? isoDate : addDaysIso(isoDate, offset);
+}
+
+function getSaturdayOnOrAfter(isoDate: string): string {
+  const dt = parseIsoUtc(isoDate);
+  const offset = (6 - dt.getUTCDay() + 7) % 7;
+  return offset === 0 ? isoDate : addDaysIso(isoDate, offset);
+}
+
+function getSaturdayOnOrBefore(isoDate: string): string {
+  const dt = parseIsoUtc(isoDate);
+  const offset = (dt.getUTCDay() - 6 + 7) % 7;
+  return offset === 0 ? isoDate : addDaysIso(isoDate, -offset);
+}
+
+export function getFifaWindows(startYear: number): FifaWindow[] {
+  const specs: Array<{
+    suffix: string;
+    anchor: string;
+    label: string;
+    competition: string;
+    processable: boolean;
+  }> = [
+    {
+      suffix: "sep",
+      anchor: `${startYear}-09-20`,
+      label: "Data FIFA • Setembro",
+      competition: "Eliminatórias / Nations League",
+      processable: true,
+    },
+    {
+      suffix: "oct",
+      anchor: `${startYear}-10-04`,
+      label: "Data FIFA • Outubro",
+      competition: "Eliminatórias / Nations League",
+      processable: true,
+    },
+    {
+      suffix: "nov",
+      anchor: `${startYear}-11-08`,
+      label: "Data FIFA • Novembro",
+      competition: "Eliminatórias / Nations League",
+      processable: true,
+    },
+    {
+      suffix: "mar",
+      anchor: `${startYear + 1}-03-21`,
+      label: "Data FIFA • Março",
+      competition: "Amistosos & Eliminatórias",
+      processable: true,
+    },
+    {
+      suffix: "jun",
+      anchor: `${startYear + 1}-06-01`,
+      label: "Data FIFA • Junho",
+      competition: "Amistosos (pós-temporada)",
+      processable: false,
+    },
+  ];
+
+  return specs.map((spec) => {
+    const startDate = getMondayOnOrAfter(spec.anchor);
+    const endDate = addDaysIso(startDate, 8);
+    return {
+      id: `${startYear}-${spec.suffix}`,
+      label: spec.label,
+      startDate,
+      endDate,
+      competition: spec.competition,
+      processable: spec.processable,
+    };
+  });
+}
+
+export function isDateInFifaWindow(
+  isoDate: string,
+  windows: FifaWindow[]
+): FifaWindow | undefined {
+  return windows.find((w) => isoDate >= w.startDate && isoDate <= w.endDate);
+}
+
+export function buildLeagueMatchweekDates(
+  startYear: number,
+  count = 38
+): string[] {
+  const windows = getFifaWindows(startYear);
+  const firstSat = getSaturdayOnOrAfter(`${startYear}-08-15`);
+  const lastSat = getSaturdayOnOrBefore(`${startYear + 1}-05-31`);
+
+  const saturdays: string[] = [];
+  for (let cur = firstSat; cur <= lastSat; cur = addDaysIso(cur, 7)) {
+    if (!isDateInFifaWindow(cur, windows)) {
+      saturdays.push(cur);
+    }
+  }
+
+  let dates = [...saturdays];
+  if (dates.length > count) {
+    dates = dates.slice(dates.length - count);
+  } else if (dates.length < count) {
+    const existing = new Set(dates);
+    const preferredAnchors = [
+      getSaturdayOnOrBefore(`${startYear}-12-31`),
+      getSaturdayOnOrAfter(`${startYear}-12-01`),
+      getSaturdayOnOrAfter(`${startYear + 1}-02-01`),
+      getSaturdayOnOrAfter(`${startYear + 1}-04-01`),
+    ];
+    for (const sat of preferredAnchors) {
+      if (dates.length >= count) break;
+      const wed = addDaysIso(sat, -3);
+      if (!existing.has(wed) && !isDateInFifaWindow(wed, windows)) {
+        dates.push(wed);
+        existing.add(wed);
+      }
+    }
+    for (const sat of saturdays) {
+      if (dates.length >= count) break;
+      const wed = addDaysIso(sat, -3);
+      if (
+        wed >= `${startYear}-08-15` &&
+        !existing.has(wed) &&
+        !isDateInFifaWindow(wed, windows)
+      ) {
+        dates.push(wed);
+        existing.add(wed);
+      }
+    }
+    dates.sort();
+  }
+
+  return dates;
+}
+
+export function buildCupRoundDates(
+  leagueDates: string[],
+  windows: FifaWindow[],
+  afterMatchweeks: number[] = [9, 15, 20, 26, 31, 35]
+): string[] {
+  const leagueSet = new Set(leagueDates);
+  const usedCupDates = new Set<string>();
+  const result: string[] = [];
+
+  for (const mw of afterMatchweeks) {
+    const prevDate = leagueDates[Math.min(mw - 1, leagueDates.length - 1)] ?? "2026-11-01";
+    const nextDate = leagueDates[Math.min(mw, leagueDates.length - 1)];
+
+    let candidate = addDaysIso(prevDate, 4); // Wednesday after MW
+    if (
+      isDateInFifaWindow(candidate, windows) ||
+      (nextDate && candidate >= nextDate) ||
+      leagueSet.has(candidate) ||
+      usedCupDates.has(candidate)
+    ) {
+      candidate = nextDate ? addDaysIso(nextDate, -3) : addDaysIso(prevDate, 3);
+    }
+
+    while (
+      isDateInFifaWindow(candidate, windows) ||
+      leagueSet.has(candidate) ||
+      usedCupDates.has(candidate)
+    ) {
+      candidate = addDaysIso(candidate, 1);
+    }
+
+    usedCupDates.add(candidate);
+    result.push(candidate);
+  }
+
+  return result;
+}
+
+export function remapFixtureDates(
+  fixtures: Fixture[],
+  dates: string[]
+): Fixture[] {
+  return fixtures.map((fx) => {
+    const targetDate = dates[fx.matchweek - 1];
+    return targetDate ? { ...fx, date: targetDate } : { ...fx };
+  });
 }
 
 function clampPct(val: number): number {

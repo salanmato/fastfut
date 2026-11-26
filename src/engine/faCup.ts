@@ -12,6 +12,12 @@ import type {
 } from "../types/game";
 import { autoPickLineup, createDefaultTactics, simulateFullMatch } from "./matchEngine";
 import { formatMoney } from "../utils/format";
+import {
+  buildCupRoundDates,
+  buildLeagueMatchweekDates,
+  getFifaWindows,
+  getSeasonStartYear,
+} from "../utils/calendar";
 
 const ROUND_TEMPLATES: Array<{
   index: number;
@@ -169,10 +175,35 @@ export function getCupInfo(club?: Club): { name: string; shortName: string; desc
   };
 }
 
-export function createInitialFACupState(clubs: Club[], userClubId?: number): FACupState {
+export function getPendingCupRound(faCup?: FACupState): FACupRound | undefined {
+  if (!faCup || faCup.championClubId !== null) return undefined;
+  const round = faCup.rounds[faCup.currentRoundIndex];
+  if (!round || round.completed) return undefined;
+  return round;
+}
+
+export function isUserInRound(round: FACupRound | undefined, userClubId: number): boolean {
+  if (!round) return false;
+  return round.ties.some((t) => !t.played && (t.homeClubId === userClubId || t.awayClubId === userClubId));
+}
+
+export function createInitialFACupState(
+  clubs: Club[],
+  userClubId?: number,
+  opts?: { leagueDates?: string[]; seasonLabel?: string }
+): FACupState {
   const userClub = userClubId ? clubs.find((c) => c.id === userClubId) : undefined;
   const userCountry = userClub?.country ?? "Inglaterra";
   const userLeague = userClub?.league ?? userClub?.division ?? "Premier League";
+
+  const startYear = opts?.seasonLabel
+    ? getSeasonStartYear(opts.seasonLabel)
+    : opts?.leagueDates?.[0]
+    ? getSeasonStartYear(opts.leagueDates[0])
+    : 2026;
+  const seasonLabel = opts?.seasonLabel ?? `${startYear}/${String((startYear + 1) % 100).padStart(2, "0")}`;
+  const leagueDates = opts?.leagueDates ?? buildLeagueMatchweekDates(startYear, 38);
+  const cupDates = buildCupRoundDates(leagueDates, getFifaWindows(startYear));
 
   // Select clubs for domestic cup: prefer same country or league family
   let candidateClubs = clubs.filter((c) => {
@@ -221,12 +252,13 @@ export function createInitialFACupState(clubs: Club[], userClubId?: number): FAC
 
   const rounds: FACupRound[] = ROUND_TEMPLATES.map((tpl) => ({
     ...tpl,
+    date: cupDates[tpl.index] ?? tpl.date,
     completed: tpl.index < startRoundIndex,
     ties: tpl.index === startRoundIndex ? initialTies : [],
   }));
 
   return {
-    season: "2026/27",
+    season: seasonLabel,
     currentRoundIndex: startRoundIndex,
     championClubId: null,
     rounds,

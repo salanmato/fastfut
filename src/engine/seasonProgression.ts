@@ -9,10 +9,13 @@ import type {
 import { computeStandings } from "./standings";
 import {
   createInitialFACupState,
-  extractMatchweekDates,
   generateDivisionFixtures,
 } from "./faCup";
-import { addDaysIso, getDefaultDateForMatchweek, getSeasonStartYear } from "../utils/calendar";
+import {
+  buildLeagueMatchweekDates,
+  getDefaultDateForMatchweek,
+  getSeasonStartYear,
+} from "../utils/calendar";
 import { formatMoney } from "../utils/format";
 import { generateAnnualYouthIntake } from "./youthAndLoansEngine";
 
@@ -451,8 +454,7 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
   const newDivClubs = updatedClubs.filter(
     (c) => (c.league ?? c.division ?? "Premier League") === newDivision
   );
-  const baseMatchweekDates = extractMatchweekDates(save.fixtures);
-  const nextMatchweekDates = baseMatchweekDates.map((d) => addDaysIso(d, 364));
+  const nextMatchweekDates = buildLeagueMatchweekDates(nextStartYear, 38);
 
   const nextFixtures = generateDivisionFixtures(
     newDivClubs,
@@ -470,7 +472,10 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
   );
 
   // 6. Reset Domestic Cup for the new season
-  const nextFaCup = createInitialFACupState(updatedClubs, save.userClubId);
+  const nextFaCup = createInitialFACupState(updatedClubs, save.userClubId, {
+    leagueDates: nextMatchweekDates,
+    seasonLabel: nextSeason,
+  });
 
   // 7. News Items for New Season
   const welcomeNews = [
@@ -529,6 +534,8 @@ export function advanceToNextSeason(save: SaveState): SeasonTransitionResult {
     seasonFinished: false,
     currentMatchweek: 1,
     currentDate: initialDate,
+    calendarVersion: 2,
+    processedFifaWindowIds: [],
     clubs: updatedClubs,
     players: finalPlayers,
     fixtures: nextFixtures,

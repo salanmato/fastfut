@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { Club, FACupState } from "../types/game";
 import { formatMoney } from "../utils/format";
-import { formatDatePtBr } from "../utils/calendar";
+import { formatDatePtBr, formatDateShortPtBr } from "../utils/calendar";
 import { getCupInfo } from "../engine/faCup";
 import { ClubBadge } from "./ClubBadge";
 
@@ -20,6 +20,7 @@ interface FACupHubProps {
   clubs: Club[];
   userClubId: number;
   currentMatchweek: number;
+  currentDate: string;
   onSimulateCurrentRound: () => void;
 }
 
@@ -42,7 +43,7 @@ export const FACupHub: React.FC<FACupHubProps> = ({
   faCup,
   clubs,
   userClubId,
-  currentMatchweek,
+  currentDate,
   onSimulateCurrentRound,
 }) => {
   const [selectedRoundIdx, setSelectedRoundIdx] = useState<number>(faCup.currentRoundIndex);
@@ -113,8 +114,8 @@ export const FACupHub: React.FC<FACupHubProps> = ({
 
   const canSimulateCurrent =
     Boolean(currentRound) && !currentRound.completed && faCup.championClubId === null;
-  const isDueBySchedule =
-    Boolean(currentRound) && currentMatchweek >= currentRound.triggerMatchweek;
+  const isDueByDate =
+    Boolean(currentRound) && currentDate >= currentRound.date;
 
   return (
     <div className="space-y-5">
@@ -154,17 +155,20 @@ export const FACupHub: React.FC<FACupHubProps> = ({
                 </div>
               </div>
             ) : (
-              canSimulateCurrent && (
+              canSimulateCurrent && currentRound && (
                 <button
                   onClick={onSimulateCurrentRound}
+                  disabled={!isDueByDate}
                   className={`inline-flex items-center gap-2 rounded-lg px-5 py-3 text-xs font-black transition ${
-                    isDueBySchedule
+                    isDueByDate
                       ? "bg-amber-400 text-slate-950 hover:bg-amber-300"
-                      : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                      : "cursor-not-allowed border border-slate-700 bg-slate-800 text-slate-400"
                   }`}
                 >
                   <Play className="h-4 w-4 fill-current" />
-                  Simular {currentRound.shortName} ({currentRound.ties.length} jogos)
+                  {isDueByDate
+                    ? `Simular ${currentRound.shortName} (${currentRound.ties.length} jogos)`
+                    : `Disponível em ${formatDateShortPtBr(currentRound.date)}`}
                 </button>
               )
             )}
@@ -196,7 +200,7 @@ export const FACupHub: React.FC<FACupHubProps> = ({
                 ) : isActiveCurrent ? (
                   <Flame className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <span className="text-[10px] text-slate-500">R{r.triggerMatchweek}</span>
+                  <span className="text-[10px] text-slate-500">após R{Math.max(1, r.triggerMatchweek - 1)}</span>
                 )}
               </div>
               <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
@@ -217,7 +221,7 @@ export const FACupHub: React.FC<FACupHubProps> = ({
               <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3 w-3 text-sky-400" />
-                  Rodada sugerida: R{viewedRound.triggerMatchweek} ({formatDatePtBr(viewedRound.date)})
+                  Data no calendário: {formatDatePtBr(viewedRound.date)} (após a Rodada {Math.max(1, viewedRound.triggerMatchweek - 1)})
                 </span>
                 <span className="inline-flex items-center gap-1 text-emerald-300 font-semibold">
                   <Coins className="h-3 w-3" /> Prêmio por vitória: {formatMoney(viewedRound.prizeEur)}

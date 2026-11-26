@@ -18,9 +18,11 @@ import {
   GraduationCap,
   Sun,
   Moon,
+  Flag,
 } from "lucide-react";
 import type {
   Club,
+  InternationalBreakReport,
   MatchInjury,
   MatchResult,
   NewsItem,
@@ -44,11 +46,14 @@ import {
 } from "./engine/seasonProgression";
 import {
   createInitialFACupState,
-  extractMatchweekDates,
   generateDivisionFixtures,
   getCupInfo,
+  getPendingCupRound,
+  isUserInRound,
   simulateFACupRound,
 } from "./engine/faCup";
+import { buildNationalSquads } from "./engine/nationalTeams";
+import { advanceCalendar } from "./engine/calendarFlow";
 import { formatMoney, formatWage } from "./utils/format";
 import { getKitThemePalette } from "./utils/clubVisuals";
 import {
@@ -59,11 +64,17 @@ import {
 } from "./utils/shirtNumbers";
 import {
   addDaysIso,
+  buildCupRoundDates,
+  buildLeagueMatchweekDates,
   formatDatePtBr,
+  formatDateShortPtBr,
   getDefaultDateForMatchweek,
+  getFifaWindows,
   getNextMatchFixture,
+  getSeasonStartYear,
   getTransferWindowStatus,
   POST_SEASON_WINDOW_START,
+  remapFixtureDates,
   SUMMER_WINDOW_END,
   WINTER_WINDOW_END,
   WINTER_WINDOW_START,
@@ -86,6 +97,8 @@ import { TransferNegotiationModal } from "./components/TransferNegotiationModal"
 import { SeasonReviewDashboard } from "./components/SeasonReviewDashboard";
 import { SquadPerformanceAnalysis } from "./components/SquadPerformanceAnalysis";
 import { YouthAcademyHub } from "./components/YouthAcademyHub";
+import { InternationalBreakModal } from "./components/InternationalBreakModal";
+import { NationalTeamsHub } from "./components/NationalTeamsHub";
 import {
   initializeSquadCategoriesAndLoans,
   promoteYouthPlayer,
@@ -116,6 +129,7 @@ type Tab =
   | "calendar"
   | "league"
   | "facup"
+  | "national"
   | "market"
   | "matchday"
   | "season_review";
@@ -135,12 +149,69 @@ function ensureStadiumMap(
 }
 
 function hydrateSave(parsed: SaveState): SaveState {
+  const startYear = getSeasonStartYear(
+    parsed.season ?? parsed.fixtures[0]?.date ?? "2026-08-15"
+  );
+  const leagueDates = buildLeagueMatchweekDates(startYear, 38);
+  const fifaWindows = getFifaWindows(startYear);
+  const cupDates = buildCupRoundDates(leagueDates, fifaWindows);
+
+  const needsCalendarMigration = (parsed.calendarVersion ?? 1) < 2;
+  const nextFixtures = needsCalendarMigration
+    ? remapFixtureDates(parsed.fixtures, leagueDates)
+    : parsed.fixtures;
+
+  let nextFaCup = parsed.faCup;
+  if (!nextFaCup) {
+    nextFaCup = createInitialFACupState(parsed.clubs, parsed.userClubId, {
+      leagueDates,
+      seasonLabel: parsed.season ?? "2026/27",
+    });
+  } else if (needsCalendarMigration) {
+    nextFaCup = {
+      ...nextFaCup,
+      rounds: nextFaCup.rounds.map((r) => ({
+        ...r,
+        date: cupDates[r.index] ?? r.date,
+      })),
+    };
+  }
+
   const defaultDate = getDefaultDateForMatchweek(
-    parsed.fixtures,
+    nextFixtures,
     parsed.currentMatchweek,
     parsed.seasonFinished,
     parsed.userClubId
   );
+
+  let finalDate = parsed.currentDate ?? defaultDate;
+  let processedIds = parsed.processedFifaWindowIds;
+
+  if (needsCalendarMigration) {
+    if (parsed.seasonFinished) {
+      finalDate = parsed.currentDate ?? defaultDate;
+      processedIds =
+        parsed.processedFifaWindowIds ??
+        fifaWindows.filter((w) => w.processable).map((w) => w.id);
+    } else {
+      const currUserFx = nextFixtures.find(
+        (f) =>
+          f.matchweek === parsed.currentMatchweek &&
+          (f.homeClubId === parsed.userClubId || f.awayClubId === parsed.userClubId)
+      );
+      const baseCandidate = parsed.currentDate ?? defaultDate;
+      finalDate =
+        currUserFx && baseCandidate > currUserFx.date
+          ? currUserFx.date
+          : baseCandidate;
+      processedIds =
+        parsed.processedFifaWindowIds ??
+        fifaWindows
+          .filter((w) => w.processable && w.startDate <= finalDate)
+          .map((w) => w.id);
+    }
+  }
+
   const hydratedPlayers = initializeSquadCategoriesAndLoans(
     ensureAllPlayersShirtNumbers(parsed.players),
     parsed.clubs
@@ -156,14 +227,18 @@ function hydrateSave(parsed: SaveState): SaveState {
   );
   return {
     ...parsed,
+    fixtures: nextFixtures,
     players: playersWithListings,
     stadiumByClub: ensureStadiumMap(parsed.clubs, parsed.stadiumByClub),
     kitTheme: parsed.kitTheme ?? "home",
     autoOpenFormationOnRedCard: parsed.autoOpenFormationOnRedCard ?? true,
-    currentDate: parsed.currentDate ?? defaultDate,
+    currentDate: finalDate,
+    calendarVersion: 2,
+    processedFifaWindowIds: processedIds ?? [],
+    internationalBreaks: parsed.internationalBreaks ?? [],
     shortlistIds: parsed.shortlistIds ?? [],
     allowTransfersOutsideWindow: parsed.allowTransfersOutsideWindow ?? false,
-    faCup: parsed.faCup ?? createInitialFACupState(parsed.clubs),
+    faCup: nextFaCup,
   };
 }
 
@@ -264,6 +339,10 @@ export const App: React.FC = () => {
   const [negotiatingPlayer, setNegotiatingPlayer] = useState<Player | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [transitionReport, setTransitionReport] = useState<SeasonTransitionReport | null>(null);
+  const [pendingBreakModal, setPendingBreakModal] = useState<{
+    report: InternationalBreakReport;
+    openMatchdayAfterClose?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/data/fm2627.json")
@@ -428,18 +507,23 @@ export const App: React.FC = () => {
       clubId
     );
     const chosenDivision = chosenClub.league ?? chosenClub.division ?? "Premier League";
+    const startYear = getSeasonStartYear(rawDb.season ?? "2026/27");
+    const leagueDates = buildLeagueMatchweekDates(startYear, 38);
     const fixtures =
       chosenDivision !== "Premier League"
         ? generateDivisionFixtures(
             clubs.filter(
               (c) => (c.league ?? c.division ?? "Premier League") === chosenDivision
             ),
-            extractMatchweekDates(rawDb.fixtures),
+            leagueDates,
             referees,
             clubId,
             chosenDivision
           )
-        : rawDb.fixtures.map((f) => ({ ...f }));
+        : remapFixtureDates(
+            rawDb.fixtures.map((f) => ({ ...f })),
+            leagueDates
+          );
 
     const initialDate = getDefaultDateForMatchweek(fixtures, 1, false, clubId);
     const cupInfo = getCupInfo(chosenClub);
@@ -458,9 +542,15 @@ export const App: React.FC = () => {
       kitTheme,
       autoOpenFormationOnRedCard: true,
       currentDate: initialDate,
+      calendarVersion: 2,
+      processedFifaWindowIds: [],
+      internationalBreaks: [],
       shortlistIds: [],
       allowTransfersOutsideWindow: false,
-      faCup: createInitialFACupState(clubs, clubId),
+      faCup: createInitialFACupState(clubs, clubId, {
+        leagueDates,
+        seasonLabel: rawDb.season ?? "2026/27",
+      }),
       news: [
         {
           id: "welcome-1",
@@ -823,22 +913,6 @@ export const App: React.FC = () => {
     const userClub = save.clubs.find((c) => c.id === save.userClubId);
     const cupInfo = getCupInfo(userClub);
     const activeCup = save.faCup ?? createInitialFACupState(nextClubs, save.userClubId);
-    const dueCupRound = !seasonFinished
-      ? activeCup.rounds.find(
-          (r) => !r.completed && r.triggerMatchweek === nextMwValue
-        )
-      : undefined;
-    const cupNews: NewsItem[] = dueCupRound
-      ? [
-          {
-            id: `fac-due-${nextMwValue}`,
-            matchweek: nextMwValue,
-            category: "cup",
-            title: `${cupInfo.shortName}: ${dueCupRound.name} disponível!`,
-            body: `Os confrontos eliminatórios da ${dueCupRound.shortName} estão prontos. Acesse a aba ${cupInfo.shortName} para simular a fase.`,
-          },
-        ]
-      : [];
 
     // Transfer Market: AI Offers & World Transfers Simulation
     const windowStatus = getTransferWindowStatus(
@@ -910,12 +984,12 @@ export const App: React.FC = () => {
       save.userClubId
     );
 
-    setSave({
+    const draftSave: SaveState = {
       ...save,
       clubs: finalClubs,
       currentMatchweek: nextMwValue,
       seasonFinished,
-      currentDate: nextDate,
+      currentDate: prevDate,
       fixtures: nextFixtures,
       players: finalPlayers,
       tacticsByClub: nextTacticsByClub,
@@ -924,18 +998,27 @@ export const App: React.FC = () => {
       faCup: activeCup,
       transferOffers: nextTransferOffers,
       worldTransfers: nextWorldTransfers,
-      news: [...cupNews, ...transferNews, ...milestoneNews, ...newItems, ...save.news].slice(0, 50),
-    });
+      news: [...transferNews, ...milestoneNews, ...newItems, ...save.news].slice(0, 50),
+    };
+
+    const adv = advanceCalendar(draftSave, prevDate, nextDate, nextStadiumByClub);
+    setSave(adv.save);
+    if (adv.reports.length > 0) {
+      setPendingBreakModal({
+        report: adv.reports[adv.reports.length - 1],
+        openMatchdayAfterClose: false,
+      });
+    }
 
     setActiveTab(seasonFinished ? "season_review" : "dashboard");
     const milestoneToast = offerToastMsg
       ? offerToastMsg
-      : dueCupRound
-      ? `${cupInfo.shortName} liberada: ${dueCupRound.name}!`
+      : adv.stoppedAtCupRound
+      ? `Dia de ${cupInfo.shortName}: ${adv.stoppedAtCupRound.shortName}!`
       : milestoneNews[0]?.title;
     setToast(
       seasonFinished
-        ? "Temporada 2026/27 encerrada! Confira o Dashboard de Desempenho."
+        ? "Temporada encerrada! Confira o Dashboard de Desempenho."
         : milestoneToast
         ? milestoneToast
         : userHomeRevenue > 0
@@ -953,6 +1036,14 @@ export const App: React.FC = () => {
     const currentCup = save.faCup ?? createInitialFACupState(save.clubs, save.userClubId);
     const activeRound = currentCup.rounds[currentCup.currentRoundIndex];
     if (!activeRound || activeRound.completed) return;
+    if (currentDate < activeRound.date) {
+      setToast(
+        `${cupInfo.shortName} (${activeRound.shortName}) disponível apenas em ${formatDateShortPtBr(
+          activeRound.date
+        )}.`
+      );
+      return;
+    }
 
     const { nextFaCup, prizeByClub, headlines } = simulateFACupRound(
       currentCup,
@@ -1103,6 +1194,32 @@ export const App: React.FC = () => {
     save?.allowTransfersOutsideWindow ?? false
   );
 
+  const seasonStartYear = useMemo(
+    () => getSeasonStartYear(save?.season ?? currentDate),
+    [save?.season, currentDate]
+  );
+
+  const fifaWindows = useMemo(
+    () => getFifaWindows(seasonStartYear),
+    [seasonStartYear]
+  );
+
+  const projectedSquads = useMemo(
+    () => (save ? buildNationalSquads(save.players) : new Map()),
+    [save?.players]
+  );
+
+  const projectedUserCallupsCount = useMemo(() => {
+    if (!save) return 0;
+    let count = 0;
+    for (const sq of projectedSquads.values()) {
+      for (const m of sq.members) {
+        if (m.player.clubId === save.userClubId) count++;
+      }
+    }
+    return count;
+  }, [projectedSquads, save?.userClubId]);
+
   const handleToggleShortlist = (playerId: number) => {
     if (!save) return;
     const curr = save.shortlistIds ?? [];
@@ -1134,42 +1251,151 @@ export const App: React.FC = () => {
       save.seasonFinished
     );
 
-    setSave({
-      ...save,
-      currentDate: targetDate,
-      news: [...milestoneNews, ...save.news].slice(0, 40),
-    });
+    const baseSave: SaveState =
+      milestoneNews.length > 0
+        ? { ...save, news: [...milestoneNews, ...save.news].slice(0, 50) }
+        : save;
+    const adv = advanceCalendar(baseSave, currentDate, targetDate, stadiumByClub);
+    setSave(adv.save);
+
+    if (adv.reports.length > 0) {
+      setPendingBreakModal({
+        report: adv.reports[adv.reports.length - 1],
+        openMatchdayAfterClose: false,
+      });
+    }
+
+    if (adv.stoppedAtCupRound) {
+      const uc = save.clubs.find((c) => c.id === save.userClubId);
+      setToast(
+        `Dia de ${getCupInfo(uc).shortName}: ${adv.stoppedAtCupRound.shortName}!`
+      );
+      setActiveTab("facup");
+      return;
+    }
+
     setToast(
-      milestoneNews[0]?.title ?? `Calendário avançado para ${formatDatePtBr(targetDate)}`
+      adv.news[0]?.title ??
+        milestoneNews[0]?.title ??
+        `Calendário avançado para ${formatDatePtBr(adv.reachedDate)}`
     );
   };
 
   const handleAdvanceToMatchday = () => {
     if (!save || save.seasonFinished) return;
     const nextFx = getNextMatchFixture(save.fixtures, save.currentMatchweek, save.userClubId);
-    if (!nextFx) return;
-    if (currentDate >= nextFx.date) {
-      setActiveTab("matchday");
+    const pendingCup = getPendingCupRound(save.faCup);
+    const hasUserCupTie = pendingCup ? isUserInRound(pendingCup, save.userClubId) : false;
+    const targetDate =
+      hasUserCupTie && pendingCup && (!nextFx || pendingCup.date <= nextFx.date)
+        ? pendingCup.date
+        : nextFx?.date;
+    if (!targetDate) return;
+
+    if (currentDate >= targetDate) {
+      if (hasUserCupTie && pendingCup && targetDate === pendingCup.date) {
+        setActiveTab("facup");
+      } else {
+        handleStartMatchday();
+      }
       return;
     }
 
     const milestoneNews = buildWindowMilestoneNews(
       currentDate,
-      nextFx.date,
+      targetDate,
       save.currentMatchweek,
       save.seasonFinished,
       save.seasonFinished
     );
+    const baseSave: SaveState =
+      milestoneNews.length > 0
+        ? { ...save, news: [...milestoneNews, ...save.news].slice(0, 50) }
+        : save;
 
-    setSave({
-      ...save,
-      currentDate: nextFx.date,
-      news: [...milestoneNews, ...save.news].slice(0, 40),
-    });
+    const adv = advanceCalendar(baseSave, currentDate, targetDate, stadiumByClub);
+    setSave(adv.save);
+
+    if (adv.reports.length > 0) {
+      setPendingBreakModal({
+        report: adv.reports[adv.reports.length - 1],
+        openMatchdayAfterClose: false,
+      });
+    }
+
+    if (adv.stoppedAtCupRound) {
+      const uc = save.clubs.find((c) => c.id === save.userClubId);
+      setToast(
+        `Dia de ${getCupInfo(uc).shortName}: ${adv.stoppedAtCupRound.shortName}!`
+      );
+      setActiveTab("facup");
+      return;
+    }
+
     setToast(
       milestoneNews[0]?.title ??
-        `Data avançada para o Dia de Jogo (${formatDatePtBr(nextFx.date)})!`
+        `Data avançada para o Dia de Jogo (${formatDatePtBr(adv.reachedDate)})!`
     );
+  };
+
+  const handleStartMatchday = () => {
+    if (!save || save.seasonFinished) return;
+    const nextFx = getNextMatchFixture(save.fixtures, save.currentMatchweek, save.userClubId);
+    const pendingCup = getPendingCupRound(save.faCup);
+    const hasUserCup = pendingCup ? isUserInRound(pendingCup, save.userClubId) : false;
+    const uc = save.clubs.find((c) => c.id === save.userClubId);
+    const cupShort = getCupInfo(uc).shortName;
+
+    if (hasUserCup && pendingCup && (!nextFx || pendingCup.date <= nextFx.date)) {
+      if (currentDate < pendingCup.date) {
+        const adv = advanceCalendar(save, currentDate, pendingCup.date, stadiumByClub);
+        setSave(adv.save);
+        if (adv.reports.length > 0) {
+          setPendingBreakModal({
+            report: adv.reports[adv.reports.length - 1],
+            openMatchdayAfterClose: false,
+          });
+        }
+      }
+      setToast(`Jogue primeiro ${cupShort} — ${pendingCup.shortName}!`);
+      setActiveTab("facup");
+      return;
+    }
+
+    if (!nextFx) return;
+
+    if (currentDate < nextFx.date) {
+      const milestoneNews = buildWindowMilestoneNews(
+        currentDate,
+        nextFx.date,
+        save.currentMatchweek,
+        save.seasonFinished,
+        save.seasonFinished
+      );
+      const baseSave: SaveState =
+        milestoneNews.length > 0
+          ? { ...save, news: [...milestoneNews, ...save.news].slice(0, 50) }
+          : save;
+
+      const adv = advanceCalendar(baseSave, currentDate, nextFx.date, stadiumByClub);
+      setSave(adv.save);
+
+      if (adv.stoppedAtCupRound) {
+        setToast(`Jogue primeiro ${cupShort} — ${adv.stoppedAtCupRound.shortName}!`);
+        setActiveTab("facup");
+        return;
+      }
+
+      if (adv.reports.length > 0) {
+        setPendingBreakModal({
+          report: adv.reports[adv.reports.length - 1],
+          openMatchdayAfterClose: true,
+        });
+        return;
+      }
+    }
+
+    setActiveTab("matchday");
   };
 
   const handleStartNegotiation = (target: Player) => {
@@ -1679,6 +1905,12 @@ export const App: React.FC = () => {
   const userTactics = save.tacticsByClub[userClub.id];
   const kitTheme: "home" | "away" = save.kitTheme ?? "home";
   const palette = getKitThemePalette(userClub, kitTheme);
+  const pendingCupRound = getPendingCupRound(save.faCup);
+  const isUserCupDueNow = Boolean(
+    pendingCupRound &&
+      isUserInRound(pendingCupRound, userClub.id) &&
+      currentDate >= pendingCupRound.date
+  );
 
   const handleToggleKitTheme = handleToggleSaveKitTheme;
 
@@ -1785,6 +2017,7 @@ export const App: React.FC = () => {
                   label: getCupInfo(userClub).shortName,
                   icon: Award,
                 },
+                { id: "national" as const, label: "Seleções", icon: Flag },
                 { id: "market" as const, label: "Mercado", icon: ShoppingBag },
               ].map((item) => {
                 const Icon = item.icon;
@@ -1819,10 +2052,23 @@ export const App: React.FC = () => {
 
               {!save.seasonFinished && (
                 <button
-                  onClick={() => setActiveTab("matchday")}
+                  onClick={
+                    isUserCupDueNow
+                      ? () => setActiveTab("facup")
+                      : handleStartMatchday
+                  }
                   className="ml-1 inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-black text-slate-950 transition hover:bg-amber-300"
                 >
-                  <Play className="h-3.5 w-3.5 fill-current" /> Dia de Jogo
+                  {isUserCupDueNow ? (
+                    <>
+                      <Trophy className="h-3.5 w-3.5" /> Jogo da{" "}
+                      {getCupInfo(userClub).shortName}
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5 fill-current" /> Dia de Jogo
+                    </>
+                  )}
                 </button>
               )}
 
@@ -1921,7 +2167,7 @@ export const App: React.FC = () => {
             stadiumByClub={stadiumByClub}
             userKitVariant={kitTheme}
             news={save.news}
-            onStartMatchday={() => setActiveTab("matchday")}
+            onStartMatchday={handleStartMatchday}
             onNavigate={(tab) => setActiveTab(tab)}
             onSelectPlayer={setInspectedPlayer}
           />
@@ -1937,10 +2183,17 @@ export const App: React.FC = () => {
             currentSeason={save.season ?? "2026/27"}
             currentDate={currentDate}
             windowStatus={windowStatus}
+            faCup={save.faCup}
+            cupShortName={getCupInfo(userClub).shortName}
+            fifaWindows={fifaWindows}
+            internationalBreaks={save.internationalBreaks}
+            projectedUserCallupsCount={projectedUserCallupsCount}
             onAdvanceDays={handleAdvanceDays}
             onAdvanceToMatchday={handleAdvanceToMatchday}
             onOpenMarket={() => setActiveTab("market")}
-            onStartMatchday={() => setActiveTab("matchday")}
+            onOpenCup={() => setActiveTab("facup")}
+            onOpenNationalTeams={() => setActiveTab("national")}
+            onStartMatchday={handleStartMatchday}
           />
         )}
 
@@ -2043,7 +2296,22 @@ export const App: React.FC = () => {
             clubs={save.clubs}
             userClubId={userClub.id}
             currentMatchweek={save.currentMatchweek}
+            currentDate={currentDate}
             onSimulateCurrentRound={handleSimulateFACupRound}
+          />
+        )}
+
+        {activeTab === "national" && (
+          <NationalTeamsHub
+            userClub={userClub}
+            clubs={save.clubs}
+            players={save.players}
+            currentDate={currentDate}
+            fifaWindows={fifaWindows}
+            processedWindowIds={save.processedFifaWindowIds ?? []}
+            projectedSquads={projectedSquads}
+            internationalBreaks={save.internationalBreaks ?? []}
+            onSelectPlayer={setInspectedPlayer}
           />
         )}
 
@@ -2147,6 +2415,26 @@ export const App: React.FC = () => {
           onCompleteTransfer={handleCompleteTransfer}
         />
       )}
+
+      {/* International Break Report Modal */}
+      <InternationalBreakModal
+        report={pendingBreakModal?.report ?? null}
+        clubName={userClub.name}
+        ctaLabel={
+          pendingBreakModal?.openMatchdayAfterClose
+            ? "Ir para o Dia de Jogo"
+            : undefined
+        }
+        onCta={
+          pendingBreakModal?.openMatchdayAfterClose
+            ? () => {
+                setPendingBreakModal(null);
+                setActiveTab("matchday");
+              }
+            : undefined
+        }
+        onClose={() => setPendingBreakModal(null)}
+      />
 
       {/* Season Transition Report Modal */}
       {transitionReport && (

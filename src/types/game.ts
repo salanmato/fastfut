@@ -299,10 +299,74 @@ export interface StandingRow {
 export interface NewsItem {
   id: string;
   matchweek: number;
-  category: "match" | "transfer" | "league" | "injury" | "stadium" | "cup";
+  category: "match" | "transfer" | "league" | "injury" | "stadium" | "cup" | "international";
   title: string;
   body: string;
   clubId?: number;
+}
+
+export interface FifaWindow {
+  id: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  competition: string;
+  processable: boolean;
+}
+
+export interface NationalCallup {
+  playerId: number;
+  playerName: string;
+  clubId: number;
+  clubName: string;
+  position: string;
+  overall: number;
+  age: number;
+  nationKey: string;
+  nationLabel: string;
+  flag: string;
+  role: "starter" | "reserve";
+  apps: number;
+  minutes: number;
+  goals: number;
+  assists: number;
+  staminaLoss: number;
+  injuryMatches?: number;
+  injuryType?: string;
+}
+
+export interface NationalMatchResult {
+  nationKey: string;
+  nationLabel: string;
+  flag: string;
+  opponentKey: string;
+  opponentLabel: string;
+  opponentFlag: string;
+  goalsFor: number;
+  goalsAgainst: number;
+  isHome: boolean;
+  competition: string;
+  matchIndex: number;
+}
+
+export interface InternationalBreakReport {
+  windowId: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  competition: string;
+  userCallups: NationalCallup[];
+  userSnubs: Array<{
+    playerId: number;
+    playerName: string;
+    overall: number;
+    position: string;
+    nationLabel: string;
+    flag: string;
+    reason: string;
+  }>;
+  results: NationalMatchResult[];
+  restedCount: number;
 }
 
 export interface FACupTie {
@@ -463,6 +527,9 @@ export interface SaveState {
   kitTheme?: "home" | "away";
   autoOpenFormationOnRedCard?: boolean;
   currentDate?: string;
+  calendarVersion?: number;
+  processedFifaWindowIds?: string[];
+  internationalBreaks?: InternationalBreakReport[];
   shortlistIds?: number[];
   allowTransfersOutsideWindow?: boolean;
   faCup?: FACupState;
