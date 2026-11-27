@@ -4,6 +4,7 @@ import type {
   FACupState,
   FACupTie,
   Fixture,
+  MatchInjury,
   NewsItem,
   Player,
   Referee,
@@ -11,6 +12,7 @@ import type {
   Tactics,
 } from "../types/game";
 import { autoPickLineup, createDefaultTactics, simulateFullMatch } from "./matchEngine";
+import { applyPostMatchFatigue } from "./fatigueEngine";
 import { formatMoney } from "../utils/format";
 import {
   buildCupRoundDates,
@@ -300,13 +302,14 @@ export function simulateFACupRound(
   currentMatchweek: number
 ): {
   nextFaCup: FACupState;
+  nextPlayers: Player[];
   prizeByClub: Map<number, number>;
   headlines: NewsItem[];
 } {
   const rIdx = faCup.currentRoundIndex;
   const round = faCup.rounds[rIdx];
   if (!round || round.completed || faCup.championClubId !== null) {
-    return { nextFaCup: faCup, prizeByClub: new Map(), headlines: [] };
+    return { nextFaCup: faCup, nextPlayers: players, prizeByClub: new Map(), headlines: [] };
   }
 
   const clubMap = new Map(clubs.map((c) => [c.id, c]));
@@ -315,6 +318,12 @@ export function simulateFACupRound(
   const winners: Club[] = [];
   let userTieSummary: string | null = null;
   const upsets: Array<{ winner: Club; loser: Club; score: string; gap: number }> = [];
+  const cupClubsPlayed = new Set<number>();
+  const cupMinutesByPlayer = new Map<
+    number,
+    { mins: number; tactics?: Tactics; turfLevel: number }
+  >();
+  const cupInjuries = new Map<number, MatchInjury>();
 
   const updatedTies: FACupTie[] = round.ties.map((tie, idx) => {
     const homeClub = clubMap.get(tie.homeClubId)!;
@@ -372,6 +381,23 @@ export function simulateFACupRound(
       ref,
       stadiumByClub[homeClub.id]
     );
+
+    cupClubsPlayed.add(homeClub.id);
+    cupClubsPlayed.add(awayClub.id);
+    const homeTurf = stadiumByClub[homeClub.id]?.turfLevel ?? 1;
+    const homePlayerIdSet = new Set(homePlayers.map((p) => p.id));
+    for (const [pidStr, mins] of Object.entries(res.minutesPlayed ?? {})) {
+      const pid = Number(pidStr);
+      const isHomeP = homePlayerIdSet.has(pid);
+      cupMinutesByPlayer.set(pid, {
+        mins,
+        tactics: isHomeP ? hTac : aTac,
+        turfLevel: isHomeP ? homeTurf : 1,
+      });
+    }
+    for (const inj of res.injuries ?? []) {
+      cupInjuries.set(inj.playerId, inj);
+    }
 
     let winnerClub = res.homeGoals > res.awayGoals ? homeClub : awayClub;
     let homePens: number | null = null;
@@ -491,6 +517,40 @@ export function simulateFACupRound(
     });
   }
 
+  const nextPlayers = players.map((p) => {
+    const playedInfo = cupMinutesByPlayer.get(p.id);
+    const newInj = cupInjuries.get(p.id);
+    const clubPlayed = p.clubId !== null && cupClubsPlayed.has(p.clubId);
+
+    let nextInjLeft = p.injuryMatchesLeft ?? 0;
+    let nextInjType = p.injuryType;
+    if (newInj) {
+      nextInjLeft = newInj.matchesOut;
+      nextInjType = newInj.injuryType;
+    } else if (clubPlayed && nextInjLeft > 0) {
+      nextInjLeft = Math.max(0, nextInjLeft - 1);
+      if (nextInjLeft === 0) nextInjType = undefined;
+    }
+
+    const nextStamina = playedInfo
+      ? applyPostMatchFatigue(p, playedInfo.mins, playedInfo.tactics, playedInfo.turfLevel)
+      : p.stamina;
+
+    if (
+      nextStamina === p.stamina &&
+      nextInjLeft === (p.injuryMatchesLeft ?? 0) &&
+      nextInjType === p.injuryType
+    ) {
+      return p;
+    }
+    return {
+      ...p,
+      stamina: nextStamina,
+      injuryMatchesLeft: nextInjLeft,
+      injuryType: nextInjType,
+    };
+  });
+
   return {
     nextFaCup: {
       ...faCup,
@@ -498,6 +558,7 @@ export function simulateFACupRound(
       championClubId,
       rounds: nextRounds,
     },
+    nextPlayers,
     prizeByClub,
     headlines,
   };

@@ -9,6 +9,7 @@ import type {
 import { getFifaWindows, getSeasonStartYear } from "../utils/calendar";
 import { getCupInfo, getPendingCupRound, isUserInRound, simulateFACupRound } from "./faCup";
 import { simulateInternationalBreak } from "./nationalTeams";
+import { countNonFifaRecoveryDays, recoverSquadStaminaOverDays } from "./fatigueEngine";
 
 export interface CalendarAdvanceResult {
   save: SaveState;
@@ -69,6 +70,14 @@ export function advanceCalendar(
       nextFifa && (!cupDue || nextFifa.startDate <= cupDue.date);
 
     if (pickFifa && nextFifa) {
+      const recDays = countNonFifaRecoveryDays(cursorDate, nextFifa.startDate, fifaWindows);
+      if (recDays > 0) {
+        curSave = {
+          ...curSave,
+          players: recoverSquadStaminaOverDays(curSave.players, recDays, stadiumByClub),
+        };
+      }
+
       const { players: nextPlayers, report, news } = simulateInternationalBreak(
         curSave,
         nextFifa,
@@ -94,6 +103,17 @@ export function advanceCalendar(
     }
 
     if (cupDue) {
+      const recDays = countNonFifaRecoveryDays(cursorDate, cupDue.date, fifaWindows);
+      if (recDays > 0) {
+        curSave = {
+          ...curSave,
+          players: recoverSquadStaminaOverDays(curSave.players, recDays, stadiumByClub),
+        };
+      }
+      if (cupDue.date > cursorDate) {
+        cursorDate = cupDue.date;
+      }
+
       if (isUserInRound(cupDue, curSave.userClubId)) {
         const reachedDate = cupDue.date > fromDate ? cupDue.date : fromDate;
         const userTie = cupDue.ties.find(
@@ -134,7 +154,7 @@ export function advanceCalendar(
       }
 
       // User eliminated or not in pool: auto-simulate this cup round silently
-      const { nextFaCup, prizeByClub, headlines } = simulateFACupRound(
+      const { nextFaCup, nextPlayers, prizeByClub, headlines } = simulateFACupRound(
         curSave.faCup!,
         curSave.clubs,
         curSave.players,
@@ -153,16 +173,21 @@ export function advanceCalendar(
       curSave = {
         ...curSave,
         clubs: nextClubs,
+        players: nextPlayers,
         faCup: nextFaCup,
       };
-      if (cupDue.date > cursorDate) {
-        cursorDate = cupDue.date;
-      }
     }
   }
 
+  const remainingRecDays = countNonFifaRecoveryDays(cursorDate, targetDate, fifaWindows);
+  const finalPlayers =
+    remainingRecDays > 0
+      ? recoverSquadStaminaOverDays(curSave.players, remainingRecDays, stadiumByClub)
+      : curSave.players;
+
   curSave = {
     ...curSave,
+    players: finalPlayers,
     currentDate: targetDate,
     news: allNews.length > 0 ? [...allNews, ...curSave.news].slice(0, 50) : curSave.news,
   };

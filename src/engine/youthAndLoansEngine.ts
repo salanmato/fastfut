@@ -6,7 +6,7 @@ import type {
   PlayerDetailedStats,
   Tactics,
 } from "../types/game";
-import { autoPickLineup } from "./matchEngine";
+import { repairLineup } from "./matchEngine";
 
 function generateAttributes(
   overall: number,
@@ -189,7 +189,7 @@ export function demoteToYouthSquad(
     const firstTeamSquad = nextPlayers.filter(
       (p) => p.clubId === userClubId && p.squadCategory !== "youth"
     );
-    const picked = autoPickLineup(firstTeamSquad, tactics.formation);
+    const picked = repairLineup(firstTeamSquad, tactics);
     nextTactics = {
       ...tactics,
       starters: picked.starters,

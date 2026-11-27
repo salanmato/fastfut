@@ -12,7 +12,7 @@ import type {
   StadiumConfig,
   Tactics,
 } from "../types/game";
-import { getFormationSlots } from "../utils/format";
+import { getFormationSlots, type FormationSlot } from "../utils/format";
 import { evaluateShirtNumberAffinity } from "../utils/shirtNumbers";
 import type { TeamSynergyResult } from "./synergyEngine";
 
@@ -81,6 +81,7 @@ export interface LiveMatchSession {
   injuredIds: number[];
   injuries: MatchInjury[];
   playerStamina: Record<number, number>;
+  minutesPlayed?: Record<number, number>;
   playerRatings: Record<number, number>;
   possessionAccumulatorHome: number;
   possessionTicks: number;
@@ -95,33 +96,169 @@ export interface LiveMatchSession {
   pendingSubs?: PendingSubstitution[];
 }
 
+export type AutoPickMode = "best" | "rotation";
+
+function getEffectiveOvrForPick(p: Player, mode: AutoPickMode = "best"): number {
+  const stam = p.stamina ?? 100;
+  if (p.roleCategory === "GK") {
+    if (mode === "rotation" && stam < 88) {
+      return p.overall - (88 - stam) * 0.4;
+    }
+    return p.overall - Math.max(0, 75 - stam) * 0.25;
+  }
+
+  if (mode === "rotation") {
+    if (stam >= 92) return p.overall;
+    if (stam >= 80) return p.overall - (92 - stam) * 0.6;
+    return p.overall - (7.2 + (80 - stam) * 1.1);
+  }
+
+  // "best" mode: preserves squad hierarchy; minimal penalty above 78%, progressive drop below 65% / <52%
+  if (stam >= 78) {
+    return p.overall - (100 - stam) * 0.02;
+  }
+  if (stam >= 65) {
+    return p.overall - (0.44 + (78 - stam) * 0.24);
+  }
+  if (stam >= 52) {
+    return p.overall - (3.56 + (65 - stam) * 0.65);
+  }
+  return p.overall - (12.0 + (52 - stam) * 1.1);
+}
+
+function getSlotPriority(slot: FormationSlot): number {
+  const mainPos = slot.preferredPositions[0];
+  if (mainPos === "GK") return 1;
+  if (mainPos === "ST" || mainPos === "CF") return 2;
+  if (mainPos === "RW" || mainPos === "RM" || mainPos === "LW" || mainPos === "LM") return 3;
+  if (mainPos === "CB") return 4;
+  if (mainPos === "LB" || mainPos === "LWB" || mainPos === "RB" || mainPos === "RWB") return 5;
+  if (mainPos === "CDM") return 6;
+  if (mainPos === "CAM") return 7;
+  return 8; // CM
+}
+
+function computeSlotPosBonus(p: Player, slot: FormationSlot): number {
+  const pPos = p.primaryPosition;
+  const positions = p.positions ?? [pPos];
+  const mainSlotPos = slot.preferredPositions[0];
+
+  if (slot.roleCategory === "GK") {
+    return p.roleCategory === "GK" ? 120 : -500;
+  }
+  if (p.roleCategory === "GK") {
+    return -500;
+  }
+  if (pPos === mainSlotPos) {
+    return 48;
+  }
+  if (
+    (mainSlotPos in { RW: 1, RM: 1 } && pPos in { RW: 1, RM: 1 }) ||
+    (mainSlotPos in { LW: 1, LM: 1 } && pPos in { LW: 1, LM: 1 }) ||
+    (mainSlotPos in { ST: 1, CF: 1 } && pPos in { ST: 1, CF: 1 }) ||
+    (mainSlotPos in { RB: 1, RWB: 1 } && pPos in { RB: 1, RWB: 1 }) ||
+    (mainSlotPos in { LB: 1, LWB: 1 } && pPos in { LB: 1, LWB: 1 })
+  ) {
+    return 46;
+  }
+  if (slot.preferredPositions.includes(pPos)) {
+    return 44;
+  }
+  if (positions.includes(mainSlotPos)) {
+    return 42;
+  }
+  if (slot.preferredPositions.some((pos) => positions.includes(pos))) {
+    return 38;
+  }
+  if (p.roleCategory === slot.roleCategory) {
+    return 12;
+  }
+  return -45;
+}
+
+function getLineupCandidatePool(players: Player[]): {
+  healthyPool: Player[];
+  fullPool: Player[];
+} {
+  const firstTeam = players.filter((p) => p.squadCategory !== "youth");
+  const basePool = firstTeam.length >= 11 ? firstTeam : players;
+  const healthy = basePool.filter((p) => (p.injuryMatchesLeft ?? 0) === 0);
+  const injured = basePool.filter((p) => (p.injuryMatchesLeft ?? 0) > 0);
+  return {
+    healthyPool: healthy,
+    fullPool: healthy.length >= 11 ? [...healthy] : [...healthy, ...injured],
+  };
+}
+
+function fillBalancedBench(
+  existingBenchIds: number[],
+  availablePool: Player[],
+  excludedIds: Set<number>
+): number[] {
+  const remaining = availablePool.filter((p) => !excludedIds.has(p.id));
+  const benchScore = (p: Player) =>
+    p.overall - Math.max(0, 80 - (p.stamina ?? 100)) * 0.18;
+
+  const bench: number[] = [];
+  const usedBench = new Set<number>();
+
+  for (const id of existingBenchIds) {
+    if (bench.length >= 7) break;
+    if (excludedIds.has(id) || usedBench.has(id)) continue;
+    const pl = remaining.find((p) => p.id === id);
+    if (pl && (pl.injuryMatchesLeft ?? 0) === 0) {
+      bench.push(id);
+      usedBench.add(id);
+    }
+  }
+
+  const desiredBenchRoles: Array<Player["roleCategory"]> = [
+    "GK",
+    "DEF",
+    "DEF",
+    "MID",
+    "MID",
+    "ATT",
+    "ATT",
+  ];
+  const sortedPool = remaining
+    .filter((p) => !usedBench.has(p.id))
+    .sort((a, b) => benchScore(b) - benchScore(a));
+
+  for (const role of desiredBenchRoles) {
+    if (bench.length >= 7) break;
+    const countInRole = bench.filter((id) => {
+      const pl = availablePool.find((p) => p.id === id);
+      return pl?.roleCategory === role;
+    }).length;
+    const desiredInRole = desiredBenchRoles.filter((r) => r === role).length;
+    if (countInRole >= desiredInRole) continue;
+
+    const idx = sortedPool.findIndex((p) => p.roleCategory === role);
+    if (idx >= 0) {
+      const picked = sortedPool.splice(idx, 1)[0];
+      bench.push(picked.id);
+      usedBench.add(picked.id);
+    }
+  }
+
+  while (bench.length < 7 && sortedPool.length > 0) {
+    const next = sortedPool.shift()!;
+    bench.push(next.id);
+    usedBench.add(next.id);
+  }
+
+  return bench;
+}
+
 export function autoPickLineup(
   players: Player[],
-  formation: Formation
+  formation: Formation,
+  mode: AutoPickMode = "best"
 ): { starters: number[]; bench: number[] } {
   const slots = getFormationSlots(formation);
-  const healthy = players.filter((p) => (p.injuryMatchesLeft ?? 0) === 0);
-  const injured = players.filter((p) => (p.injuryMatchesLeft ?? 0) > 0);
-  const available = healthy.length >= 11 ? [...healthy] : [...healthy, ...injured];
-
-  const effectiveOvr = (p: Player) =>
-    p.roleCategory === "GK"
-      ? p.overall * (0.92 + 0.08 * (p.stamina / 100))
-      : p.overall * (0.65 + 0.35 * (p.stamina / 100));
-
-  // Prioritize specialized tactical roles (GK, ST, Wingers, Fullbacks) so specialists
-  // are locked into their natural starting slots before generic midfield slots can misassign them.
-  const getSlotPriority = (slot: (typeof slots)[number]): number => {
-    const mainPos = slot.preferredPositions[0];
-    if (mainPos === "GK") return 1;
-    if (mainPos === "ST" || mainPos === "CF") return 2;
-    if (mainPos === "RW" || mainPos === "RM" || mainPos === "LW" || mainPos === "LM") return 3;
-    if (mainPos === "CB") return 4;
-    if (mainPos === "LB" || mainPos === "LWB" || mainPos === "RB" || mainPos === "RWB") return 5;
-    if (mainPos === "CDM") return 6;
-    if (mainPos === "CAM") return 7;
-    return 8; // CM
-  };
+  const { fullPool } = getLineupCandidatePool(players);
+  const available = [...fullPool];
 
   const sortedSlots = slots
     .map((s, idx) => ({ slot: s, originalIndex: idx, priority: getSlotPriority(s) }))
@@ -135,47 +272,7 @@ export function autoPickLineup(
 
     for (let i = 0; i < available.length; i++) {
       const p = available[i];
-      const eff = effectiveOvr(p);
-      const pPos = p.primaryPosition;
-      const positions = p.positions ?? [pPos];
-      const mainSlotPos = slot.preferredPositions[0];
-
-      let posBonus = 0;
-
-      if (slot.roleCategory === "GK") {
-        posBonus = p.roleCategory === "GK" ? 120 : -500;
-      } else if (p.roleCategory === "GK") {
-        posBonus = -500;
-      } else if (pPos === mainSlotPos) {
-        // Exact primary position match
-        posBonus = 48;
-      } else if (
-        (mainSlotPos in { RW: 1, RM: 1 } && pPos in { RW: 1, RM: 1 }) ||
-        (mainSlotPos in { LW: 1, LM: 1 } && pPos in { LW: 1, LM: 1 }) ||
-        (mainSlotPos in { ST: 1, CF: 1 } && pPos in { ST: 1, CF: 1 }) ||
-        (mainSlotPos in { RB: 1, RWB: 1 } && pPos in { RB: 1, RWB: 1 }) ||
-        (mainSlotPos in { LB: 1, LWB: 1 } && pPos in { LB: 1, LWB: 1 })
-      ) {
-        // Natural flank & striker equivalences (e.g. RM playing RW)
-        posBonus = 46;
-      } else if (slot.preferredPositions.includes(pPos)) {
-        // Primary position is in slot preferences (e.g. CAM in CM slot)
-        posBonus = 44;
-      } else if (positions.includes(mainSlotPos)) {
-        // Secondary position is exact match for slot
-        posBonus = 42;
-      } else if (slot.preferredPositions.some((pos) => positions.includes(pos))) {
-        // Secondary position is in slot preferences
-        posBonus = 38;
-      } else if (p.roleCategory === slot.roleCategory) {
-        // Same broad category (MID, DEF, ATT)
-        posBonus = 12;
-      } else {
-        // Mismatch
-        posBonus = -45;
-      }
-
-      const score = eff + posBonus;
+      const score = getEffectiveOvrForPick(p, mode) + computeSlotPosBonus(p, slot);
       if (score > bestScore) {
         bestScore = score;
         bestIdx = i;
@@ -189,33 +286,144 @@ export function autoPickLineup(
   }
 
   const finalStarters = starters.filter((id): id is number => id !== null);
-
-  // Pick 7 balanced bench players (1 GK, 2 DEF, 2 MID, 2 ATT)
-  const bench: number[] = [];
-  const desiredBenchRoles: Array<Player["roleCategory"]> = [
-    "GK",
-    "DEF",
-    "DEF",
-    "MID",
-    "MID",
-    "ATT",
-    "ATT",
-  ];
-  available.sort((a, b) => effectiveOvr(b) - effectiveOvr(a));
-
-  for (const role of desiredBenchRoles) {
-    const idx = available.findIndex((p) => p.roleCategory === role);
-    if (idx >= 0) {
-      bench.push(available[idx].id);
-      available.splice(idx, 1);
-    }
-  }
-  while (bench.length < 7 && available.length > 0) {
-    const next = available.shift()!;
-    bench.push(next.id);
-  }
+  const starterSet = new Set(finalStarters);
+  const bench = fillBalancedBench([], fullPool, starterSet);
 
   return { starters: finalStarters, bench };
+}
+
+/**
+ * Repairs a lineup only for missing/injured/youth slots without reshuffling healthy user starters.
+ */
+export function repairLineup(
+  players: Player[],
+  tactics: Tactics
+): { starters: number[]; bench: number[] } {
+  const slots = getFormationSlots(tactics.formation);
+  const firstTeam = players.filter((p) => p.squadCategory !== "youth");
+  const pool = firstTeam.length >= 11 ? firstTeam : players;
+  const poolMap = new Map(pool.map((p) => [p.id, p]));
+
+  const nextStarters: Array<number | null> = new Array(slots.length).fill(null);
+  const usedStarterIds = new Set<number>();
+
+  for (let i = 0; i < slots.length; i++) {
+    const id = tactics.starters[i];
+    if (id === undefined || usedStarterIds.has(id)) continue;
+    const p = poolMap.get(id);
+    if (!p) continue;
+    if ((p.injuryMatchesLeft ?? 0) > 0) continue;
+    nextStarters[i] = id;
+    usedStarterIds.add(id);
+  }
+
+  const benchSet = new Set(tactics.bench);
+  const vacantIndices = nextStarters
+    .map((id, idx) => ({ id, idx, priority: getSlotPriority(slots[idx]) }))
+    .filter((item) => item.id === null)
+    .sort((a, b) => a.priority - b.priority);
+
+  const healthyRemaining = pool.filter(
+    (p) => !usedStarterIds.has(p.id) && (p.injuryMatchesLeft ?? 0) === 0
+  );
+  const injuredRemaining = pool.filter(
+    (p) => !usedStarterIds.has(p.id) && (p.injuryMatchesLeft ?? 0) > 0
+  );
+  const fallbackPool = [...healthyRemaining];
+
+  for (const { idx } of vacantIndices) {
+    const slot = slots[idx];
+    const source = fallbackPool.length > 0 ? fallbackPool : injuredRemaining;
+    let bestIdx = -1;
+    let bestScore = -99999;
+
+    for (let i = 0; i < source.length; i++) {
+      const p = source[i];
+      const benchBoost = benchSet.has(p.id) ? 1.5 : 0;
+      const score =
+        getEffectiveOvrForPick(p, "best") + computeSlotPosBonus(p, slot) + benchBoost;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx >= 0) {
+      const picked = source.splice(bestIdx, 1)[0];
+      nextStarters[idx] = picked.id;
+      usedStarterIds.add(picked.id);
+    }
+  }
+
+  const finalStarters = nextStarters.filter((id): id is number => id !== null);
+  const starterSet = new Set(finalStarters);
+  const healthyPool = pool.filter((p) => (p.injuryMatchesLeft ?? 0) === 0);
+  const bench = fillBalancedBench(
+    tactics.bench,
+    healthyPool.length >= 11 ? healthyPool : pool,
+    starterSet
+  );
+
+  return { starters: finalStarters, bench };
+}
+
+/**
+ * Adapts the user's current healthy starters to a new formation without dropping tired starters.
+ */
+export function adaptLineupToFormation(
+  players: Player[],
+  currentStarters: number[],
+  currentBench: number[],
+  newFormation: Formation
+): { starters: number[]; bench: number[] } {
+  const repaired = repairLineup(players, {
+    formation: newFormation,
+    mentality: "Balanced",
+    pressing: "Medium",
+    passingStyle: "Mixed",
+    starters: currentStarters,
+    bench: currentBench,
+  });
+
+  const playerMap = new Map(players.map((p) => [p.id, p]));
+  const chosenPool = repaired.starters
+    .map((id) => playerMap.get(id))
+    .filter((p): p is Player => Boolean(p));
+
+  const slots = getFormationSlots(newFormation);
+  const sortedSlots = slots
+    .map((s, idx) => ({ slot: s, originalIndex: idx, priority: getSlotPriority(s) }))
+    .sort((a, b) => a.priority - b.priority);
+
+  const available = [...chosenPool];
+  const mapped: Array<number | null> = new Array(slots.length).fill(null);
+
+  for (const { slot, originalIndex } of sortedSlots) {
+    let bestIdx = -1;
+    let bestScore = -99999;
+    for (let i = 0; i < available.length; i++) {
+      const p = available[i];
+      const score = computeSlotPosBonus(p, slot) + p.overall * 0.15;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) {
+      mapped[originalIndex] = available[bestIdx].id;
+      available.splice(bestIdx, 1);
+    }
+  }
+
+  const finalStarters = mapped.filter((id): id is number => id !== null);
+  return repairLineup(players, {
+    formation: newFormation,
+    mentality: "Balanced",
+    pressing: "Medium",
+    passingStyle: "Mixed",
+    starters: finalStarters,
+    bench: repaired.bench,
+  });
 }
 
 export function createDefaultTactics(players: Player[], clubAvgOverall: number): Tactics {
@@ -1093,6 +1301,7 @@ export function initLiveMatchSession(
     injuredIds: [],
     injuries: [],
     playerStamina,
+    minutesPlayed: {},
     playerRatings,
     possessionAccumulatorHome: 50,
     possessionTicks: 1,
@@ -1284,17 +1493,20 @@ function maybePerformAiSub(
   const benchIds = isHome ? session.homeBenchIds : session.awayBenchIds;
   if (benchIds.length === 0) return;
 
-  // Find most fatigued outfield starter that is not already pending sub
+  const stamCutoff = session.minute < 66 ? 58 : session.minute < 76 ? 65 : 72;
+  const goalDiff = isHome
+    ? session.homeGoals - session.awayGoals
+    : session.awayGoals - session.homeGoals;
+
   const pendingOutIds = new Set((session.pendingSubs ?? []).map((s) => s.playerOutId));
   const outfieldActive = activeIds
     .filter((id) => !pendingOutIds.has(id))
     .map((id) => playerMap.get(id))
     .filter((p): p is Player => Boolean(p))
-    .filter((p) => p.roleCategory !== "GK")
+    .filter((p) => p.roleCategory !== "GK" && (session.playerStamina[p.id] ?? 100) <= stamCutoff)
     .sort((a, b) => (session.playerStamina[a.id] ?? 100) - (session.playerStamina[b.id] ?? 100));
 
-  const candidateOut = outfieldActive[0];
-  if (!candidateOut || (session.playerStamina[candidateOut.id] ?? 100) > 76) return;
+  if (outfieldActive.length === 0) return;
 
   const pendingInIds = new Set((session.pendingSubs ?? []).map((s) => s.playerInId));
   const benchPlayers = benchIds
@@ -1304,20 +1516,42 @@ function maybePerformAiSub(
     .filter((p) => p.roleCategory !== "GK");
   if (benchPlayers.length === 0) return;
 
-  const sameRole = benchPlayers
-    .filter((p) => p.roleCategory === candidateOut.roleCategory)
-    .sort((a, b) => b.overall - a.overall);
-  const candidateIn =
-    sameRole[0] ?? benchPlayers.sort((a, b) => b.overall - a.overall)[0];
-  if (!candidateIn) return;
+  let chosenOut: Player | null = null;
+  let chosenIn: Player | null = null;
+
+  for (const outP of outfieldActive) {
+    const outStam = session.playerStamina[outP.id] ?? 100;
+    const outEff = outP.overall * (0.72 + 0.28 * (outStam / 100));
+
+    const sameRole = benchPlayers
+      .filter((p) => p.roleCategory === outP.roleCategory)
+      .sort((a, b) => b.overall - a.overall);
+    const inP = sameRole[0] ?? [...benchPlayers].sort((a, b) => b.overall - a.overall)[0];
+    if (!inP) continue;
+
+    const inStam = session.playerStamina[inP.id] ?? inP.stamina ?? 95;
+    const inEff = inP.overall * (0.72 + 0.28 * (inStam / 100));
+
+    const exhausted = outStam < 48;
+    const protectLead = goalDiff >= 2 && outStam < 70 && inP.overall >= outP.overall - 14;
+    const improvesOrHolds = inEff >= outEff - 2.0;
+
+    if (exhausted || protectLead || improvesOrHolds) {
+      chosenOut = outP;
+      chosenIn = inP;
+      break;
+    }
+  }
+
+  if (!chosenOut || !chosenIn) return;
 
   requestLiveSubstitution(
     session,
     clubId,
-    candidateOut.id,
-    candidateIn.id,
-    candidateOut.name,
-    candidateIn.name
+    chosenOut.id,
+    chosenIn.id,
+    chosenOut.name,
+    chosenIn.name
   );
 }
 
@@ -1452,6 +1686,7 @@ export function stepLiveMatchMinute(
     session.awaySynergy
   );
 
+  session.minutesPlayed = session.minutesPlayed ?? {};
   // Drain stamina (home turf level reduces home fatigue)
   const homeTurfFactor = 1 - ((homeStadiumConfig?.turfLevel ?? 1) - 1) * 0.05;
   const drainFor = (isHome: boolean, tactics: Tactics, active: Player[]) => {
@@ -1460,6 +1695,7 @@ export function stepLiveMatchMinute(
       (tactics.mentality === "Attacking" ? 0.08 : tactics.mentality === "Defensive" ? -0.05 : 0);
     const turfMult = isHome ? homeTurfFactor : 1;
     for (const p of active) {
+      session.minutesPlayed![p.id] = (session.minutesPlayed![p.id] ?? 0) + 1;
       if (p.roleCategory === "GK") {
         // Goalkeepers tire much less than outfield players (~3-4% over 90 mins, independent of pressing)
         const gkDrain = 0.038 * turfMult;
@@ -1469,7 +1705,8 @@ export function stepLiveMatchMinute(
         );
       } else {
         const stamStat = Math.max(45, p.stats.stamina);
-        const mult = (1 - (stamStat - 70) * 0.004) * turfMult;
+        const ageDrain = p.age >= 32 ? 1 + Math.min(0.16, (p.age - 31) * 0.04) : 1;
+        const mult = (1 - (stamStat - 70) * 0.004) * turfMult * ageDrain;
         session.playerStamina[p.id] = Math.max(
           18,
           (session.playerStamina[p.id] ?? 100) - baseDrain * mult
@@ -1680,7 +1917,10 @@ export function stepLiveMatchMinute(
     const avgStam =
       candidates.reduce((sum, p) => sum + (session.playerStamina[p.id] ?? 100), 0) /
       candidates.length;
-    const fatigueRisk = avgStam < 55 ? 0.0008 : avgStam < 68 ? 0.0003 : 0.0001;
+    const minStam = Math.min(...candidates.map((p) => session.playerStamina[p.id] ?? 100));
+    const fatigueRisk =
+      (avgStam < 55 ? 0.0008 : avgStam < 68 ? 0.0003 : 0.0001) +
+      (minStam < 45 ? 0.0012 : 0);
     const pressMult = tactics.pressing === "High" ? 1.25 : tactics.pressing === "Low" ? 0.8 : 1.0;
     const turfMult = isHome ? homeTurfFactor : 1.0;
     // Hard fouls only cause an injury ~3.5% of the time; non-foul muscular injuries are rare (~8-10% per match)
@@ -1691,13 +1931,16 @@ export function stepLiveMatchMinute(
     if (Math.random() > injuryProb) return false;
 
     const victim =
+      fromFoul &&
       preferredVictim &&
       preferredVictim.roleCategory !== "GK" &&
       !session.injuredIds.includes(preferredVictim.id)
         ? preferredVictim
         : weightedPick(candidates, (p) => {
-            const stam = session.playerStamina[p.id] ?? 100;
-            return Math.max(0.5, (115 - stam) / 30);
+            const s = session.playerStamina[p.id] ?? 100;
+            if (s < 45) return 6;
+            if (s < 60) return 2.5;
+            return Math.max(0.4, (110 - s) / 40);
           });
 
     const injuryType = INJURY_TYPES[Math.floor(Math.random() * INJURY_TYPES.length)];
@@ -2828,6 +3071,11 @@ export function finalizeMatchResult(session: LiveMatchSession): MatchResult {
     }
   }
 
+  const finalStamina: Record<number, number> = {};
+  for (const [idStr, v] of Object.entries(session.playerStamina)) {
+    finalStamina[Number(idStr)] = Math.round(v);
+  }
+
   return {
     fixtureId: session.fixtureId,
     homeGoals: session.homeGoals,
@@ -2842,6 +3090,8 @@ export function finalizeMatchResult(session: LiveMatchSession): MatchResult {
     gateRevenueEur: session.gateRevenueEur,
     homeAdvantagePct: session.homeAdvantagePct,
     injuries: [...session.injuries],
+    minutesPlayed: session.minutesPlayed ? { ...session.minutesPlayed } : undefined,
+    finalStamina,
   };
 }
 

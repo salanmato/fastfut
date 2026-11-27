@@ -256,6 +256,8 @@ export interface MatchResult {
   gateRevenueEur?: number;
   homeAdvantagePct?: number;
   injuries?: MatchInjury[];
+  minutesPlayed?: Record<number, number>;
+  finalStamina?: Record<number, number>;
 }
 
 export interface Fixture {

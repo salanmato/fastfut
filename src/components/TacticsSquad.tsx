@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   ArrowLeftRight,
+  BatteryCharging,
   Sparkles,
   Info,
   Shield,
@@ -22,7 +23,14 @@ import type {
   Pressing,
   Tactics,
 } from "../types/game";
-import { autoPickLineup, computeTeamPower, evaluateTacticalFit } from "../engine/matchEngine";
+import {
+  adaptLineupToFormation,
+  autoPickLineup,
+  computeTeamPower,
+  evaluateTacticalFit,
+  type AutoPickMode,
+} from "../engine/matchEngine";
+import { projectPlayerStamina } from "../engine/fatigueEngine";
 import {
   calculateTeamSynergy,
   getOrCreateClubSynergyTracker,
@@ -44,6 +52,8 @@ interface TacticsSquadProps {
   players: Player[];
   tactics: Tactics;
   synergyTracker?: ClubSynergyTracker;
+  daysToNextMatch?: number;
+  turfLevel?: number;
   onChangeTactics: (next: Tactics) => void;
   onSelectPlayer: (player: Player) => void;
   onChangeShirtNumber?: (playerId: number, newNumber: number) => void;
@@ -58,6 +68,8 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   players,
   tactics,
   synergyTracker,
+  daysToNextMatch = 0,
+  turfLevel = 1,
   onChangeTactics,
   onSelectPlayer,
   onChangeShirtNumber,
@@ -127,7 +139,12 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
   );
 
   const handleFormationChange = (formation: Formation) => {
-    const picked = autoPickLineup(firstTeamPlayers, formation);
+    const picked = adaptLineupToFormation(
+      firstTeamPlayers,
+      tactics.starters,
+      tactics.bench,
+      formation
+    );
     setSwapId(null);
     onChangeTactics({
       ...tactics,
@@ -137,8 +154,8 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
     });
   };
 
-  const handleAutoPick = () => {
-    const picked = autoPickLineup(firstTeamPlayers, tactics.formation);
+  const handleAutoPick = (mode: AutoPickMode = "best") => {
+    const picked = autoPickLineup(firstTeamPlayers, tactics.formation, mode);
     setSwapId(null);
     onChangeTactics({
       ...tactics,
@@ -201,6 +218,12 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
     const isSelectedForSwap = swapId === p.id;
     const injLeft = p.injuryMatchesLeft ?? 0;
     const staminaPct = Math.round(p.stamina);
+    const projectedPct =
+      daysToNextMatch > 0 ? projectPlayerStamina(p, daysToNextMatch, turfLevel) : staminaPct;
+    const staminaTitle =
+      daysToNextMatch > 0 && projectedPct !== staminaPct
+        ? `Overall ${p.overall} / Energia atual ${staminaPct}% • Previsão no jogo (${daysToNextMatch}d): ${projectedPct}%`
+        : `Overall ${p.overall} / Energia ${staminaPct}%`;
     const affinity = evaluateShirtNumberAffinity(p);
     const affinityTitle = `${affinity.label} (${affinity.bonusPctText}) • Já usou: #${affinity.historyNumbers.join(", #")} • Função (${p.primaryPosition}): #${affinity.roleNumbers.join(", #")}`;
     return (
@@ -313,7 +336,7 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
 
         <div className="flex shrink-0 items-center gap-2">
           <div
-            title={`Overall ${p.overall} / Energia ${staminaPct}%`}
+            title={staminaTitle}
             className={`rounded-md border px-2 py-0.5 ${getOverallColor(p.overall)}`}
           >
             <div className="flex items-center gap-1.5 whitespace-nowrap text-xs font-black">
@@ -398,13 +421,47 @@ export const TacticsSquad: React.FC<TacticsSquadProps> = ({
                   </button>
                 )}
                 <button
-                  onClick={handleAutoPick}
+                  onClick={() => handleAutoPick("best")}
+                  title="Escala o melhor 11 titular respeitando hierarquia e evitando tirar craques com desgaste leve"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25"
                 >
                   <Sparkles className="h-3.5 w-3.5" /> Escalar Melhor 11
                 </button>
+                <button
+                  onClick={() => handleAutoPick("rotation")}
+                  title="Prioriza atletas mais descansados para poupar titulares desgastados"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/30 transition hover:bg-amber-500/25"
+                >
+                  <BatteryCharging className="h-3.5 w-3.5" /> Poupar Cansados
+                </button>
               </div>
             </div>
+
+            {daysToNextMatch > 0 && starters.some((p) => Math.round(p.stamina) < 99) && (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200">
+                <span className="flex items-center gap-1.5 font-semibold">
+                  <BatteryCharging className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span>
+                    Recuperação até o próximo jogo ({daysToNextMatch}{" "}
+                    {daysToNextMatch === 1 ? "dia" : "dias"}): média projetada dos titulares{" "}
+                    <strong className="text-white">
+                      {starters.length > 0
+                        ? Math.round(
+                            starters.reduce(
+                              (acc, p) => acc + projectPlayerStamina(p, daysToNextMatch, turfLevel),
+                              0
+                            ) / starters.length
+                          )
+                        : 100}
+                      %
+                    </strong>
+                  </span>
+                </span>
+                <span className="hidden sm:inline text-[10px] text-emerald-300/80">
+                  CT Nível {turfLevel}
+                </span>
+              </div>
+            )}
 
             {/* Formation selector */}
             <div>

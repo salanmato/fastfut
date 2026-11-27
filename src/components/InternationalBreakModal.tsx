@@ -81,7 +81,7 @@ export const InternationalBreakModal: React.FC<InternationalBreakModalProps> = (
                 <BatteryCharging className="h-3.5 w-3.5 text-emerald-400" /> Descansaram no CT
               </div>
               <div className="mt-1 text-lg font-black text-emerald-300">
-                {report.restedCount} atletas (+12 energia)
+                {report.restedCount} atletas (+28 energia)
               </div>
             </div>
 

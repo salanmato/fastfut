@@ -457,8 +457,8 @@ export function simulateInternationalBreak(
       const clubConfed = club?.country
         ? normalizeNation(club.country).confed
         : st.confed;
-      const baseLoss = st.role === "starter" ? 16 : 7;
-      const travelPenalty = st.confed !== clubConfed ? 6 : 0;
+      const baseLoss = st.role === "starter" ? 26 : 11;
+      const travelPenalty = st.confed !== clubConfed ? 8 : 0;
       const staminaLoss = baseLoss + travelPenalty;
       st.staminaLoss = staminaLoss;
 
@@ -476,7 +476,7 @@ export function simulateInternationalBreak(
 
       return {
         ...p,
-        stamina: Math.max(45, p.stamina - staminaLoss),
+        stamina: Math.max(38, p.stamina - staminaLoss),
         morale: Math.min(100, p.morale + 3 + st.goals * 2),
         injuryMatchesLeft: nextInjuryMatches,
         injuryType: nextInjuryType,
@@ -487,7 +487,7 @@ export function simulateInternationalBreak(
       if (p.clubId === save.userClubId) restedCount++;
       return {
         ...p,
-        stamina: Math.min(100, p.stamina + 12),
+        stamina: Math.min(100, p.stamina + 28),
       };
     }
 
@@ -588,7 +588,7 @@ export function simulateInternationalBreak(
       title: `${window.label}: ${userCallups.length} convocados do ${clubLabel}`,
       body: `${namesPreview}${
         userCallups.length > 4 ? ` e mais ${userCallups.length - 4}` : ""
-      } defenderam suas seleções em ${window.competition}. ${restedCount} atletas descansaram (+12 energia).`,
+      } defenderam suas seleções em ${window.competition}. ${restedCount} atletas descansaram (+28 energia).`,
     });
   } else {
     news.push({
@@ -597,7 +597,7 @@ export function simulateInternationalBreak(
       category: "international",
       clubId: save.userClubId,
       title: `${window.label}: elenco do ${clubLabel} aproveita pausa`,
-      body: `Nenhum atleta do ${clubLabel} foi convocado nesta janela. ${restedCount} jogadores recuperaram energia (+12).`,
+      body: `Nenhum atleta do ${clubLabel} foi convocado nesta janela. ${restedCount} jogadores recuperaram energia (+28).`,
     });
   }
 

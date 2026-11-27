@@ -8,7 +8,7 @@ import type {
 } from "../types/game";
 import type { TransferWindowStatus } from "../utils/calendar";
 import { formatMoney } from "../utils/format";
-import { autoPickLineup } from "./matchEngine";
+import { repairLineup } from "./matchEngine";
 
 export interface GenerateOffersResult {
   offers: TransferOffer[];
@@ -253,7 +253,7 @@ export function respondToTransferOffer(
     const userTac = nextTactics[userClub.id];
     if (userTac && (userTac.starters.includes(targetPlayer.id) || userTac.bench.includes(targetPlayer.id))) {
       const remainingSquad = nextPlayers.filter((p) => p.clubId === userClub.id);
-      const picked = autoPickLineup(remainingSquad, userTac.formation);
+      const picked = repairLineup(remainingSquad, userTac);
       nextTactics[userClub.id] = {
         ...userTac,
         starters: picked.starters,

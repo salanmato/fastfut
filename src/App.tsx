@@ -38,7 +38,9 @@ import {
   autoPickLineup,
   createDefaultStadiumConfig,
   createDefaultTactics,
+  repairLineup,
 } from "./engine/matchEngine";
+import { applyPostMatchFatigue, countNonFifaRecoveryDays } from "./engine/fatigueEngine";
 import { computeStandings } from "./engine/standings";
 import {
   advanceToNextSeason,
@@ -410,7 +412,10 @@ export const App: React.FC = () => {
               tac.bench.some((id) => !validSet.has(id));
             if (hasInvalid) {
               const clubSquad = cleanedPlayers.filter((p) => p.clubId === club.id);
-              const picked = autoPickLineup(clubSquad, tac.formation);
+              const picked =
+                club.id === prevSave.userClubId
+                  ? repairLineup(clubSquad, tac)
+                  : autoPickLineup(clubSquad, tac.formation, "best");
               nextTacticsByClub[club.id] = {
                 ...tac,
                 starters: picked.starters,
@@ -690,9 +695,40 @@ export const App: React.FC = () => {
     }
 
     const newInjuryMap = new Map<number, MatchInjury>();
+    const minutesByPlayer = new Map<
+      number,
+      { mins: number; clubId: number; turfLevel: number }
+    >();
+    const playerClubLookup = new Map<number, number | null>(
+      save.players.map((p) => [p.id, p.clubId])
+    );
+
     for (const res of results) {
       for (const inj of res.injuries ?? []) {
         newInjuryMap.set(inj.playerId, inj);
+      }
+      const fx = save.fixtures.find((f) => f.id === res.fixtureId);
+      const homeTurf = fx ? stadiumByClub[fx.homeClubId]?.turfLevel ?? 1 : 1;
+      if (res.minutesPlayed && Object.keys(res.minutesPlayed).length > 0) {
+        for (const [pidStr, mins] of Object.entries(res.minutesPlayed)) {
+          const pid = Number(pidStr);
+          const cid = playerClubLookup.get(pid) ?? 0;
+          minutesByPlayer.set(pid, {
+            mins,
+            clubId: cid,
+            turfLevel: fx && cid === fx.homeClubId ? homeTurf : 1,
+          });
+        }
+      } else {
+        for (const pidStr of Object.keys(res.playerRatings)) {
+          const pid = Number(pidStr);
+          const cid = playerClubLookup.get(pid) ?? 0;
+          minutesByPlayer.set(pid, {
+            mins: 75,
+            clubId: cid,
+            turfLevel: fx && cid === fx.homeClubId ? homeTurf : 1,
+          });
+        }
       }
     }
 
@@ -708,10 +744,8 @@ export const App: React.FC = () => {
         : undefined;
 
       if (!perf) {
-        // Rested players recover stamina to 100
         return {
           ...p,
-          stamina: Math.min(100, p.stamina + 25),
           injuryMatchesLeft: nextInjLeft,
           injuryType: nextInjType,
         };
@@ -720,16 +754,16 @@ export const App: React.FC = () => {
       const newApps = prevApps + 1;
       const newAvg =
         Math.round(((p.seasonAvgRating * prevApps + perf.rating) / newApps) * 100) / 100;
-      let postRecovery: number;
-      if (p.roleCategory === "GK") {
-        // Goalkeepers tire far less than outfield players and recover almost completely between rounds (96-99%)
-        const baseStam = p.stamina < 94 ? 98 : p.stamina;
-        postRecovery = baseStam <= 96 ? Math.min(99, baseStam + 1) : baseStam - 1;
-      } else {
-        const staminaBonus = Math.max(0, Math.min(8, Math.floor((p.stats.stamina - 65) / 5)));
-        const staminaDrop = 16 - staminaBonus;
-        postRecovery = Math.max(58, Math.min(100, p.stamina - Math.max(6, staminaDrop) + 8));
-      }
+
+      const playedInfo = minutesByPlayer.get(p.id);
+      const mins = playedInfo?.mins ?? 80;
+      const clubTac = p.clubId !== null ? save.tacticsByClub[p.clubId] : undefined;
+      const postRecovery = applyPostMatchFatigue(
+        p,
+        mins,
+        clubTac,
+        playedInfo?.turfLevel ?? 1
+      );
 
       return {
         ...p,
@@ -745,33 +779,26 @@ export const App: React.FC = () => {
       };
     });
 
-    // Refresh AI lineups for next round (skipping injured players) & move injured user starters out safely
+    // Refresh AI lineups for next round (skipping injured players) & repair user lineup only for injured/missing slots
     const nextTacticsByClub: Record<number, Tactics> = { ...save.tacticsByClub };
     for (const club of save.clubs) {
       const clubPlayers = nextPlayers.filter((p) => p.clubId === club.id);
       const curr = nextTacticsByClub[club.id];
+      if (!curr) continue;
       if (club.id !== save.userClubId) {
-        const picked = autoPickLineup(clubPlayers, curr.formation);
+        const picked = autoPickLineup(clubPlayers, curr.formation, "best");
         nextTacticsByClub[club.id] = {
           ...curr,
           starters: picked.starters,
           bench: picked.bench,
         };
       } else {
-        const injuredSet = new Set(
-          clubPlayers.filter((p) => (p.injuryMatchesLeft ?? 0) > 0).map((p) => p.id)
-        );
-        if (
-          curr.starters.some((id) => injuredSet.has(id)) ||
-          curr.bench.some((id) => injuredSet.has(id))
-        ) {
-          const picked = autoPickLineup(clubPlayers, curr.formation);
-          nextTacticsByClub[club.id] = {
-            ...curr,
-            starters: picked.starters,
-            bench: picked.bench,
-          };
-        }
+        const repaired = repairLineup(clubPlayers, curr);
+        nextTacticsByClub[club.id] = {
+          ...curr,
+          starters: repaired.starters,
+          bench: repaired.bench,
+        };
       }
     }
 
@@ -1045,7 +1072,7 @@ export const App: React.FC = () => {
       return;
     }
 
-    const { nextFaCup, prizeByClub, headlines } = simulateFACupRound(
+    const { nextFaCup, nextPlayers, prizeByClub, headlines } = simulateFACupRound(
       currentCup,
       save.clubs,
       save.players,
@@ -1061,10 +1088,24 @@ export const App: React.FC = () => {
       return bonus > 0 ? { ...c, transferBudgetEur: c.transferBudgetEur + bonus } : c;
     });
 
+    const userTac = save.tacticsByClub[save.userClubId];
+    const nextTacticsByClub = { ...save.tacticsByClub };
+    if (userTac) {
+      const userSquadAfterCup = nextPlayers.filter((p) => p.clubId === save.userClubId);
+      const repaired = repairLineup(userSquadAfterCup, userTac);
+      nextTacticsByClub[save.userClubId] = {
+        ...userTac,
+        starters: repaired.starters,
+        bench: repaired.bench,
+      };
+    }
+
     const userBonus = prizeByClub.get(save.userClubId) ?? 0;
     setSave({
       ...save,
       clubs: nextClubs,
+      players: nextPlayers,
+      tacticsByClub: nextTacticsByClub,
       faCup: nextFaCup,
       news: [...headlines, ...save.news].slice(0, 40),
     });
@@ -1338,6 +1379,23 @@ export const App: React.FC = () => {
     );
   };
 
+  const refreshLineupsForMatchday = (targetSave: SaveState): SaveState => {
+    const nextTactics: Record<number, Tactics> = { ...targetSave.tacticsByClub };
+    for (const c of targetSave.clubs) {
+      const curr = nextTactics[c.id];
+      if (!curr) continue;
+      const squad = targetSave.players.filter((p) => p.clubId === c.id);
+      if (c.id !== targetSave.userClubId) {
+        const picked = autoPickLineup(squad, curr.formation, "best");
+        nextTactics[c.id] = { ...curr, starters: picked.starters, bench: picked.bench };
+      } else {
+        const repaired = repairLineup(squad, curr);
+        nextTactics[c.id] = { ...curr, starters: repaired.starters, bench: repaired.bench };
+      }
+    }
+    return { ...targetSave, tacticsByClub: nextTactics };
+  };
+
   const handleStartMatchday = () => {
     if (!save || save.seasonFinished) return;
     const nextFx = getNextMatchFixture(save.fixtures, save.currentMatchweek, save.userClubId);
@@ -1378,7 +1436,8 @@ export const App: React.FC = () => {
           : save;
 
       const adv = advanceCalendar(baseSave, currentDate, nextFx.date, stadiumByClub);
-      setSave(adv.save);
+      const refreshed = refreshLineupsForMatchday(adv.save);
+      setSave(refreshed);
 
       if (adv.stoppedAtCupRound) {
         setToast(`Jogue primeiro ${cupShort} — ${adv.stoppedAtCupRound.shortName}!`);
@@ -1393,6 +1452,8 @@ export const App: React.FC = () => {
         });
         return;
       }
+    } else {
+      setSave(refreshLineupsForMatchday(save));
     }
 
     setActiveTab("matchday");
@@ -1781,7 +1842,7 @@ export const App: React.FC = () => {
     const remainingUserSquad = nextPlayers.filter((p) => p.clubId === userClub.id);
     const currTac = nextTacticsByClub[userClub.id];
     if (currTac.starters.includes(target.id) || currTac.bench.includes(target.id)) {
-      const picked = autoPickLineup(remainingUserSquad, currTac.formation);
+      const picked = repairLineup(remainingUserSquad, currTac);
       nextTacticsByClub[userClub.id] = {
         ...currTac,
         starters: picked.starters,
@@ -2203,6 +2264,13 @@ export const App: React.FC = () => {
             players={userSquad}
             tactics={userTactics}
             synergyTracker={getOrCreateClubSynergyTracker(save, userClub.id)}
+            daysToNextMatch={(() => {
+              const nextFx = getNextMatchFixture(save.fixtures, save.currentMatchweek, userClub.id);
+              const nextCup = pendingCupRound && isUserInRound(pendingCupRound, userClub.id) ? pendingCupRound.date : undefined;
+              const target = nextCup && (!nextFx || nextCup <= nextFx.date) ? nextCup : nextFx?.date;
+              return target ? countNonFifaRecoveryDays(currentDate, target, fifaWindows) : 0;
+            })()}
+            turfLevel={stadiumByClub[userClub.id]?.turfLevel ?? 1}
             onChangeTactics={(next) =>
               setSave({
                 ...save,
